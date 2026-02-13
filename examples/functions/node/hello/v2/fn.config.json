@@ -1,0 +1,19 @@
+{
+  "timeout_ms": 1500,
+  "max_concurrency": 15,
+  "max_body_bytes": 1048576,
+  "include_debug_headers": false,
+  "response": {
+    "include_debug_headers": false
+  },
+  "invoke": {
+    "methods": [
+      "GET"
+    ],
+    "body": "",
+    "query": {
+      "name": "World"
+    },
+    "summary": "Node greeting v2"
+  }
+}

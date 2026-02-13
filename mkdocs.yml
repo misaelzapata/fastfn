@@ -1,0 +1,162 @@
+site_name: fastfn
+site_url: https://misaelzapata.github.io/fastfn/
+repo_url: https://github.com/misaelzapata/fastfn
+repo_name: fastfn
+edit_uri: blob/main/docs/
+
+theme:
+  name: material
+  language: en
+  palette:
+    # Palette toggle for light mode
+    - scheme: default
+      primary: teal
+      accent: purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Palette toggle for dark mode
+    - scheme: slate
+      primary: teal
+      accent: lime
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+  icon:
+    repo: fontawesome/brands/github
+
+extra_css:
+  - stylesheets/extra.css
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+
+nav:
+  - Home: index.md
+  - English Docs:
+    - Introduction: en/index.md
+    - Tutorial:
+      - First Steps: en/tutorial/first-steps.md
+      - From Zero (Chapter by Chapter):
+        - Overview: en/tutorial/from-zero/index.md
+        - Chapter 1 - Hello World: en/tutorial/from-zero/chapter-01-hello-world.md
+        - Chapter 2 - Query and Body: en/tutorial/from-zero/chapter-02-query-and-body.md
+        - Chapter 3 - Env: en/tutorial/from-zero/chapter-03-env.md
+        - Chapter 4 - Meta and Methods: en/tutorial/from-zero/chapter-04-meta-and-methods.md
+        - Chapter 5 - Edge Proxy: en/tutorial/from-zero/chapter-05-edge-proxy.md
+        - Chapter 6 - External Libraries: en/tutorial/from-zero/chapter-06-external-libraries.md
+        - Chapter 7 - Rich Responses: en/tutorial/from-zero/chapter-07-rich-responses.md
+        - Chapter 8 - Session, Context, Memory: en/tutorial/from-zero/chapter-08-session-context-memory.md
+        - Chapter 9 - Shared Deps and Env: en/tutorial/from-zero/chapter-09-shared-deps-env.md
+      - Your First Function: en/tutorial/your-first-function.md
+      - Build a Complete API: en/tutorial/build-complete-api.md
+      - QR in Python + Node: en/tutorial/qr-in-python-node.md
+      - WhatsApp Bot Demo: en/tutorial/whatsapp-bot-demo.md
+      - Versioning and Rollout: en/tutorial/versioning-and-rollout.md
+      - Auth and Secrets: en/tutorial/auth-and-secrets.md
+      - Artistic QR Variants (Optional): en/tutorial/artistic-qrs.md
+    - How-To Guides:
+      - Console and Admin Access: en/how-to/console-admin-access.md
+      - Manage Functions: en/how-to/manage-functions.md
+      - Operational Recipes: en/how-to/operational-recipes.md
+      - Telegram Digest (Cron): en/how-to/telegram-digest.md
+      - Telegram E2E: en/how-to/telegram-e2e.md
+      - Run & Test: en/how-to/run-and-test.md
+      - Contributing: en/how-to/contributing.md
+    - Articles:
+      - Telegram Loop Mode: en/articles/telegram-loop.md
+      - Telegram AI Memory Bot (Cron): en/articles/telegram-ai-memory-cron.md
+      - Local Serverless Hot Reload + OpenAPI: en/articles/local-serverless-hot-reload-openapi.md
+      - Practical Auth for Functions: en/articles/practical-auth-for-functions.md
+    - Reference:
+      - CLI Reference: en/reference/cli.md
+      - HTTP API: en/reference/http-api.md
+      - Function Spec: en/reference/function-spec.md
+      - Runtime Contract: en/reference/runtime-contract.md
+      - Builtin Functions: en/reference/builtin-functions.md
+    - Explanation:
+      - Architecture: en/explanation/architecture.md
+      - Invocation Lifecycle: en/explanation/invocation-flow.md
+      - Security Model: en/explanation/security-model.md
+      - Performance Benchmarks: en/explanation/performance-benchmarks.md
+      - Documentation Status: en/explanation/docs-gap-vs-fastapi.md
+      - Visual Flows: en/explanation/visual-flows.md
+  - Documentación en Español:
+    - Introducción: es/index.md
+    - Tutorial:
+      - Primeros Pasos: es/tutorial/primeros-pasos.md
+      - Desde Cero (Capitulo a Capitulo):
+        - Vista General: es/tutorial/desde-cero/index.md
+        - Capitulo 1 - Hola Mundo: es/tutorial/desde-cero/capitulo-01-hola-mundo.md
+        - Capitulo 2 - Query y Body: es/tutorial/desde-cero/capitulo-02-query-y-body.md
+        - Capitulo 3 - Env: es/tutorial/desde-cero/capitulo-03-env.md
+        - Capitulo 4 - Meta y Metodos: es/tutorial/desde-cero/capitulo-04-meta-y-metodos.md
+        - Capitulo 5 - Edge Proxy: es/tutorial/desde-cero/capitulo-05-edge-proxy.md
+        - Capitulo 6 - Librerias Externas: es/tutorial/desde-cero/capitulo-06-librerias-externas.md
+        - Capitulo 7 - Respuestas Rich: es/tutorial/desde-cero/capitulo-07-respuestas-rich.md
+        - Capitulo 8 - Sesion, Contexto, Memoria: es/tutorial/desde-cero/capitulo-08-sesion-contexto-memoria.md
+        - Capitulo 9 - Compartir Deps y Env: es/tutorial/desde-cero/capitulo-09-compartir-deps-env.md
+      - Tu Primera Función: es/tutorial/tu-primera-funcion.md
+      - Construir API Completa: es/tutorial/construir-api-completa.md
+      - QR en Python y Node: es/tutorial/qr-python-node.md
+      - Demo Bot de WhatsApp: es/tutorial/demo-bot-whatsapp.md
+      - Versionado y Rollout: es/tutorial/versionado-y-rollout.md
+      - Auth y Secretos: es/tutorial/auth-y-secretos.md
+      - QRs Artísticos (Opcional): es/tutorial/qrs-artisticos.md
+    - Guías Cómo-Hacer:
+      - Consola y Administración: es/como-hacer/consola-admin.md
+      - Gestionar Funciones: es/como-hacer/gestionar-funciones.md
+      - Recetas Operativas: es/como-hacer/recetas-operativas.md
+      - Telegram Digest (Cron): es/como-hacer/telegram-digest.md
+      - Telegram E2E: es/como-hacer/telegram-e2e.md
+      - Ejecutar y Probar: es/como-hacer/ejecutar-y-probar.md
+      - Contribuir: es/como-hacer/contribuir.md
+    - Artículos:
+      - Telegram Loop Mode: es/articulos/telegram-loop.md
+      - Bot Telegram IA con Memoria (Cron): es/articulos/telegram-ai-memoria-cron.md
+      - Serverless Local Hot Reload + OpenAPI: es/articulos/serverless-local-hot-reload-openapi.md
+      - Auth Práctica para Funciones: es/articulos/auth-practica-para-funciones.md
+    - Referencia:
+      - API HTTP: es/referencia/api-http.md
+      - Especificación Funciones: es/referencia/especificacion-funciones.md
+      - Contrato Runtime: es/referencia/contrato-runtime.md
+      - Funciones de Ejemplo: es/referencia/funciones-ejemplo.md
+    - Explicación:
+      - Arquitectura: es/explicacion/arquitectura.md
+      - Ciclo de Invocación: es/explicacion/flujo-invocacion.md
+      - Modelo de Seguridad: es/explicacion/modelo-seguridad.md
+      - Benchmarks de Rendimiento: es/explicacion/benchmarks-rendimiento.md
+      - Estado Documentación: es/explicacion/estado-documentacion.md
+      - Flujos Visuales: es/explicacion/flujos-visuales.md
+  - Internal:
+    - Task Queue: internal/TASK_QUEUE.md
+    - Docs Workflow: internal/DOCS_WORKFLOW.md
+    - Context Dump: internal/chat_dump_openresty_faas.md
+    - Future Plans: internal/prefork-plan.md
+    - Overview: internal/README.md

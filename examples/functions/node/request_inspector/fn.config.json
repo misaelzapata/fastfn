@@ -1,0 +1,10 @@
+{
+  "invoke": {
+    "summary": "Request inspector (debug endpoint for demos)",
+    "methods": ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    "query": { "key": "value" },
+    "body": "hello",
+    "content_type": "application/json"
+  }
+}
+

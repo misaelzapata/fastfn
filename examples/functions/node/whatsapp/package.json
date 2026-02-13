@@ -1,0 +1,9 @@
+{
+  "name": "fn-node-whatsapp",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.9",
+    "qrcode": "^1.5.4"
+  }
+}

@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    name: Unit + Coverage (Python + Node)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install coverage tooling
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install coverage
+          npm install -g c8
+
+      - name: Ensure scripts are executable
+        run: chmod +x scripts/*.sh
+
+      - name: Run unit tests with coverage
+        run: ./scripts/coverage.sh
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-artifacts
+          path: |
+            coverage/python-coverage.xml
+            coverage/python-coverage.json
+            coverage/python-coverage.txt
+            coverage/node/coverage-summary.json
+            coverage/node/lcov.info
+            coverage/node-coverage.txt
+            coverage/summary.md
+
+      - name: Publish coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage/python-coverage.xml,./coverage/node/lcov.info
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Coverage summary
+        run: cat coverage/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+  e2e:
+    name: E2E (OpenResty + Docker Compose)
+    runs-on: ubuntu-latest
+    needs: unit
+    timeout-minutes: 40
+    env:
+      DOCKER_BUILDKIT: "1"
+      COMPOSE_DOCKER_CLI_BUILD: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Docker versions
+        run: |
+          docker version
+          docker compose version
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Ensure test scripts are executable
+        run: |
+          chmod +x scripts/*.sh
+          chmod +x tests/integration/test_api.sh
+
+      - name: Run full test suite
+        run: ./scripts/test-all.sh
+
+      - name: Run Playwright UI E2E
+        run: ./scripts/test-playwright.sh
+
+      - name: Dump Compose logs on failure
+        if: failure()
+        run: |
+          docker compose -f docker-compose.yml ps || true
+          docker compose -f docker-compose.yml logs --no-color --timestamps || true
+          docker compose -f docker-compose.yml down --remove-orphans || true

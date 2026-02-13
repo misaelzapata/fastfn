@@ -1,0 +1,208 @@
+# Tu primera funcion (Python, Node, PHP, Rust)
+
+En este tutorial crearas una funcion usando el mismo contrato en cuatro lenguajes.
+
+!!! info "Estado actual de runtimes"
+    `python`, `node`, `php` y `rust` se ejecutan hoy.
+
+## 0) (Camino para principiantes) Usa el Wizard de la Consola
+
+Si estas empezando a programar, esto es lo mas simple:
+
+1. Habilita la UI de consola:
+
+```bash
+export FN_UI_ENABLED=1
+docker compose up -d --build
+```
+
+2. Abre el wizard:
+
+- `http://127.0.0.1:8080/console/wizard`
+
+3. Elige runtime + template y toca **Create and open**.
+
+Despues podes seguir el resto del tutorial para entender los archivos que fastfn creo dentro de `FN_FUNCTIONS_ROOT`.
+
+## 1) Elegir root de funciones
+
+El root de discovery se configura con `FN_FUNCTIONS_ROOT`.
+
+Defaults:
+
+- Docker: `/app/srv/fn/functions`
+- local repo: `$PWD/srv/fn/functions`
+
+Ejemplo local:
+
+```bash
+export FN_FUNCTIONS_ROOT="$PWD/srv/fn/functions"
+```
+
+## 2) Crear carpeta de funcion
+
+Ejemplos (relativos a `FN_FUNCTIONS_ROOT`):
+
+- `python/mi_perfil/`
+- `node/mi_perfil/`
+- `php/mi_perfil/`
+- `rust/mi_perfil/`
+
+## 3) Agregar handler (mismo comportamiento en 4 lenguajes)
+
+La funcion lee query/header/context y devuelve JSON.
+
+=== "Python (`app.py`)"
+
+    ```python title="$FN_FUNCTIONS_ROOT/python/mi_perfil/app.py"
+    import json
+
+    def handler(event):
+        query = event.get("query") or {}
+        headers = event.get("headers") or {}
+        ctx = event.get("context") or {}
+
+        perfil = {
+            "name": query.get("name", "anonimo"),
+            "role": query.get("role", "invitado"),
+            "trace": ctx.get("request_id"),
+            "auth_header_seen": bool(headers.get("authorization")),
+        }
+
+        return {
+            "status": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps(perfil),
+        }
+    ```
+
+=== "Node (`app.js`)"
+
+    ```js title="$FN_FUNCTIONS_ROOT/node/mi_perfil/app.js"
+    exports.handler = async (event) => {
+      const query = event.query || {};
+      const headers = event.headers || {};
+      const ctx = event.context || {};
+
+      const perfil = {
+        name: query.name || 'anonimo',
+        role: query.role || 'invitado',
+        trace: ctx.request_id || null,
+        auth_header_seen: Boolean(headers.authorization),
+      };
+
+      return {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(perfil),
+      };
+    };
+    ```
+
+=== "PHP (`app.php`)"
+
+    ```php title="$FN_FUNCTIONS_ROOT/php/mi_perfil/app.php"
+    <?php
+    function handler($event) {
+        $query = $event['query'] ?? [];
+        $headers = $event['headers'] ?? [];
+        $ctx = $event['context'] ?? [];
+
+        $perfil = [
+            'name' => $query['name'] ?? 'anonimo',
+            'role' => $query['role'] ?? 'invitado',
+            'trace' => $ctx['request_id'] ?? null,
+            'auth_header_seen' => !empty($headers['authorization']),
+        ];
+
+        return [
+            'status' => 200,
+            'headers' => ['Content-Type' => 'application/json'],
+            'body' => json_encode($perfil),
+        ];
+    }
+    ```
+
+=== "Rust (`app.rs`)"
+
+    ```rust title="$FN_FUNCTIONS_ROOT/rust/mi_perfil/app.rs"
+    use serde_json::{json, Value};
+
+    pub fn handler(event: Value) -> Value {
+        let query = event.get("query").cloned().unwrap_or_else(|| json!({}));
+        let headers = event.get("headers").cloned().unwrap_or_else(|| json!({}));
+        let ctx = event.get("context").cloned().unwrap_or_else(|| json!({}));
+
+        let name = query.get("name").and_then(|v| v.as_str()).unwrap_or("anonimo");
+        let role = query.get("role").and_then(|v| v.as_str()).unwrap_or("invitado");
+        let trace = ctx.get("request_id").cloned().unwrap_or(Value::Null);
+        let auth_seen = headers.get("authorization").is_some();
+
+        json!({
+            "status": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": json!({
+                "name": name,
+                "role": role,
+                "trace": trace,
+                "auth_header_seen": auth_seen
+            }).to_string()
+        })
+    }
+    ```
+
+## 4) Configurar politica (`fn.config.json`)
+
+Crear `fn.config.json` en la misma carpeta de la funcion:
+
+```json title="$FN_FUNCTIONS_ROOT/<runtime>/mi_perfil/fn.config.json"
+{
+  "timeout_ms": 1500,
+  "max_concurrency": 5,
+  "max_body_bytes": 262144,
+  "invoke": {
+    "methods": ["GET", "POST"],
+    "summary": "Retornar payload de perfil",
+    "query": {"name": "Ada", "role": "admin"},
+    "body": ""
+  }
+}
+```
+
+## 5) Recargar discovery
+
+```bash
+curl -sS -X POST 'http://127.0.0.1:8080/_fn/reload'
+```
+
+## 6) Probar endpoint
+
+```bash
+curl -sS 'http://127.0.0.1:8080/fn/mi_perfil?name=Ada&role=admin' \
+  -H 'Authorization: Bearer demo-token'
+```
+
+POST:
+
+```bash
+curl -sS -X POST 'http://127.0.0.1:8080/fn/mi_perfil?name=Bob' \
+  -H 'Content-Type: application/json' \
+  -d '{"nota":"event.body contiene el input raw"}'
+```
+
+## 7) Variables de entorno opcionales
+
+Crear `fn.env.json` en la misma carpeta de la funcion:
+
+```json
+{
+  "PROFILE_SOURCE": "base-local"
+}
+```
+
+Lectura en runtime:
+
+- Python: `event.get("env", {}).get("PROFILE_SOURCE")`
+- Node: `(event.env || {}).PROFILE_SOURCE`
+- PHP: `$event['env']['PROFILE_SOURCE'] ?? null`
+- Rust: `event.get("env").and_then(|e| e.get("PROFILE_SOURCE"))`

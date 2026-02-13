@@ -1,0 +1,40 @@
+{
+  "timeout_ms": 200000,
+  "max_concurrency": 2,
+  "invoke": {
+    "summary": "Telegram webhook -> OpenAI -> Telegram reply (AI bot)",
+    "methods": ["GET", "POST"],
+    "body": "{\"message\":{\"chat\":{\"id\":123},\"text\":\"Hola\"}}",
+    "content_type": "application/json"
+  },
+  "schedule": {
+    "enabled": true,
+    "every_seconds": 12,
+    "method": "GET",
+    "query": {
+      "loop": "true",
+      "dry_run": "false",
+      "wait_secs": "9",
+      "poll_ms": "500",
+      "memory": "true",
+      "memory_max_turns": "24",
+      "memory_ttl_secs": "86400",
+      "max_replies": "4",
+      "tools": "true",
+      "auto_tools": "true",
+      "tool_allow_hosts": "api.ipify.org,wttr.in,ipapi.co",
+      "tool_allow_fn": "request_inspector,telegram_ai_digest,cron_tick",
+      "tool_timeout_ms": "12000",
+      "show_thinking": "true",
+      "thinking_mode": "typing",
+      "thinking_min_ms": "250",
+      "thinking_fallback_text": "false",
+      "send_prompt": "false",
+      "force_clear_webhook": "false"
+    },
+    "note": "Scheduled polling loop for Telegram replies (no manual invoke needed).",
+    "context": {
+      "type": "cron"
+    }
+  }
+}

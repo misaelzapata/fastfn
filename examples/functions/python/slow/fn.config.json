@@ -1,0 +1,1 @@
+{"max_body_bytes":262144,"max_concurrency":1,"timeout_ms":1500,"invoke":{"body":"","methods":["GET"],"query":{"sleep_ms":"100"},"summary":"Slow test function for timeout and concurrency checks"}}

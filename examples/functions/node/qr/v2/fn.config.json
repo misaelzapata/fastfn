@@ -1,0 +1,1 @@
+{"max_body_bytes":65536,"invoke":{"summary":"Node QR generator (PNG)","query":{"size":320,"text":"https:\/\/github.com\/misaelzapata\/fastfn"},"body":"","methods":["GET"]},"timeout_ms":60000,"max_concurrency":512}

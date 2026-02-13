@@ -1,0 +1,2 @@
+# Just a simple dependency to prove it installs
+requests==2.31.0

@@ -1,0 +1,7 @@
+{
+  "timeout_ms": 2500,
+  "invoke": {
+    "methods": ["GET"],
+    "summary": "Requirements demo"
+  }
+}

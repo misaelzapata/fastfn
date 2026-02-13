@@ -1,0 +1,12 @@
+version: "3.7"
+services:
+  runtime:
+    image: ghcr.io/fastfn/runtime:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - {{.FunctionDir}}:/app/srv/fn/functions
+    environment:
+      FN_HOT_RELOAD: "1"
+      FN_UI_ENABLED: "1"
+    restart: unless-stopped

@@ -1,0 +1,1 @@
+{"max_body_bytes":65536,"invoke":{"summary":"Python QR generator (SVG)","query":{"text":"https:\/\/github.com\/misaelzapata\/fastfn"},"body":"","methods":["GET"]},"timeout_ms":60000,"max_concurrency":512}

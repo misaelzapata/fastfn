@@ -1,0 +1,28 @@
+services:
+  openresty:
+    build:
+      context: .
+      dockerfile: docker/openresty/Dockerfile
+    # Integration tests `exec` into the container and call 127.0.0.1:8080 internally,
+    # so we intentionally do NOT publish a host port here (avoids clashing with dev stacks).
+    volumes:
+      - ./srv/fn/functions:/app/srv/fn/functions
+    environment:
+      FN_UI_ENABLED: ${FN_UI_ENABLED:-0}
+      FN_CONSOLE_API_ENABLED: ${FN_CONSOLE_API_ENABLED:-1}
+      FN_CONSOLE_WRITE_ENABLED: ${FN_CONSOLE_WRITE_ENABLED:-1}
+      FN_CONSOLE_LOCAL_ONLY: ${FN_CONSOLE_LOCAL_ONLY:-1}
+      FN_ADMIN_TOKEN: ${FN_ADMIN_TOKEN:-}
+      FN_STRICT_FS: ${FN_STRICT_FS:-1}
+      FN_STRICT_FS_ALLOW: ${FN_STRICT_FS_ALLOW:-}
+      FN_PREINSTALL_PY_DEPS_ON_START: ${FN_PREINSTALL_PY_DEPS_ON_START:-1}
+      FN_PREINSTALL_NODE_DEPS_ON_START: ${FN_PREINSTALL_NODE_DEPS_ON_START:-1}
+      FN_HTTP_VERIFY_TLS: ${FN_HTTP_VERIFY_TLS:-1}
+      FN_ASSISTANT_ENABLED: ${FN_ASSISTANT_ENABLED:-0}
+      FN_ASSISTANT_PROVIDER: ${FN_ASSISTANT_PROVIDER:-mock}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_API_BASE: ${TELEGRAM_API_BASE:-}
+

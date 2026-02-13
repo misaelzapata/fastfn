@@ -1,0 +1,10 @@
+{
+  "invoke": {
+    "methods": ["GET"],
+    "summary": "Append a row via a Google Apps Script Web App (dry_run=true by default)"
+  },
+  "timeout_ms": 2500,
+  "max_concurrency": 10,
+  "max_body_bytes": 262144
+}
+

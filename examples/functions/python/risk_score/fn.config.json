@@ -1,0 +1,12 @@
+{
+  "timeout_ms": 2200,
+  "max_concurrency": 8,
+  "invoke": {
+    "summary": "Risk scoring by email/ip",
+    "methods": ["GET", "POST"],
+    "query": {
+      "email": "user@example.com"
+    },
+    "body": ""
+  }
+}

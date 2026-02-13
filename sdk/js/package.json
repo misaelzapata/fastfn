@@ -1,0 +1,17 @@
+{
+  "name": "@fastfn/runtime",
+  "version": "0.1.0",
+  "description": "TypeScript/JavaScript definitions for FastFn serverless runtime",
+  "main": "index.d.ts",
+  "types": "index.d.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "serverless",
+    "fastfn",
+    "functions"
+  ],
+  "author": "FastFn",
+  "license": "MIT"
+}

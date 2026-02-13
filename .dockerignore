@@ -1,0 +1,9 @@
+.git
+.gitignore
+openresty/logs
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+node_modules
+.DS_Store

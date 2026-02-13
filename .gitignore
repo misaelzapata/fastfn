@@ -1,0 +1,13 @@
+openresty/logs/
+*.sock
+__pycache__/
+*.pyc
+.DS_Store
+node_modules/
+.deps/
+playwright-report/
+test-results/
+srv/fn/functions/**/count.txt
+srv/fn/functions/**/.deps/
+.env
+.env.*

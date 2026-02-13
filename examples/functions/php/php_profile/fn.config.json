@@ -1,0 +1,11 @@
+{
+  "timeout_ms": 2500,
+  "max_concurrency": 20,
+  "max_body_bytes": 1048576,
+  "invoke": {
+    "methods": ["GET"],
+    "summary": "PHP hello profile",
+    "query": {"name": "PHP"},
+    "body": ""
+  }
+}
