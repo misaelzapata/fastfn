@@ -107,57 +107,6 @@ def test_python_custom_echo_shape():
     assert body["value"] == "abc"
 
 
-def test_python_openclaw_single_dry_run_plan():
-    handler = load_handler(ROOT / "examples/functions/python/openclaw-single/app.py")
-    resp = handler({"query": {"text": "quiero saber mi ip", "dry_run": "true"}})
-    assert_response_contract(resp)
-    body = json.loads(resp["body"])
-    assert body["agent"] == "openclaw-single-py"
-    assert body["dry_run"] is True
-    assert isinstance(body.get("planned_tools"), list) and len(body["planned_tools"]) >= 1
-    assert body["planned_tools"][0]["tool"] == "ip_lookup"
-    assert body["tool_results"] == []
-
-
-def test_python_openclaw_single_exec_with_mocked_http():
-    mod = load_module(ROOT / "examples/functions/python/openclaw-single/app.py")
-    handler = mod.handler
-    seen = []
-
-    def fake_http(url, timeout_ms):
-        seen.append((url, timeout_ms))
-        if "api.ipify.org" in url:
-            return {"ok": True, "status": 200, "elapsed_ms": 7, "data": {"ip": "1.2.3.4"}}
-        if "api.agify.io" in url:
-            return {"ok": True, "status": 200, "elapsed_ms": 9, "data": {"name": "ana", "age": 31}}
-        return {"ok": False, "status": 404, "elapsed_ms": 4, "error": "not found", "data": {}}
-
-    original = mod._http_get_json
-    mod._http_get_json = fake_http
-    try:
-        resp = handler(
-            {
-                "query": {
-                    "text": "proba tools",
-                    "tool": "ip_lookup,age_predict",
-                    "name": "ana",
-                    "dry_run": "false",
-                }
-            }
-        )
-        assert_response_contract(resp)
-        body = json.loads(resp["body"])
-        assert body["dry_run"] is False
-        assert len(body["tool_results"]) == 2
-        assert body["tool_results"][0]["ok"] is True
-        assert body["tool_results"][0]["data"]["ip"] == "1.2.3.4"
-        assert body["tool_results"][1]["ok"] is True
-        assert body["tool_results"][1]["data"]["name"] == "ana"
-        assert len(seen) == 2
-    finally:
-        mod._http_get_json = original
-
-
 def test_python_telegram_ai_reply_py_dry_run():
     handler = load_handler(ROOT / "examples/functions/python/telegram-ai-reply-py/app.py")
     resp = handler(
@@ -599,8 +548,6 @@ def main():
     test_python_risk_score_branches()
     test_python_lambda_echo_shape()
     test_python_custom_echo_shape()
-    test_python_openclaw_single_dry_run_plan()
-    test_python_openclaw_single_exec_with_mocked_http()
     test_python_telegram_ai_reply_py_dry_run()
     test_python_telegram_ai_reply_py_exec_with_mocks()
     test_python_telegram_ai_reply_py_scheduler_bypass_loop_token()

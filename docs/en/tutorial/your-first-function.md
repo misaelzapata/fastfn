@@ -5,7 +5,7 @@ In this tutorial, you will create a serverless function from scratch using the `
 We will build a simple API that returns a JSON profile based on query parameters.
 
 ??? tip "Prerequisites"
-    - [FastFn CLI installed](../../how-to/run-and-test.md)
+    - [FastFN CLI installed](../how-to/run-and-test.md)
     - Docker running (for `fastfn dev`)
 
 ## 1. Create a Project
@@ -49,7 +49,7 @@ This creates a folder `my-profile/` with a configuration file `fn.config.json` a
 
 ## 3. The Function Contract
 
-Open the generated handler file. FastFn normalizes the request into a single `event` object across all languages.
+Open the generated handler file. FastFN normalizes the request into a single `event` object across all languages.
 
 The `event` object contains:
 - `method` (GET, POST, etc.)
