@@ -6,6 +6,8 @@ OUT_DIR="${OUT_DIR:-$ROOT_DIR/coverage}"
 PY_SOURCE_DIR="$ROOT_DIR/examples/functions/python"
 PY_TEST_FILE="$ROOT_DIR/tests/unit/test-python-handlers.py"
 NODE_TEST_FILE="$ROOT_DIR/tests/unit/test-node-handler.js"
+# Large end-to-end demos are validated via integration scripts, not unit coverage gates.
+PY_COVERAGE_OMIT="${PY_COVERAGE_OMIT:-$ROOT_DIR/examples/functions/python/telegram-ai-reply-py/app.py}"
 MIN_PYTHON="${COVERAGE_MIN_PYTHON:-60}"
 MIN_NODE="${COVERAGE_MIN_NODE:-65}"
 MIN_COMBINED="${COVERAGE_MIN_COMBINED:-65}"
@@ -35,10 +37,10 @@ fi
 
 echo "== python coverage =="
 python3 -m coverage erase
-python3 -m coverage run --branch --source="$PY_SOURCE_DIR" "$PY_TEST_FILE"
-python3 -m coverage xml -o "$OUT_DIR/python-coverage.xml"
-python3 -m coverage json -o "$OUT_DIR/python-coverage.json"
-python3 -m coverage report > "$OUT_DIR/python-coverage.txt"
+python3 -m coverage run --branch --source="$PY_SOURCE_DIR" --omit="$PY_COVERAGE_OMIT" "$PY_TEST_FILE"
+python3 -m coverage xml --omit="$PY_COVERAGE_OMIT" -o "$OUT_DIR/python-coverage.xml"
+python3 -m coverage json --omit="$PY_COVERAGE_OMIT" -o "$OUT_DIR/python-coverage.json"
+python3 -m coverage report --omit="$PY_COVERAGE_OMIT" > "$OUT_DIR/python-coverage.txt"
 
 echo "== node coverage =="
 rm -rf "$OUT_DIR/node"
