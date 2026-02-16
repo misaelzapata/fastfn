@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+import importlib.util
+import json
+import shutil
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+SRC = ROOT / "examples/functions/rust/rust_profile/app.rs"
+CFG = ROOT / "examples/functions/rust/rust_profile/fn.config.json"
+RUNTIME_DIR = ROOT / "srv/fn/runtimes"
+RUST_DAEMON_PATH = RUNTIME_DIR / "rust-daemon.py"
+
+_RUST_SPEC = importlib.util.spec_from_file_location("fastfn_rust_daemon", RUST_DAEMON_PATH)
+if _RUST_SPEC is None or _RUST_SPEC.loader is None:
+    raise RuntimeError(f"failed to load runtime module: {RUST_DAEMON_PATH}")
+rust_daemon = importlib.util.module_from_spec(_RUST_SPEC)  # type: ignore
+_RUST_SPEC.loader.exec_module(rust_daemon)  # type: ignore
+
+
+def ensure_toolchain() -> None:
+    rustc = shutil.which("rustc")
+    cargo = shutil.which("cargo")
+    if not rustc or not cargo:
+        raise RuntimeError("rustc/cargo not found in PATH")
+
+
+def configure_runtime_paths() -> None:
+    rust_daemon.FUNCTIONS_DIR = ROOT / "examples/functions"
+    rust_daemon.RUNTIME_FUNCTIONS_DIR = rust_daemon.FUNCTIONS_DIR / "rust"
+    rust_daemon._BINARY_CACHE.clear()
+
+
+def test_source_contract() -> None:
+    assert SRC.is_file(), f"missing rust source: {SRC}"
+    raw = SRC.read_text(encoding="utf-8")
+    assert "pub fn handler" in raw, "handler signature missing"
+    assert "serde_json" in raw, "serde_json usage missing"
+
+    assert CFG.is_file(), f"missing rust config: {CFG}"
+    cfg_raw = CFG.read_text(encoding="utf-8")
+    assert '"methods": ["GET"]' in cfg_raw, "GET policy missing in config"
+
+
+def test_runtime_handler_execution() -> None:
+    resp = rust_daemon._handle_request_direct(
+        {
+            "fn": "rust_profile",
+            "event": {
+                "query": {"name": "UnitRust"},
+            },
+        }
+    )
+    assert resp.get("status") == 200, resp
+    headers = resp.get("headers") or {}
+    assert headers.get("Content-Type") == "application/json", headers
+
+    body = json.loads(resp.get("body") or "{}")
+    assert body.get("runtime") == "rust", body
+    assert body.get("function") == "rust_profile", body
+    assert body.get("hello") == "rust-UnitRust", body
+
+
+def test_runtime_not_found() -> None:
+    try:
+        rust_daemon._handle_request_direct({"fn": "missing_rust_profile", "event": {}})
+    except FileNotFoundError:
+        return
+    raise AssertionError("missing rust function should raise FileNotFoundError")
+
+
+def main() -> None:
+    ensure_toolchain()
+    configure_runtime_paths()
+    test_source_contract()
+    test_runtime_handler_execution()
+    test_runtime_not_found()
+    print("rust unit tests passed")
+
+
+if __name__ == "__main__":
+    main()

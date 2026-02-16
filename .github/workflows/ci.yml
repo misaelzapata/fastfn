@@ -16,9 +16,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  cli:
+    name: Go CLI (Build & Test)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          cache: true
+
+      - name: Install dependencies
+        run: cd cli && go mod download
+
+      - name: Run Go Tests
+        run: cd cli && go test -v ./...
+
+      - name: Build Binary
+        run: cd cli && go build -o ../bin/fastfn
+
   unit:
     name: Unit + Coverage (Python + Node)
     runs-on: ubuntu-latest
+    needs: cli
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -34,6 +57,38 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Ensure bash is available
+        shell: sh
+        run: |
+          if command -v bash >/dev/null 2>&1; then
+            exit 0
+          fi
+          if command -v apt-get >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y bash
+            exit 0
+          fi
+          if command -v apk >/dev/null 2>&1; then
+            if command -v sudo >/dev/null 2>&1; then
+              sudo apk add --no-cache bash
+            else
+              apk add --no-cache bash
+            fi
+            exit 0
+          fi
+          echo "bash is required for full CI coverage/integration paths" >&2
+          exit 1
+
+      - name: Detect bash availability
+        id: has_bash
+        shell: sh
+        run: |
+          if command -v bash >/dev/null 2>&1; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Install coverage tooling
         run: |
           python3 -m pip install --upgrade pip
@@ -41,12 +96,52 @@ jobs:
           npm install -g c8
 
       - name: Ensure scripts are executable
-        run: chmod +x scripts/*.sh
+        if: steps.has_bash.outputs.present == 'true'
+        run: chmod +x cli/coverage.sh
 
-      - name: Run unit tests with coverage
-        run: ./scripts/coverage.sh
+      - name: Run unit tests with coverage (bash path)
+        if: steps.has_bash.outputs.present == 'true'
+        env:
+          COVERAGE_MIN_PYTHON: "60"
+          COVERAGE_MIN_NODE: "65"
+          COVERAGE_MIN_COMBINED: "65"
+          COVERAGE_MIN_LUA: "70"
+          COVERAGE_ENFORCE_LUA: "1"
+        run: ./cli/coverage.sh
+
+      - name: Run unit tests (no-bash fallback)
+        if: steps.has_bash.outputs.present != 'true'
+        shell: sh
+        run: |
+          python3 tests/unit/test-python-handlers.py
+          if ! command -v node >/dev/null 2>&1; then
+            echo "node is required for no-bash fallback tests" >&2
+            exit 1
+          fi
+          env -u NO_COLOR node tests/unit/test-node-handler.js
+          (cd sdk/js && env -u NO_COLOR node smoke.test.cjs)
+
+      - name: Run SDK contract tests (bash path)
+        if: steps.has_bash.outputs.present == 'true'
+        run: bash tests/unit/test-sdks.sh
+
+      - name: Run SDK contract tests (no-bash fallback)
+        if: steps.has_bash.outputs.present != 'true'
+        shell: sh
+        run: |
+          python3 - <<'PY'
+          from sdk.python.fastfn.types import Request, Response
+          req: Request = {"id": "ci-no-bash", "method": "GET", "path": "/x", "query": {}, "headers": {}, "body": "", "client": {}, "context": {}, "env": {}}
+          resp: Response = {"status": 200, "headers": {"Content-Type": "application/json"}, "body": "{}"}
+          assert req["method"] == "GET"
+          assert resp["status"] == 200
+          PY
+          if command -v cargo >/dev/null 2>&1 && command -v rustc >/dev/null 2>&1; then
+            (cd sdk/rust && cargo test --quiet)
+          fi
 
       - name: Upload coverage artifacts
+        if: steps.has_bash.outputs.present == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: coverage-artifacts
@@ -56,18 +151,22 @@ jobs:
             coverage/python-coverage.txt
             coverage/node/coverage-summary.json
             coverage/node/lcov.info
+            coverage/lua/luacov.report.out
             coverage/node-coverage.txt
+            coverage/lua-coverage.txt
             coverage/summary.md
+            coverage/summary.json
 
       - name: Publish coverage to Codecov
-        uses: codecov/codecov-action@v4
+        if: steps.has_bash.outputs.present == 'true'
+        uses: codecov/codecov-action@v5
         with:
+          token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage/python-coverage.xml,./coverage/node/lcov.info
           fail_ci_if_error: false
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Coverage summary
+        if: steps.has_bash.outputs.present == 'true'
         run: cat coverage/summary.md >> "$GITHUB_STEP_SUMMARY"
 
   e2e:
@@ -97,16 +196,50 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Ensure bash is available
+        shell: sh
+        run: |
+          if command -v bash >/dev/null 2>&1; then
+            exit 0
+          fi
+          if command -v apt-get >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y bash
+            exit 0
+          fi
+          if command -v apk >/dev/null 2>&1; then
+            if command -v sudo >/dev/null 2>&1; then
+              sudo apk add --no-cache bash
+            else
+              apk add --no-cache bash
+            fi
+            exit 0
+          fi
+          echo "bash is required for E2E pipeline" >&2
+          exit 1
+
       - name: Ensure test scripts are executable
         run: |
-          chmod +x scripts/*.sh
-          chmod +x tests/integration/test_api.sh
+          chmod +x cli/test-all.sh
+          chmod +x cli/test-lua.sh
+          chmod +x cli/test-playwright.sh
+          chmod +x tests/integration/test-api.sh
+          chmod +x tests/integration/test-openapi-system.sh
+          chmod +x scripts/ci/check-repo-layout.sh
+          chmod +x scripts/ci/test-pipeline.sh
 
-      - name: Run full test suite
-        run: ./scripts/test-all.sh
+      - name: Run CI pipeline (bash-aware)
+        shell: sh
+        run: sh ./scripts/ci/test-pipeline.sh
 
-      - name: Run Playwright UI E2E
-        run: ./scripts/test-playwright.sh
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            tests/results
 
       - name: Dump Compose logs on failure
         if: failure()

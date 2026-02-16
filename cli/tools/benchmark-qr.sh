@@ -7,7 +7,7 @@ CONCURRENCY_SET="${CONCURRENCY_SET:-1,2,4,6,8}"
 BASE_URL="${BASE_URL:-http://127.0.0.1:8080}"
 AUTO_STACK="${AUTO_STACK:-1}" # 1 => docker compose up/down in this script
 
-ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 
 if [[ "$MODE" != "default" && "$MODE" != "no-throttle" ]]; then
   echo "usage: $0 [default|no-throttle]"
@@ -167,4 +167,3 @@ for endpoint in sorted({r["endpoint"] for r in rows}):
         best = max(clean, key=lambda x: x["rps"])
         print(f"{endpoint},{domain},{best['concurrency']},{best['rps']}")
 PY
-

@@ -24,7 +24,8 @@ jobs:
         with:
           python-version: 3.x
 
-      - echo "cache_id=$(date --utc '+%V')" >> $GITHUB_ENV 
+      - name: Set cache key suffix
+        run: echo "cache_id=$(date --utc +%V)" >> "$GITHUB_ENV"
 
       - uses: actions/cache@v4
         with:

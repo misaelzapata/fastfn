@@ -148,9 +148,9 @@ assert "cron_tick" in py_names, obj
 assert "stripe_webhook_verify" in py_names, obj
 assert "sendgrid_send" in py_names, obj
 assert "sheets_webapp_append" in py_names, obj
-assert "custom_handler_demo" in py_names, obj
+assert "custom-handler-demo" in py_names, obj
 assert ("hello" in node_names) or ("node_echo" in node_names), obj
-assert "custom_handler_demo" in node_names, obj
+assert "custom-handler-demo" in node_names, obj
 assert "slack_webhook" in node_names, obj
 assert "discord_webhook" in node_names, obj
 assert "notion_create_page" in node_names, obj
@@ -159,7 +159,7 @@ assert "rust_profile" in rust_names, obj
 PY
 
 echo "== test: invoke.handler custom name (node/python) =="
-node_custom_resp="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -X POST 'http://127.0.0.1:8080/_fn/invoke' -H 'Content-Type: application/json' --data '{\"runtime\":\"node\",\"name\":\"custom_handler_demo\",\"method\":\"GET\",\"query\":{\"name\":\"Codex\"},\"body\":\"\"}'")"
+node_custom_resp="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -X POST 'http://127.0.0.1:8080/_fn/invoke' -H 'Content-Type: application/json' --data '{\"runtime\":\"node\",\"name\":\"custom-handler-demo\",\"method\":\"GET\",\"query\":{\"name\":\"Codex\"},\"body\":\"\"}'")"
 python3 - "$node_custom_resp" <<'PY'
 import json
 import sys
@@ -170,7 +170,7 @@ assert inner.get("handler") == "main", inner
 assert inner.get("hello") == "Codex", inner
 PY
 
-py_custom_resp="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -X POST 'http://127.0.0.1:8080/_fn/invoke' -H 'Content-Type: application/json' --data '{\"runtime\":\"python\",\"name\":\"custom_handler_demo\",\"method\":\"GET\",\"query\":{\"name\":\"Codex\"},\"body\":\"\"}'")"
+py_custom_resp="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -X POST 'http://127.0.0.1:8080/_fn/invoke' -H 'Content-Type: application/json' --data '{\"runtime\":\"python\",\"name\":\"custom-handler-demo\",\"method\":\"GET\",\"query\":{\"name\":\"Codex\"},\"body\":\"\"}'")"
 python3 - "$py_custom_resp" <<'PY'
 import json
 import sys
@@ -1082,14 +1082,14 @@ if [[ "$demo_recipe_delete_code" != "200" ]]; then
 fi
 
 echo "== test: stress smoke =="
-python3 "$ROOT_DIR/tests/stress/load_runner.py" \
+python3 "$ROOT_DIR/tests/stress/load-runner.py" \
   --base-url "http://127.0.0.1:8080" \
   --path "/fn/hello?name=stress" \
   --total 120 \
   --concurrency 24 \
   --expect 200 429
 
-python3 "$ROOT_DIR/tests/stress/load_runner.py" \
+python3 "$ROOT_DIR/tests/stress/load-runner.py" \
   --base-url "http://127.0.0.1:8080" \
   --path "/fn/slow?sleep_ms=120" \
   --total 120 \
@@ -1097,7 +1097,7 @@ python3 "$ROOT_DIR/tests/stress/load_runner.py" \
   --expect 200 429
 
 echo "== test: runtime down -> 503 =="
-if "${DC[@]}" exec -T openresty sh -lc "pkill -f node_daemon.js >/dev/null 2>&1 || true"; then
+if "${DC[@]}" exec -T openresty sh -lc "pkill -f node-daemon.js >/dev/null 2>&1 || true"; then
   sleep 1
   status_503="$(dc_status "/fn/hello@v2?name=Down")"
   if [[ "$status_503" != "503" ]]; then

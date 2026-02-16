@@ -1,6 +1,0 @@
-{
-  "runtime": "node",
-  "name": "my-test-function",
-  "version": "1.0.0",
-  "entrypoint": "handler.js"
-}

@@ -1,6 +1,7 @@
 #!/usr/bin/env resty
 
-package.path = "/app/openresty/lua/?.lua;/app/openresty/lua/?/init.lua;" .. package.path
+local REPO_ROOT = os.getenv("FASTFN_REPO_ROOT") or "/app"
+package.path = REPO_ROOT .. "/openresty/lua/?.lua;" .. REPO_ROOT .. "/openresty/lua/?/init.lua;" .. package.path
 
 local function fail(msg)
   io.stderr:write("FAIL: " .. msg .. "\n")
