@@ -9,7 +9,8 @@ Canonical fixture root for integration and E2E scenarios.
 - `test-integration-config/`: `fastfn.toml` fixture using `functions_dir = "functions"`.
 - `test-cfg-config/`: `fastfn.toml` fixture using `functions_dir = "sub"`.
 - `test-config-config/`: `fastfn.toml` fixture using `functions_dir = "subdir"`.
-- `local-dev-samples/`: migrated local development samples from top-level `test/`.
+- `local-dev-samples/`: dependency-heavy local fixtures used by coverage/integration flows.
+- `local-dev-samples-legacy/`: migrated local development samples previously stored in top-level `test/`.
 
 ## Usage
 
