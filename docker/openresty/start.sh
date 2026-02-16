@@ -2,6 +2,7 @@
 set -eu
 
 mkdir -p /tmp/fastfn
+chmod 1777 /tmp/fastfn 2>/dev/null || true
 
 RUNTIMES="${FN_RUNTIMES:-python,node,php,lua}"
 
@@ -86,4 +87,3 @@ cleanup() {
 trap cleanup INT TERM EXIT
 
 exec openresty -g "daemon off;" -p /app/openresty -c nginx.conf
-

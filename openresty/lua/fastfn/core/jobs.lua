@@ -18,6 +18,7 @@ local DEFAULT_MAX_RESULT_BYTES = 256 * 1024
 local DEFAULT_MAX_ATTEMPTS = 1
 local DEFAULT_RETRY_DELAY_MS = 1000
 local ENSURED_DIRS = {}
+local DEFAULT_JOBS_DIR = "/tmp/fastfn/jobs"
 
 local function env_bool(name, default_value)
   local raw = os.getenv(name)
@@ -80,7 +81,17 @@ end
 
 local function jobs_dir()
   local cfg = routes.get_config()
-  return tostring(cfg.functions_root) .. "/.fastfn/jobs"
+  local override = os.getenv("FN_JOBS_DIR")
+  if override ~= nil and tostring(override) ~= "" then
+    return tostring(override)
+  end
+  if type(cfg) == "table" and type(cfg.socket_base_dir) == "string" and cfg.socket_base_dir ~= "" then
+    local base = tostring(cfg.socket_base_dir):gsub("/+$", "")
+    if base ~= "" then
+      return base .. "/jobs"
+    end
+  end
+  return DEFAULT_JOBS_DIR
 end
 
 local function shell_quote(s)
@@ -88,12 +99,18 @@ local function shell_quote(s)
 end
 
 local function ensure_dir(path)
+  if type(path) ~= "string" or path == "" then
+    return false, "invalid dir"
+  end
   if ENSURED_DIRS[path] then
     return true
   end
-  os.execute(string.format("mkdir -p %s", shell_quote(path)))
-  ENSURED_DIRS[path] = true
-  return true
+  local ok = os.execute(string.format("mkdir -p %s", shell_quote(path)))
+  if ok == true or ok == 0 then
+    ENSURED_DIRS[path] = true
+    return true
+  end
+  return false, "mkdir failed"
 end
 
 local function write_file_atomic(path, data)
@@ -414,7 +431,10 @@ local function result_path(id)
 end
 
 local function write_spec(id, spec)
-  ensure_dir(jobs_dir())
+  local ok, err = ensure_dir(jobs_dir())
+  if not ok then
+    return nil, err or "failed to create jobs dir"
+  end
   local raw = cjson.encode(spec) or "{}"
   return write_file_atomic(spec_path(id), raw .. "\n")
 end
@@ -432,7 +452,10 @@ local function read_spec(id)
 end
 
 local function write_result(id, result)
-  ensure_dir(jobs_dir())
+  local ok, err = ensure_dir(jobs_dir())
+  if not ok then
+    return nil, err or "failed to create jobs dir"
+  end
   local raw = cjson.encode(result) or "{}"
   local maxb = jobs_max_result_bytes()
   if #raw > maxb then
