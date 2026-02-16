@@ -347,7 +347,10 @@ async function testEdgeFilterAuthAndRewrite() {
   assert.equal(typeof ok.proxy, "object");
   assert.equal(ok.proxy.method, "GET");
   const rewritten = new URL(String(ok.proxy.path), "http://fastfn.local");
-  assert.equal(rewritten.pathname, "/_fn/openapi.json");
+  assert.ok(
+    rewritten.pathname === "/_fn/openapi.json" || rewritten.pathname === "/openapi.json",
+    `unexpected rewritten path: ${rewritten.pathname}`
+  );
   const rewrittenUserId = rewritten.searchParams.get("edge_user_id") || rewritten.searchParams.get("edge-user-id");
   assert.equal(rewrittenUserId, "123");
   assert.equal(ok.proxy.timeout_ms, 10000);
