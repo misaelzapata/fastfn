@@ -1,0 +1,1 @@
+module.exports = async () => ({ status: 200, body: {"ok": true} });

@@ -1,0 +1,67 @@
+# .goreleaser.yaml
+project_name: fastfn
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: "fastfn"
+    binary: "fastfn"
+    main: "./main.go"  # Assuming main.go is at cli/ root
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- .Arch }}
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  name_template: "{{ .Tag }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+
+# Homebrew Tap Integration
+brews:
+  -
+    name: fastfn
+    
+    # Git repository to push the formula to
+    repository:
+      owner: misaelzapata
+      name: homebrew-fastfn
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+
+    # Folder inside the repository to put the formula.
+    directory: Formula
+
+    # Homepage URL
+    homepage: "https://github.com/misaelzapata/fastfn"
+
+    # Description
+    description: "The fastest way to build serverless functions locally"
+
+    # License
+    license: "MIT"
+
+    # Test block
+    test: |
+      system "#{bin}/fastfn --version"
