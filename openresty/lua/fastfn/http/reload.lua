@@ -1,7 +1,8 @@
 local routes = require "fastfn.core.routes"
 local guard = require "fastfn.console.guard"
 
-if ngx.req.get_method() ~= "POST" then
+local method = ngx.req.get_method()
+if method ~= "POST" and method ~= "GET" then
   guard.write_json(405, { error = "method not allowed" })
   return
 end

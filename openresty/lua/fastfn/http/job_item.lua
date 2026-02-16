@@ -21,11 +21,31 @@ if suffix == "result" then
     return
   end
   local result = jobs.read_result(id)
-  if not result then
-    guard.write_json(404, { error = "result not found" })
+  if result then
+    guard.write_json(200, result)
     return
   end
-  guard.write_json(200, result)
+
+  local meta = jobs.get(id)
+  if not meta then
+    guard.write_json(404, { error = "job not found" })
+    return
+  end
+
+  local status = tostring(meta.status or "")
+  if status == "queued" or status == "running" or status == "retrying" then
+    guard.write_json(202, {
+      id = id,
+      status = status,
+      error = "result not ready",
+      attempt = meta.attempt,
+      max_attempts = meta.max_attempts,
+      retry_delay_ms = meta.retry_delay_ms,
+    })
+    return
+  end
+
+  guard.write_json(404, { error = "result not found", status = status })
   return
 end
 
@@ -54,4 +74,3 @@ if not meta then
   return
 end
 guard.write_json(status or 200, meta)
-

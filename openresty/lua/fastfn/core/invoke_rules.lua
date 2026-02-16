@@ -12,11 +12,9 @@ M.RESERVED_ROUTE_PREFIXES = {
   "/fn",
   "/_fn",
   "/console",
-  "/docs",
 }
 M.RESERVED_ROUTE_EXACT = {
   ["/"] = true,
-  ["/openapi.json"] = true,
 }
 
 local function copy_list(input)

@@ -18,19 +18,31 @@ if type(payload) ~= "table" then
   return
 end
 
--- Treat assistant as a write-level feature (local-only by default, admin token override).
-if not guard.enforce_write() then
+local mode = string.lower(tostring(payload.mode or "generate"))
+if mode ~= "generate" and mode ~= "chat" and mode ~= "auto" then
+  guard.write_json(400, { error = "mode must be generate, chat, or auto" })
   return
 end
 
-local code, err = assistant.generate({
+-- Chat mode is read-like (no writes); code generation remains write-gated.
+if mode ~= "chat" then
+  if not guard.enforce_write() then
+    return
+  end
+end
+
+local text, err, resolved_mode = assistant.generate({
   runtime = payload.runtime,
   name = payload.name,
   template = payload.template,
   prompt = payload.prompt,
   timeout_ms = payload.timeout_ms,
+  mode = mode,
+  current_code = payload.current_code,
+  chat_history = payload.chat_history,
+  test_result = payload.test_result,
 })
-if not code then
+if not text then
   if err == "assistant disabled" then
     guard.write_json(404, { error = "assistant disabled" })
   else
@@ -39,9 +51,16 @@ if not code then
   return
 end
 
-guard.write_json(200, {
+local out = {
   runtime = tostring(payload.runtime or ""),
   name = tostring(payload.name or ""),
   template = tostring(payload.template or ""),
-  code = code,
-})
+  mode = tostring(resolved_mode or mode),
+}
+if tostring(resolved_mode or mode) == "chat" then
+  out.message = text
+else
+  out.code = text
+end
+
+guard.write_json(200, out)

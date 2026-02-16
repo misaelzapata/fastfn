@@ -1,0 +1,11 @@
+statsfile = "/tmp/luacov.stats.out"
+reportfile = "/tmp/luacov.report.out"
+delete_stats = true
+include = {
+  "fastfn.core",
+  "fastfn.http",
+  "fastfn.console",
+}
+exclude = {
+  "fastfn.console.asset",
+}

@@ -26,6 +26,54 @@ if [[ "$LUA_COVERAGE" == "1" ]]; then
     openresty \
     sh -lc '
       set -e
+      find_luacov_bin() {
+        # 1) Standard PATH first.
+        b="$(command -v luacov || command -v luacov-5.1 || true)"
+        if [ -n "$b" ]; then
+          printf "%s\n" "$b"
+          return 0
+        fi
+
+        # 1b) whereis when available (not always present in Alpine images).
+        if command -v whereis >/dev/null 2>&1; then
+          for n in luacov luacov-5.1; do
+            c="$(whereis -b "$n" 2>/dev/null | tr " " "\n" | grep "^/" | head -n1 || true)"
+            if [ -n "$c" ] && [ -x "$c" ]; then
+              printf "%s\n" "$c"
+              return 0
+            fi
+          done
+        fi
+
+        # 2) Common explicit bin dirs.
+        for d in /usr/local/bin /usr/bin /root/.luarocks/bin /home/*/.luarocks/bin; do
+          [ -d "$d" ] || continue
+          for n in luacov luacov-5.1; do
+            if [ -x "$d/$n" ]; then
+              printf "%s\n" "$d/$n"
+              return 0
+            fi
+          done
+        done
+
+        # 3) Rock tree fallback where wrapper may not be linked into PATH.
+        for p in \
+          /usr/local/lib/luarocks/rocks-5.1/luacov/*/bin/luacov \
+          /usr/local/lib/luarocks/rocks-5.1/luacov/*/bin/luacov-5.1 \
+          /usr/lib/luarocks/rocks-5.1/luacov/*/bin/luacov \
+          /usr/lib/luarocks/rocks-5.1/luacov/*/bin/luacov-5.1 \
+          /root/.luarocks/lib/luarocks/rocks-5.1/luacov/*/bin/luacov \
+          /root/.luarocks/lib/luarocks/rocks-5.1/luacov/*/bin/luacov-5.1
+        do
+          if [ -x "$p" ]; then
+            printf "%s\n" "$p"
+            return 0
+          fi
+        done
+
+        return 1
+      }
+
       RESTY_BIN="$(command -v resty || true)"
       if [ -z "$RESTY_BIN" ] && [ -x /usr/local/openresty/bin/resty ]; then
         RESTY_BIN="/usr/local/openresty/bin/resty"
@@ -43,17 +91,12 @@ if [[ "$LUA_COVERAGE" == "1" ]]; then
         exit 127
       fi
 
-      LUACOV_BIN="$(command -v luacov || command -v luacov-5.1 || true)"
-      if [ -z "$LUACOV_BIN" ] && [ -x /usr/local/bin/luacov ]; then
-        LUACOV_BIN="/usr/local/bin/luacov"
-      fi
-      if [ -z "$LUACOV_BIN" ] && [ -x /usr/local/bin/luacov-5.1 ]; then
-        LUACOV_BIN="/usr/local/bin/luacov-5.1"
-      fi
+      LUACOV_BIN="$(find_luacov_bin || true)"
       if [ -z "$LUACOV_BIN" ]; then
-        echo "luacov command not found in PATH or known locations" >&2
+        echo "luacov command not found in PATH or known locations (including LuaRocks trees)" >&2
         echo "PATH=$PATH" >&2
-        ls -la /usr/local/bin /usr/bin 2>/dev/null | sed -n "1,120p" >&2 || true
+        ls -la /usr/local/bin /usr/bin /root/.luarocks/bin 2>/dev/null | sed -n "1,160p" >&2 || true
+        ls -la /usr/local/lib/luarocks/rocks-5.1/luacov /usr/lib/luarocks/rocks-5.1/luacov /root/.luarocks/lib/luarocks/rocks-5.1/luacov 2>/dev/null | sed -n "1,160p" >&2 || true
         exit 127
       fi
 

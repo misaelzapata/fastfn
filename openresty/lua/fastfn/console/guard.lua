@@ -64,6 +64,10 @@ function M.api_enabled()
   return resolve_flag("api_enabled", "FN_CONSOLE_API_ENABLED", true)
 end
 
+function M.admin_api_enabled()
+  return env_bool("FN_ADMIN_API_ENABLED", true)
+end
+
 function M.write_enabled()
   return resolve_flag("write_enabled", "FN_CONSOLE_WRITE_ENABLED", false)
 end
@@ -131,12 +135,28 @@ function M.request_has_session()
   return sess ~= nil
 end
 
+function M.current_session_user()
+  local sess = auth.read_session()
+  if type(sess) ~= "table" then
+    return nil
+  end
+  if type(sess.user) ~= "string" or sess.user == "" then
+    return nil
+  end
+  return sess.user
+end
+
 function M.enforce_api(opts)
   opts = opts or {}
   local skip_login = opts.skip_login == true
 
   if not M.api_enabled() then
     json_error(404, "console api disabled")
+    return false
+  end
+
+  if not M.admin_api_enabled() then
+    json_error(404, "admin api disabled")
     return false
   end
 
@@ -195,10 +215,12 @@ function M.state_snapshot()
   return {
     ui_enabled = M.ui_enabled(),
     api_enabled = M.api_enabled(),
+    admin_api_enabled = M.admin_api_enabled(),
     write_enabled = M.write_enabled(),
     local_only = M.local_only(),
     login_enabled = M.login_enabled(),
     login_api_enabled = M.login_api_enabled(),
+    current_user = M.current_session_user(),
   }
 end
 

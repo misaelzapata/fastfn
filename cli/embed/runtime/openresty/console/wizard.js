@@ -30,35 +30,6 @@ function curlFor(baseUrl, route, method, queryExample, bodyExample) {
   return `curl -sS -X ${method} '${url}' -H 'Content-Type: text/plain' --data ${JSON.stringify(body)}`;
 }
 
-function defaultParamsForRoute(route) {
-  const out = {};
-  const re = /:([A-Za-z0-9_]+)(\*?)/g;
-  let m;
-  while ((m = re.exec(String(route || ''))) !== null) {
-    out[m[1]] = m[2] === '*' ? 'example/a/b' : '123';
-  }
-  return out;
-}
-
-async function runSmokeInvoke(runtime, name, version, method, route) {
-  const payload = {
-    runtime,
-    name,
-    method: String(method || 'GET').toUpperCase(),
-    route,
-    params: defaultParamsForRoute(route),
-    query: {},
-    body: '',
-    context: {},
-  };
-  if (version) payload.version = version;
-  return getJson('/_fn/invoke', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-}
-
 function wizardTemplate(runtime, template) {
   const rt = String(runtime || 'python');
   const t = String(template || 'hello_json');
@@ -78,14 +49,6 @@ function wizardTemplate(runtime, template) {
         methods: ['GET'],
         query_example: { name: 'World' },
         code: `// @summary Hello JSON\n// @methods GET\n// @query {\"name\":\"World\"}\nexports.handler = async (event) => {\n  const q = event.query || {};\n  const name = q.name || 'World';\n  return {\n    status: 200,\n    headers: { 'Content-Type': 'application/json' },\n    body: JSON.stringify({ hello: name }),\n  };\n};\n`,
-      };
-    }
-    if (rt === 'lua') {
-      return {
-        summary: 'Hello JSON',
-        methods: ['GET'],
-        query_example: { name: 'World' },
-        code: `local cjson = require("cjson.safe")\n\n-- @summary Hello JSON\n-- @methods GET\n-- @query {"name":"World"}\nfunction handler(event)\n  local q = event.query or {}\n  local name = q.name or "World"\n  return {\n    status = 200,\n    headers = { ["Content-Type"] = "application/json" },\n    body = cjson.encode({ hello = name }),\n  }\nend\n`,
       };
     }
   }
@@ -120,15 +83,6 @@ function wizardTemplate(runtime, template) {
         query_example: { key: 'test' },
         body_example: 'hello',
         code: `// @summary Echo\n// @methods GET,POST\n// @query {\"key\":\"test\"}\n// @body hello\nexports.handler = async (event) => {\n  return {\n    status: 200,\n    headers: { 'Content-Type': 'application/json' },\n    body: JSON.stringify({\n      method: event.method,\n      query: event.query || {},\n      body: event.body || '',\n      context: event.context || {},\n    }),\n  };\n};\n`,
-      };
-    }
-    if (rt === 'lua') {
-      return {
-        summary: 'Echo',
-        methods: ['GET', 'POST'],
-        query_example: { key: 'test' },
-        body_example: 'hello',
-        code: `local cjson = require("cjson.safe")\n\n-- @summary Echo\n-- @methods GET,POST\n-- @query {"key":"test"}\n-- @body hello\nfunction handler(event)\n  return {\n    status = 200,\n    headers = { ["Content-Type"] = "application/json" },\n    body = cjson.encode({\n      method = event.method,\n      query = event.query or {},\n      body = event.body or "",\n      context = event.context or {},\n    }),\n  }\nend\n`,
       };
     }
   }
@@ -271,7 +225,7 @@ function wizardTemplate(runtime, template) {
         summary: 'GitHub webhook guard (signature verify)',
         methods: ['POST'],
         body_example: '{"zen":"Keep it logically awesome.","hook_id":123}',
-        code: `// @summary GitHub webhook guard (signature verify)\n// @methods POST\n// @body {\"zen\":\"Keep it logically awesome.\",\"hook_id\":123}\nconst crypto = require('node:crypto');\n\nfunction header(event, name) {\n  const h = event.headers || {};\n  return h[name] || h[name.toLowerCase()] || h[name.toUpperCase()] || null;\n}\n\nfunction json(status, payload) {\n  return { status, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) };\n}\n\nfunction timingSafeEq(a, b) {\n  const ab = Buffer.from(String(a || ''), 'utf8');\n  const bb = Buffer.from(String(b || ''), 'utf8');\n  if (ab.length !== bb.length) return false;\n  return crypto.timingSafeEqual(ab, bb);\n}\n\nfunction computeSig(secret, body) {\n  return 'sha256=' + crypto.createHmac('sha256', Buffer.from(secret, 'utf8')).update(Buffer.from(body || '', 'utf8')).digest('hex');\n}\n\nexports.handler = async (event) => {\n  const env = event.env || {};\n  const ctx = event.context || {};\n  const secret = String(env.GITHUB_WEBHOOK_SECRET || '');\n  if (!secret) return json(500, { error: 'GITHUB_WEBHOOK_SECRET not configured' });\n\n  const body = typeof event.body === 'string' ? event.body : '';\n  const provided = String(header(event, 'x-hub-signature-256') || '');\n  if (!provided) return json(400, { error: 'missing x-hub-signature-256' });\n\n  const expected = computeSig(secret, body);\n  if (!timingSafeEq(provided, expected)) return json(401, { error: 'invalid signature' });\n\n  const q = event.query || {};\n  const forward = String(q.forward || '').trim() === '1';\n  if (!forward) return json(200, { ok: true, verified: true });\n\n  return {\n    proxy: {\n      path: '/request-inspector',\n      method: 'POST',\n      headers: { 'x-fastfn-edge': '1', 'x-fastfn-request-id': String(ctx.request_id || ''), 'x-webhook-verified': '1' },\n      body,\n      timeout_ms: ctx.timeout_ms || 2000,\n    },\n  };\n};\n`,
+        code: `// @summary GitHub webhook guard (signature verify)\n// @methods POST\n// @body {\"zen\":\"Keep it logically awesome.\",\"hook_id\":123}\nconst crypto = require('node:crypto');\n\nfunction header(event, name) {\n  const h = event.headers || {};\n  return h[name] || h[name.toLowerCase()] || h[name.toUpperCase()] || null;\n}\n\nfunction json(status, payload) {\n  return { status, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) };\n}\n\nfunction timingSafeEq(a, b) {\n  const ab = Buffer.from(String(a || ''), 'utf8');\n  const bb = Buffer.from(String(b || ''), 'utf8');\n  if (ab.length !== bb.length) return false;\n  return crypto.timingSafeEqual(ab, bb);\n}\n\nfunction computeSig(secret, body) {\n  return 'sha256=' + crypto.createHmac('sha256', Buffer.from(secret, 'utf8')).update(Buffer.from(body || '', 'utf8')).digest('hex');\n}\n\nexports.handler = async (event) => {\n  const env = event.env || {};\n  const ctx = event.context || {};\n  const secret = String(env.GITHUB_WEBHOOK_SECRET || '');\n  if (!secret) return json(500, { error: 'GITHUB_WEBHOOK_SECRET not configured' });\n\n  const body = typeof event.body === 'string' ? event.body : '';\n  const provided = String(header(event, 'x-hub-signature-256') || '');\n  if (!provided) return json(400, { error: 'missing x-hub-signature-256' });\n\n  const expected = computeSig(secret, body);\n  if (!timingSafeEq(provided, expected)) return json(401, { error: 'invalid signature' });\n\n  const q = event.query || {};\n  const forward = String(q.forward || '').trim() === '1';\n  if (!forward) return json(200, { ok: true, verified: true });\n\n  return {\n    proxy: {\n      path: '/fn/request_inspector',\n      method: 'POST',\n      headers: { 'x-fastfn-edge': '1', 'x-fastfn-request-id': String(ctx.request_id || ''), 'x-webhook-verified': '1' },\n      body,\n      timeout_ms: ctx.timeout_ms || 2000,\n    },\n  };\n};\n`,
         edgeConfig: {
           edge: { base_url: 'http://127.0.0.1:8080', allow_hosts: ['127.0.0.1:8080'], allow_private: true, max_response_bytes: 1048576 },
         },
@@ -294,7 +248,7 @@ function wizardTemplate(runtime, template) {
         methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
         query_example: { tenant: 'demo' },
         body_example: 'hello',
-        code: `// @summary Edge header injection + passthrough\n// @methods GET,POST,PUT,PATCH,DELETE\n// @query {\"tenant\":\"demo\"}\n// @body hello\nexports.handler = async (event) => {\n  const ctx = event.context || {};\n  const q = event.query || {};\n  const tenant = String(q.tenant || 'demo');\n  return {\n    proxy: {\n      path: '/request-inspector',\n      method: event.method || 'GET',\n      headers: {\n        'x-fastfn-edge': '1',\n        'x-fastfn-request-id': String(ctx.request_id || ''),\n        'x-tenant': tenant,\n      },\n      body: event.body || '',\n      timeout_ms: ctx.timeout_ms || 2000,\n    },\n  };\n};\n`,
+        code: `// @summary Edge header injection + passthrough\n// @methods GET,POST,PUT,PATCH,DELETE\n// @query {\"tenant\":\"demo\"}\n// @body hello\nexports.handler = async (event) => {\n  const ctx = event.context || {};\n  const q = event.query || {};\n  const tenant = String(q.tenant || 'demo');\n  return {\n    proxy: {\n      path: '/fn/request_inspector',\n      method: event.method || 'GET',\n      headers: {\n        'x-fastfn-edge': '1',\n        'x-fastfn-request-id': String(ctx.request_id || ''),\n        'x-tenant': tenant,\n      },\n      body: event.body || '',\n      timeout_ms: ctx.timeout_ms || 2000,\n    },\n  };\n};\n`,
         edgeConfig: {
           edge: { base_url: 'http://127.0.0.1:8080', allow_hosts: ['127.0.0.1:8080'], allow_private: true, max_response_bytes: 1048576 },
         },
@@ -306,7 +260,7 @@ function wizardTemplate(runtime, template) {
         methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
         query_example: { tenant: 'demo' },
         body_example: 'hello',
-        code: `# @summary Edge header injection + passthrough\n# @methods GET,POST,PUT,PATCH,DELETE\n# @query {\"tenant\":\"demo\"}\n# @body hello\n\ndef handler(event):\n    ctx = event.get(\"context\") or {}\n    q = event.get(\"query\") or {}\n    tenant = str(q.get(\"tenant\") or \"demo\")\n    return {\n        \"proxy\": {\n            \"path\": \"/request-inspector\",\n            \"method\": event.get(\"method\") or \"GET\",\n            \"headers\": {\n                \"x-fastfn-edge\": \"1\",\n                \"x-fastfn-request-id\": str(ctx.get(\"request_id\") or \"\"),\n                \"x-tenant\": tenant,\n            },\n            \"body\": event.get(\"body\") or \"\",\n            \"timeout_ms\": int(ctx.get(\"timeout_ms\") or 2000),\n        }\n    }\n`,
+        code: `# @summary Edge header injection + passthrough\n# @methods GET,POST,PUT,PATCH,DELETE\n# @query {\"tenant\":\"demo\"}\n# @body hello\n\ndef handler(event):\n    ctx = event.get(\"context\") or {}\n    q = event.get(\"query\") or {}\n    tenant = str(q.get(\"tenant\") or \"demo\")\n    return {\n        \"proxy\": {\n            \"path\": \"/fn/request_inspector\",\n            \"method\": event.get(\"method\") or \"GET\",\n            \"headers\": {\n                \"x-fastfn-edge\": \"1\",\n                \"x-fastfn-request-id\": str(ctx.get(\"request_id\") or \"\"),\n                \"x-tenant\": tenant,\n            },\n            \"body\": event.get(\"body\") or \"\",\n            \"timeout_ms\": int(ctx.get(\"timeout_ms\") or 2000),\n        }\n    }\n`,
         edgeConfig: {
           edge: { base_url: 'http://127.0.0.1:8080', allow_hosts: ['127.0.0.1:8080'], allow_private: true, max_response_bytes: 1048576 },
         },
@@ -362,14 +316,6 @@ export function initWizard(opts) {
   const wizAiCreateBtn = document.getElementById('wizAiCreateBtn');
   const wizAiOutEl = document.getElementById('wizAiOut');
 
-  async function fetchAssistantStatus() {
-    try {
-      return await getJson('/_fn/assistant/status');
-    } catch {
-      return null;
-    }
-  }
-
   async function create(openAfter) {
     if (!wizRuntimeEl || !wizNameEl || !wizTemplateEl) return;
     const runtime = String(wizRuntimeEl.value || '').trim();
@@ -420,7 +366,7 @@ export function initWizard(opts) {
 
     if (wizStatusEl) {
       const baseUrl = 'http://127.0.0.1:8080';
-      const route = `/${name}${version ? `@${version}` : ''}`;
+      const route = `/fn/${name}${version ? `@${version}` : ''}`;
       const methods = Array.isArray(tpl.methods) && tpl.methods.length > 0 ? tpl.methods : ['GET'];
       const queryEx = tpl.query_example || {};
       const bodyEx = tpl.body_example || '';
@@ -457,39 +403,16 @@ export function initWizard(opts) {
       return;
     }
     if (wizAiOutEl) wizAiOutEl.textContent = 'Generating...';
-    if (wizStatusEl) wizStatusEl.textContent = 'Asking AI to generate code...';
     try {
-      const status = await fetchAssistantStatus();
-      if (status && status.enabled === false) {
-        if (wizAiOutEl) wizAiOutEl.textContent = 'Error: assistant disabled';
-        if (wizStatusEl) wizStatusEl.textContent = 'AI assistant disabled. Enable FN_ASSISTANT_ENABLED.';
-        state.wiz_ai_code = '';
-        return;
-      }
-
       const out = await getJson('/_fn/assistant/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ runtime, name, template, prompt, mode: 'generate' }),
+        body: JSON.stringify({ runtime, name, template, prompt }),
       });
-      if (wizAiOutEl) wizAiOutEl.textContent = out.code || out.message || '(no output)';
+      if (wizAiOutEl) wizAiOutEl.textContent = out.code || '(no code)';
       state.wiz_ai_code = out.code || '';
-      if (wizStatusEl) {
-        const provider = status && status.provider ? ` provider=${status.provider}` : '';
-        wizStatusEl.textContent = `AI code generated.${provider} Use "Create from AI code" to save + run smoke test.`;
-      }
     } catch (err) {
-      const msg = String(err && err.message ? err.message : err);
-      if (wizAiOutEl) wizAiOutEl.textContent = `Error: ${msg}`;
-      if (wizStatusEl) {
-        if (msg.includes('assistant disabled')) {
-          wizStatusEl.textContent = 'AI assistant disabled. Enable FN_ASSISTANT_ENABLED.';
-        } else if (msg.includes('console write disabled')) {
-          wizStatusEl.textContent = 'Console write is disabled. Enable FN_CONSOLE_WRITE_ENABLED=1 (or use admin token) to generate/create with AI.';
-        } else {
-          wizStatusEl.textContent = `AI error: ${msg}`;
-        }
-      }
+      if (wizAiOutEl) wizAiOutEl.textContent = `Error: ${String(err && err.message ? err.message : err)}`;
       state.wiz_ai_code = '';
     }
   }
@@ -519,32 +442,14 @@ export function initWizard(opts) {
       }),
     });
 
-    const invokeMeta = created && created.metadata && created.metadata.invoke ? created.metadata.invoke : {};
-    const smokeRoute = String((invokeMeta && invokeMeta.route) || `/${name}${version ? `@${version}` : ''}`);
-    const smokeMethod = Array.isArray(invokeMeta.methods) && invokeMeta.methods.length > 0
-      ? invokeMeta.methods[0]
-      : 'GET';
-    let smokeResult = null;
-    let smokeError = null;
-    try {
-      smokeResult = await runSmokeInvoke(runtime, name, version, smokeMethod, smokeRoute);
-    } catch (err) {
-      smokeError = String(err && err.message ? err.message : err);
-    }
-
     if (wizStatusEl) {
       const baseUrl = 'http://127.0.0.1:8080';
-      const route = `/${name}${version ? `@${version}` : ''}`;
+      const route = `/fn/${name}${version ? `@${version}` : ''}`;
       const lines = [];
       lines.push(`Created ${runtime}/${publicLabel(name, version || null)} from AI`);
       lines.push(`Route: ${route}`);
       if (created && created.file_path) lines.push(`Code: ${created.file_path}`);
       if (created && created.config_path) lines.push(`Config: ${created.config_path}`);
-      if (smokeResult) {
-        lines.push(`Smoke test: status ${smokeResult.status} in ${smokeResult.latency_ms || 0} ms`);
-      } else if (smokeError) {
-        lines.push(`Smoke test error: ${smokeError}`);
-      }
       lines.push('Try:');
       lines.push(`  ${curlFor(baseUrl, route, 'GET', {}, '')}`);
       lines.push(`  ${curlFor(baseUrl, route, 'POST', {}, 'hello')}`);

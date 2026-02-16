@@ -1,8 +1,10 @@
 local cjson = require "cjson.safe"
 
 local client = require "fastfn.core.client"
+local lua_runtime = require "fastfn.core.lua_runtime"
 local limits = require "fastfn.core.limits"
 local routes = require "fastfn.core.routes"
+local invoke_rules = require "fastfn.core.invoke_rules"
 local utils = require "fastfn.core.gateway_utils"
 
 local M = {}
@@ -15,6 +17,7 @@ local DEFAULT_MAX_CONCURRENCY = 2
 local DEFAULT_MAX_RESULT_BYTES = 256 * 1024
 local DEFAULT_MAX_ATTEMPTS = 1
 local DEFAULT_RETRY_DELAY_MS = 1000
+local ENSURED_DIRS = {}
 
 local function env_bool(name, default_value)
   local raw = os.getenv(name)
@@ -85,7 +88,12 @@ local function shell_quote(s)
 end
 
 local function ensure_dir(path)
+  if ENSURED_DIRS[path] then
+    return true
+  end
   os.execute(string.format("mkdir -p %s", shell_quote(path)))
+  ENSURED_DIRS[path] = true
+  return true
 end
 
 local function write_file_atomic(path, data)
@@ -96,8 +104,12 @@ local function write_file_atomic(path, data)
   end
   f:write(data)
   f:close()
-  local ok = os.execute(string.format("mv %s %s", shell_quote(tmp), shell_quote(path)))
-  return ok == true or ok == 0
+  local ok, rename_err = os.rename(tmp, path)
+  if ok then
+    return true
+  end
+  os.remove(tmp)
+  return nil, rename_err
 end
 
 local function read_file(path, max_bytes)
@@ -185,10 +197,14 @@ local function ensure_name(raw)
   if type(raw) ~= "string" or raw == "" then
     return nil, "name is required"
   end
-  if not raw:match("^[a-zA-Z0-9_-]+$") then
+  local name = tostring(raw)
+  if name:sub(1, 1) == "/" or name == ".." or name:find("%.%.", 1, true) then
     return nil, "invalid name"
   end
-  return raw
+  if not name:match("^[A-Za-z0-9._/%-\\[%]@]+$") then
+    return nil, "invalid name"
+  end
+  return name
 end
 
 local function ensure_version(raw)
@@ -209,6 +225,121 @@ local function ensure_runtime(raw)
     return nil, "invalid runtime"
   end
   return raw
+end
+
+local function sorted_keys(tbl)
+  local keys = {}
+  for k, _ in pairs(tbl or {}) do
+    keys[#keys + 1] = k
+  end
+  table.sort(keys)
+  return keys
+end
+
+local function mapping_method_allowed(entry_methods, method)
+  if type(entry_methods) ~= "table" then
+    return true
+  end
+  for _, m in ipairs(entry_methods) do
+    if string.upper(tostring(m)) == method then
+      return true
+    end
+  end
+  return false
+end
+
+local function resolve_mapped_route(runtime, name, version, method)
+  local catalog = routes.discover_functions(false)
+  local mapped = (catalog and catalog.mapped_routes) or {}
+  local candidates = {}
+
+  for _, route in ipairs(sorted_keys(mapped)) do
+    local entries = mapped[route]
+    if type(entries) == "table" and entries.runtime ~= nil then
+      entries = { entries }
+    end
+    if type(entries) == "table" then
+      for _, entry in ipairs(entries) do
+        if type(entry) == "table"
+          and entry.runtime == runtime
+          and entry.fn_name == name
+          and (entry.version or nil) == (version or nil)
+          and mapping_method_allowed(entry.methods, method) then
+          candidates[#candidates + 1] = route
+          break
+        end
+      end
+    end
+  end
+
+  if #candidates == 0 then
+    return nil
+  end
+  table.sort(candidates)
+  return candidates[1]
+end
+
+local function parse_params_object(raw)
+  if raw == nil or raw == cjson.null then
+    return {}
+  end
+  if type(raw) ~= "table" or raw[1] ~= nil then
+    return nil, "params must be a JSON object"
+  end
+
+  local out = {}
+  for k, v in pairs(raw) do
+    if type(k) ~= "string" or k == "" then
+      return nil, "params keys must be non-empty strings"
+    end
+    if v == nil or v == cjson.null then
+      -- allow explicit null as "unset"
+    elseif type(v) == "string" then
+      out[k] = v
+    else
+      out[k] = tostring(v)
+    end
+  end
+  return out
+end
+
+local function encode_path_segment(value)
+  return ngx.escape_uri(tostring(value or ""))
+end
+
+local function encode_catch_all(value)
+  local raw = tostring(value or "")
+  if raw == "" then
+    return ""
+  end
+  local out = {}
+  for seg in raw:gmatch("[^/]+") do
+    out[#out + 1] = ngx.escape_uri(seg)
+  end
+  if #out == 0 then
+    return ngx.escape_uri(raw)
+  end
+  return table.concat(out, "/")
+end
+
+local function interpolate_route_params(route, params)
+  local missing = {}
+  local rendered = tostring(route or ""):gsub(":([A-Za-z0-9_]+)(%*?)", function(name, star)
+    local value = params and params[name] or nil
+    if value == nil or tostring(value) == "" then
+      missing[#missing + 1] = name
+      return ":" .. name .. (star or "")
+    end
+    if star == "*" then
+      return encode_catch_all(value)
+    end
+    return encode_path_segment(value)
+  end)
+
+  if #missing > 0 then
+    return nil, missing
+  end
+  return rendered, nil
 end
 
 local function allow_header_value(methods)
@@ -318,8 +449,8 @@ end
 local function runtime_is_down(runtime, rt_cfg)
   local up = routes.runtime_is_up(runtime)
   if up ~= true then
-    local ok, err = routes.check_runtime_socket(rt_cfg.socket, rt_cfg.timeout_ms or 250)
-    routes.set_runtime_health(runtime, ok, ok and "ok" or err)
+    local ok, reason = routes.check_runtime_health(runtime, rt_cfg)
+    routes.set_runtime_health(runtime, ok, ok and (reason or "ok") or reason)
     return not ok
   end
   return false
@@ -334,6 +465,9 @@ local function invoke_one(spec)
   local headers = spec.headers or {}
   local body = spec.body or ""
   local user_context = spec.context
+  local route = spec.route or "/_fn/jobs"
+  local route_template = spec.route_template or route
+  local path_params = type(spec.path_params) == "table" and spec.path_params or {}
 
   local runtime_cfg = routes.get_runtime_config(runtime)
   if not runtime_cfg then
@@ -372,15 +506,17 @@ local function invoke_one(spec)
 
   local request_id = spec.request_id
   local start = ngx.now()
-  local resp, err_code, err_msg = client.call_unix(runtime_cfg.socket, {
+  local request_payload = {
     fn = name,
     version = version,
     event = {
       id = request_id,
       ts = now_ms(),
       method = method,
-      path = "/_fn/jobs",
-      raw_path = "/_fn/jobs",
+      path = route,
+      raw_path = route_template,
+      params = path_params,
+      path_params = path_params,
       query = query,
       headers = headers,
       body = body,
@@ -398,7 +534,13 @@ local function invoke_one(spec)
         user = type(user_context) == "table" and user_context or nil,
       },
     },
-  }, timeout_ms)
+  }
+  local resp, err_code, err_msg
+  if routes.runtime_is_in_process(runtime, runtime_cfg) then
+    resp, err_code, err_msg = lua_runtime.call(request_payload)
+  else
+    resp, err_code, err_msg = client.call_unix(runtime_cfg.socket, request_payload, timeout_ms)
+  end
 
   limits.release(CONC, fn_key)
 
@@ -582,10 +724,13 @@ function M.enqueue(payload)
   if verr then
     return nil, 400, verr
   end
-  local runtime, rerr = ensure_runtime(payload.runtime)
-  if rerr then
-    return nil, 400, rerr
-  end
+local runtime, rerr = ensure_runtime(payload.runtime)
+if runtime == nil then
+  return nil, 400, "runtime is required"
+end
+if rerr then
+  return nil, 400, rerr
+end
   local method, merr = normalize_method(payload.method)
   if not method then
     return nil, 400, merr
@@ -593,36 +738,43 @@ function M.enqueue(payload)
 
   local resolved_runtime = runtime
   local resolved_version = version
-  if resolved_runtime then
-    local policy = routes.resolve_function_policy(resolved_runtime, name, resolved_version)
-    if not policy then
-      routes.discover_functions(true)
-      policy = routes.resolve_function_policy(resolved_runtime, name, resolved_version)
-      if not policy then
-        return nil, 404, "unknown function or version"
-      end
-    end
-  else
-    local resolve_err
-    resolved_runtime, resolved_version, resolve_err = routes.resolve_legacy_target(name, resolved_version)
-    if not resolved_runtime then
-      routes.discover_functions(true)
-      resolved_runtime, resolved_version, resolve_err = routes.resolve_legacy_target(name, resolved_version)
-    end
-    if not resolved_runtime then
-      if resolve_err then
-        return nil, 409, resolve_err
-      end
-      return nil, 404, "unknown function or version"
-    end
-  end
-
   local policy, perr = routes.resolve_function_policy(resolved_runtime, name, resolved_version)
   if not policy then
     return nil, 404, perr or "unknown function or version"
   end
   if not method_allowed(method, policy.methods) then
     return nil, 405, "method not allowed", { Allow = allow_header_value(policy.methods) }
+  end
+
+  local route = payload.route
+  local params_raw = payload.params
+  if route == cjson.null or route == "" then
+    route = nil
+  end
+  if route ~= nil and type(route) ~= "string" then
+    return nil, 400, "route must be a string when provided"
+  end
+  local params, params_err = parse_params_object(params_raw)
+  if not params then
+    return nil, 400, params_err or "invalid params"
+  end
+
+  local route_template
+  if route ~= nil then
+    route_template = invoke_rules.normalize_route(route)
+    if not route_template then
+      return nil, 400, "invalid route"
+    end
+  else
+    route_template = resolve_mapped_route(resolved_runtime, name, resolved_version, method)
+    if not route_template then
+      return nil, 404, "no mapped public route for target"
+    end
+  end
+
+  local resolved_route, missing_params = interpolate_route_params(route_template, params)
+  if not resolved_route then
+    return nil, 400, "missing required path params: " .. table.concat(missing_params or {}, ", ")
   end
 
   local body, berr = normalize_body(payload.body)
@@ -661,6 +813,8 @@ function M.enqueue(payload)
     name = name,
     version = resolved_version,
     method = method,
+    route = resolved_route,
+    route_template = route_template,
     attempt = 0,
     max_attempts = max_attempts,
     retry_delay_ms = retry_delay_ms,
@@ -673,6 +827,9 @@ function M.enqueue(payload)
     name = name,
     version = resolved_version,
     method = method,
+    route = resolved_route,
+    route_template = route_template,
+    path_params = params,
     query = query,
     headers = headers,
     body = body,
@@ -745,4 +902,3 @@ function M.read_result(id)
 end
 
 return M
-

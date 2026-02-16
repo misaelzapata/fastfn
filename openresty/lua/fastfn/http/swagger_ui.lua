@@ -1,3 +1,19 @@
+local function docs_enabled()
+  local raw = os.getenv("FN_DOCS_ENABLED")
+  if raw == nil or raw == "" then
+    return true
+  end
+  raw = string.lower(raw)
+  return not (raw == "0" or raw == "false" or raw == "off" or raw == "no")
+end
+
+if not docs_enabled() then
+  ngx.status = 404
+  ngx.header["Content-Type"] = "application/json"
+  ngx.say('{"error":"docs disabled"}')
+  return
+end
+
 ngx.status = 200
 ngx.header["Content-Type"] = "text/html; charset=utf-8"
 
@@ -23,7 +39,7 @@ ngx.say([[
     <div id="fallback">
       <h1>Docs unavailable from CDN</h1>
       <p>No se pudo cargar Swagger UI desde CDN en este navegador/red.</p>
-      <p>Usa el schema directo: <a href="/openapi.json">/openapi.json</a></p>
+      <p>Usa el schema directo: <a href="/_fn/openapi.json">/_fn/openapi.json</a></p>
       <p>O vuelve al inicio: <a href="/">/</a></p>
     </div>
 
@@ -41,7 +57,7 @@ ngx.say([[
           }
 
           window.SwaggerUIBundle({
-            url: '/openapi.json',
+            url: '/_fn/openapi.json',
             dom_id: '#swagger-ui',
             deepLinking: true,
             presets: [window.SwaggerUIBundle.presets.apis],

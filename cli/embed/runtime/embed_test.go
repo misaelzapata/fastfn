@@ -2,9 +2,11 @@ package runtime
 
 import (
 	"bytes"
+	"io/fs"
 	"os"
 	"path/filepath"
 	goruntime "runtime"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -69,6 +71,92 @@ func mustReadFile(t *testing.T, p string) []byte {
 		t.Fatalf("failed to read %s: %v", p, err)
 	}
 	return data
+}
+
+func listRuntimeFiles(t *testing.T, root string) map[string][]byte {
+	t.Helper()
+	out := map[string][]byte{}
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		name := d.Name()
+		if d.IsDir() {
+			if name == "__pycache__" || name == ".pytest_cache" || name == ".git" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.HasPrefix(name, ".") || strings.HasSuffix(name, ".pyc") {
+			return nil
+		}
+
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		out[rel] = mustReadFile(t, path)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("failed to walk %s: %v", root, err)
+	}
+	return out
+}
+
+func assertTreeParity(t *testing.T, mainRoot, embedRoot string) {
+	t.Helper()
+	mainFiles := listRuntimeFiles(t, mainRoot)
+	embedFiles := listRuntimeFiles(t, embedRoot)
+
+	mainKeys := make([]string, 0, len(mainFiles))
+	for k := range mainFiles {
+		mainKeys = append(mainKeys, k)
+	}
+	embedKeys := make([]string, 0, len(embedFiles))
+	for k := range embedFiles {
+		embedKeys = append(embedKeys, k)
+	}
+	sort.Strings(mainKeys)
+	sort.Strings(embedKeys)
+
+	if len(mainKeys) != len(embedKeys) {
+		t.Fatalf("runtime file set drift:\nmain=%v\nembed=%v", mainKeys, embedKeys)
+	}
+	for i := range mainKeys {
+		if mainKeys[i] != embedKeys[i] {
+			t.Fatalf("runtime file set drift:\nmain=%v\nembed=%v", mainKeys, embedKeys)
+		}
+	}
+
+	for _, rel := range mainKeys {
+		if !bytes.Equal(mainFiles[rel], embedFiles[rel]) {
+			t.Fatalf("runtime content drift for %s", rel)
+		}
+	}
+}
+
+func normalizeDockerfileForParity(data string) string {
+	lines := strings.Split(data, "\n")
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if trimmed == "COPY srv/fn/functions /app/srv/fn/functions" {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "# COPY srv/fn/functions ") {
+			continue
+		}
+		out = append(out, trimmed)
+	}
+	return strings.Join(out, "\n")
 }
 
 func TestEmbeddedOpenRestyParityPortableMode(t *testing.T) {
@@ -138,5 +226,52 @@ func TestEmbeddedOpenRestyParityPortableMode(t *testing.T) {
 	}
 	if strings.Contains(routesData, "fn-lua.sock") {
 		t.Fatal("embedded routes.lua should not reference fn-lua.sock")
+	}
+
+	mainDockerfile := string(mustReadFile(t, filepath.Join(root, "docker", "openresty", "Dockerfile")))
+	embeddedDockerfile := string(mustReadFile(t, filepath.Join(root, "cli", "embed", "runtime", "Dockerfile")))
+	requiredDockerSnippets := []string{
+		"luarocks5.1",
+		"luarocks-5.1 install luacov 0.17.0-1",
+	}
+	for _, snippet := range requiredDockerSnippets {
+		if !strings.Contains(mainDockerfile, snippet) {
+			t.Fatalf("main docker/openresty/Dockerfile missing required snippet: %s", snippet)
+		}
+		if !strings.Contains(embeddedDockerfile, snippet) {
+			t.Fatalf("embedded runtime Dockerfile missing required snippet: %s", snippet)
+		}
+	}
+}
+
+func TestEmbeddedRuntimeTreeParity(t *testing.T) {
+	root := repoRoot(t)
+
+	assertTreeParity(
+		t,
+		filepath.Join(root, "openresty", "lua", "fastfn"),
+		filepath.Join(root, "cli", "embed", "runtime", "openresty", "lua", "fastfn"),
+	)
+	assertTreeParity(
+		t,
+		filepath.Join(root, "srv", "fn", "runtimes"),
+		filepath.Join(root, "cli", "embed", "runtime", "srv", "fn", "runtimes"),
+	)
+	assertTreeParity(
+		t,
+		filepath.Join(root, "openresty", "console"),
+		filepath.Join(root, "cli", "embed", "runtime", "openresty", "console"),
+	)
+
+	mainStart := mustReadFile(t, filepath.Join(root, "docker", "openresty", "start.sh"))
+	embedStart := mustReadFile(t, filepath.Join(root, "cli", "embed", "runtime", "docker", "openresty", "start.sh"))
+	if !bytes.Equal(mainStart, embedStart) {
+		t.Fatal("runtime drift detected for docker/openresty/start.sh")
+	}
+
+	mainDocker := string(mustReadFile(t, filepath.Join(root, "docker", "openresty", "Dockerfile")))
+	embedDocker := string(mustReadFile(t, filepath.Join(root, "cli", "embed", "runtime", "Dockerfile")))
+	if normalizeDockerfileForParity(mainDocker) != normalizeDockerfileForParity(embedDocker) {
+		t.Fatal("runtime drift detected for Dockerfile (normalized parity)")
 	}
 }

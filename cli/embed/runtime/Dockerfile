@@ -13,6 +13,7 @@ COPY docker/openresty/start.sh /app/docker/openresty/start.sh
 RUN apk add --no-cache python3 py3-pip nodejs npm git openssh-client php php-phar rust cargo go luarocks5.1 \
   && luarocks-5.1 install luacov 0.17.0-1 \
   && mkdir -p /app/openresty/logs /tmp/fastfn /app/srv/fn/functions \
+  && chmod -R a+rwX /app/srv/fn/functions \
   && chmod +x /app/docker/openresty/start.sh
 
 ENV FN_FUNCTIONS_ROOT=/app/srv/fn/functions
