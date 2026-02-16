@@ -38,6 +38,12 @@ jobs:
       - name: Build Binary
         run: cd cli && go build -o ../bin/fastfn
 
+      - name: Upload CLI build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fastfn-cli-linux
+          path: bin/fastfn
+
   unit:
     name: Unit + Coverage (Python + Node)
     runs-on: ubuntu-latest
