@@ -1,24 +1,30 @@
-site_name: fastfn
+site_name: FastFN
 site_url: https://misaelzapata.github.io/fastfn/
 repo_url: https://github.com/misaelzapata/fastfn
-repo_name: fastfn
+repo_name: FastFN
 edit_uri: blob/main/docs/
 
 theme:
   name: material
+  custom_dir: docs/overrides
+  logo: logo.PNG
+  favicon: logo.PNG
   language: en
+  font:
+    text: Inter
+    code: JetBrains Mono
   palette:
     # Palette toggle for light mode
     - scheme: default
-      primary: teal
-      accent: purple
+      primary: white
+      accent: indigo
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
     # Palette toggle for dark mode
     - scheme: slate
-      primary: teal
-      accent: lime
+      primary: black
+      accent: indigo
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
@@ -59,90 +65,95 @@ plugins:
 
 nav:
   - Home: index.md
+  - Landing Preview: fastfn-landing.html
   - English Docs:
     - Introduction: en/index.md
     - Tutorial:
-      - First Steps: en/tutorial/first-steps.md
-      - From Zero (Chapter by Chapter):
+      - Quick Start: en/tutorial/first-steps.md
+      - Routing & Parameters: en/tutorial/routing.md
+      - Function CLI: en/tutorial/your-first-function.md
+      - Step-by-Step Guide:
         - Overview: en/tutorial/from-zero/index.md
-        - Chapter 1 - Hello World: en/tutorial/from-zero/chapter-01-hello-world.md
-        - Chapter 2 - Query and Body: en/tutorial/from-zero/chapter-02-query-and-body.md
-        - Chapter 3 - Env: en/tutorial/from-zero/chapter-03-env.md
-        - Chapter 4 - Meta and Methods: en/tutorial/from-zero/chapter-04-meta-and-methods.md
-        - Chapter 5 - Edge Proxy: en/tutorial/from-zero/chapter-05-edge-proxy.md
-        - Chapter 6 - External Libraries: en/tutorial/from-zero/chapter-06-external-libraries.md
-        - Chapter 7 - Rich Responses: en/tutorial/from-zero/chapter-07-rich-responses.md
-        - Chapter 8 - Session, Context, Memory: en/tutorial/from-zero/chapter-08-session-context-memory.md
-        - Chapter 9 - Shared Deps and Env: en/tutorial/from-zero/chapter-09-shared-deps-env.md
-      - Your First Function: en/tutorial/your-first-function.md
+        - 1. Hello World: en/tutorial/from-zero/chapter-01-hello-world.md
+        - 2. Query and Body: en/tutorial/from-zero/chapter-02-query-and-body.md
+        - 3. Env Vars: en/tutorial/from-zero/chapter-03-env.md
+        - 4. Metadata: en/tutorial/from-zero/chapter-04-meta-and-methods.md
+        - 5. Edge Proxy: en/tutorial/from-zero/chapter-05-edge-proxy.md
+        - 6. External Libs: en/tutorial/from-zero/chapter-06-external-libraries.md
+        - 7. Rich Responses: en/tutorial/from-zero/chapter-07-rich-responses.md
+        - 8. Context & Memory: en/tutorial/from-zero/chapter-08-session-context-memory.md
+        - 9. Shared Code: en/tutorial/from-zero/chapter-09-shared-deps-env.md
       - Build a Complete API: en/tutorial/build-complete-api.md
-      - QR in Python + Node: en/tutorial/qr-in-python-node.md
-      - WhatsApp Bot Demo: en/tutorial/whatsapp-bot-demo.md
-      - Versioning and Rollout: en/tutorial/versioning-and-rollout.md
-      - Auth and Secrets: en/tutorial/auth-and-secrets.md
-      - Artistic QR Variants (Optional): en/tutorial/artistic-qrs.md
     - How-To Guides:
-      - Console and Admin Access: en/how-to/console-admin-access.md
-      - Manage Functions: en/how-to/manage-functions.md
       - Operational Recipes: en/how-to/operational-recipes.md
-      - Telegram Digest (Cron): en/how-to/telegram-digest.md
-      - Telegram E2E: en/how-to/telegram-e2e.md
       - Run & Test: en/how-to/run-and-test.md
+      - Console Access: en/how-to/console-admin-access.md
+      - Manage Functions: en/how-to/manage-functions.md
+      - Telegram Bot (Cron): en/how-to/telegram-digest.md
+      - Telegram Bot (E2E): en/how-to/telegram-e2e.md
       - Contributing: en/how-to/contributing.md
-    - Articles:
-      - Telegram Loop Mode: en/articles/telegram-loop.md
-      - Telegram AI Memory Bot (Cron): en/articles/telegram-ai-memory-cron.md
-      - Local Serverless Hot Reload + OpenAPI: en/articles/local-serverless-hot-reload-openapi.md
-      - Practical Auth for Functions: en/articles/practical-auth-for-functions.md
+    - Articles (Advanced):
+      - Local Hot Reload: en/articles/local-serverless-hot-reload-openapi.md
+      - Practical Auth: en/articles/practical-auth-for-functions.md
+      - QR Generator (Python/Node): en/tutorial/qr-in-python-node.md
+      - WhatsApp Bot: en/tutorial/whatsapp-bot-demo.md
+      - Versioning: en/tutorial/versioning-and-rollout.md
+      - Auth & Secrets: en/tutorial/auth-and-secrets.md
+      - Doctor Domains: en/articles/doctor-domains-and-ci.md
+      - IP Geolocation: en/articles/ip-geolocation-with-maxmind-and-ipapi.md
+      - Artistic QRs: en/tutorial/artistic-qrs.md
     - Reference:
       - CLI Reference: en/reference/cli.md
-      - HTTP API: en/reference/http-api.md
+      - Configuration (fastfn.json): en/reference/fastfn-config.md
       - Function Spec: en/reference/function-spec.md
+      - HTTP API: en/reference/http-api.md
       - Runtime Contract: en/reference/runtime-contract.md
       - Builtin Functions: en/reference/builtin-functions.md
     - Explanation:
       - Architecture: en/explanation/architecture.md
-      - Invocation Lifecycle: en/explanation/invocation-flow.md
       - Security Model: en/explanation/security-model.md
-      - Performance Benchmarks: en/explanation/performance-benchmarks.md
-      - Documentation Status: en/explanation/docs-gap-vs-fastapi.md
+      - Technical Comparison: en/explanation/comparison.md
+      - Next.js Style Routing: en/explanation/nextjs-style-routing-benefits.md
+      - Invocation Lifecycle: en/explanation/invocation-flow.md
+      - Performance: en/explanation/performance-benchmarks.md
+      - Docs Methodology: en/explanation/docs-gap-vs-fastapi.md
       - Visual Flows: en/explanation/visual-flows.md
   - Documentación en Español:
     - Introducción: es/index.md
     - Tutorial:
-      - Primeros Pasos: es/tutorial/primeros-pasos.md
-      - Desde Cero (Capitulo a Capitulo):
+      - Inicio Rápido: es/tutorial/primeros-pasos.md
+      - Desde Cero (Curso Completo):
         - Vista General: es/tutorial/desde-cero/index.md
-        - Capitulo 1 - Hola Mundo: es/tutorial/desde-cero/capitulo-01-hola-mundo.md
-        - Capitulo 2 - Query y Body: es/tutorial/desde-cero/capitulo-02-query-y-body.md
-        - Capitulo 3 - Env: es/tutorial/desde-cero/capitulo-03-env.md
-        - Capitulo 4 - Meta y Metodos: es/tutorial/desde-cero/capitulo-04-meta-y-metodos.md
-        - Capitulo 5 - Edge Proxy: es/tutorial/desde-cero/capitulo-05-edge-proxy.md
-        - Capitulo 6 - Librerias Externas: es/tutorial/desde-cero/capitulo-06-librerias-externas.md
-        - Capitulo 7 - Respuestas Rich: es/tutorial/desde-cero/capitulo-07-respuestas-rich.md
-        - Capitulo 8 - Sesion, Contexto, Memoria: es/tutorial/desde-cero/capitulo-08-sesion-contexto-memoria.md
-        - Capitulo 9 - Compartir Deps y Env: es/tutorial/desde-cero/capitulo-09-compartir-deps-env.md
-      - Tu Primera Función: es/tutorial/tu-primera-funcion.md
+        - 1. Hola Mundo: es/tutorial/desde-cero/capitulo-01-hola-mundo.md
+        - 2. Query y Body: es/tutorial/desde-cero/capitulo-02-query-y-body.md
+        - 3. Env y Secretos: es/tutorial/desde-cero/capitulo-03-env.md
+        - 4. Metadatos HTTP: es/tutorial/desde-cero/capitulo-04-meta-y-metodos.md
+        - 5. Edge Proxy: es/tutorial/desde-cero/capitulo-05-edge-proxy.md
+        - 6. Librerias Externas: es/tutorial/desde-cero/capitulo-06-librerias-externas.md
+        - 7. Respuestas Rich: es/tutorial/desde-cero/capitulo-07-respuestas-rich.md
+        - 8. Contexto y Memoria: es/tutorial/desde-cero/capitulo-08-sesion-contexto-memoria.md
+        - 9. Código Compartido: es/tutorial/desde-cero/capitulo-09-compartir-deps-env.md
+      - Tu Primera Función (CLI): es/tutorial/tu-primera-funcion.md
       - Construir API Completa: es/tutorial/construir-api-completa.md
-      - QR en Python y Node: es/tutorial/qr-python-node.md
-      - Demo Bot de WhatsApp: es/tutorial/demo-bot-whatsapp.md
-      - Versionado y Rollout: es/tutorial/versionado-y-rollout.md
-      - Auth y Secretos: es/tutorial/auth-y-secretos.md
-      - QRs Artísticos (Opcional): es/tutorial/qrs-artisticos.md
     - Guías Cómo-Hacer:
       - Consola y Administración: es/como-hacer/consola-admin.md
       - Gestionar Funciones: es/como-hacer/gestionar-funciones.md
       - Recetas Operativas: es/como-hacer/recetas-operativas.md
-      - Telegram Digest (Cron): es/como-hacer/telegram-digest.md
-      - Telegram E2E: es/como-hacer/telegram-e2e.md
+      - "Receta: Digest Telegram (Cron)": es/como-hacer/telegram-digest.md
+      - "Receta: Bot E2E": es/como-hacer/telegram-e2e.md
       - Ejecutar y Probar: es/como-hacer/ejecutar-y-probar.md
       - Contribuir: es/como-hacer/contribuir.md
-    - Artículos:
-      - Telegram Loop Mode: es/articulos/telegram-loop.md
-      - Bot Telegram IA con Memoria (Cron): es/articulos/telegram-ai-memoria-cron.md
-      - Serverless Local Hot Reload + OpenAPI: es/articulos/serverless-local-hot-reload-openapi.md
-      - Auth Práctica para Funciones: es/articulos/auth-practica-para-funciones.md
+    - Artículos (Avanzado):
+      - Hot Reload Local + OpenAPI: es/articulos/serverless-local-hot-reload-openapi.md
+      - Autenticación Práctica: es/articulos/auth-practica-para-funciones.md
+      - WhatsApp Bot: es/tutorial/demo-bot-whatsapp.md
+      - Versionado y Rollout: es/tutorial/versionado-y-rollout.md
+      - QRs Artísticos: es/tutorial/qrs-artisticos.md
+      - Doctor Dominios + CI: es/articulos/doctor-dominios-y-ci.md
+      - Geolocalizacion IP: es/articulos/geolocalizacion-ip-con-maxmind-e-ipapi.md
     - Referencia:
+      - CLI Reference: es/referencia/cli-reference.md
+      - Configuración fastfn.json: es/referencia/config-fastfn.md
       - API HTTP: es/referencia/api-http.md
       - Especificación Funciones: es/referencia/especificacion-funciones.md
       - Contrato Runtime: es/referencia/contrato-runtime.md
@@ -151,7 +162,7 @@ nav:
       - Arquitectura: es/explicacion/arquitectura.md
       - Ciclo de Invocación: es/explicacion/flujo-invocacion.md
       - Modelo de Seguridad: es/explicacion/modelo-seguridad.md
-      - Benchmarks de Rendimiento: es/explicacion/benchmarks-rendimiento.md
+      - Benchmarks: es/explicacion/benchmarks-rendimiento.md
       - Estado Documentación: es/explicacion/estado-documentacion.md
       - Flujos Visuales: es/explicacion/flujos-visuales.md
   - Internal:

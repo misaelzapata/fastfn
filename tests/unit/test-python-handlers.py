@@ -408,7 +408,10 @@ def test_python_gmail_send_body_parse_variants():
 
 
 def test_python_ip_intel_maxmind_mock():
-    handler = load_handler(ROOT / "examples/functions/ip-intel/get.maxmind.py")
+    demo_path = ROOT / "examples/functions/ip-intel/get.maxmind.py"
+    if not require_demo(demo_path):
+        return
+    handler = load_handler(demo_path)
 
     ok_resp = handler({"query": {"ip": "8.8.8.8", "mock": "1"}})
     assert_response_contract(ok_resp)
