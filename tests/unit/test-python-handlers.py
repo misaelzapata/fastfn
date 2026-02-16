@@ -71,7 +71,7 @@ def test_python_hello_debug():
     assert body["debug"]["trace_id"] == "trace-1"
 
 
-def test_python_risk-score():
+def test_python_risk_score():
     handler = load_handler(ROOT / "examples/functions/python/risk-score/app.py")
     resp = handler({"query": {"email": "user@example.com"}, "client": {"ip": "192.168.1.10"}})
     assert_response_contract(resp)
@@ -82,7 +82,7 @@ def test_python_risk-score():
     assert body["risk"] in {"low", "medium", "high"}
 
 
-def test_python_risk-score_branches():
+def test_python_risk_score_branches():
     handler = load_handler(ROOT / "examples/functions/python/risk-score/app.py")
 
     low_resp = handler({"query": {"email": "user@public.test"}, "client": {"ip": "8.8.8.8"}})
@@ -98,7 +98,7 @@ def test_python_risk-score_branches():
     assert medium_body["risk"] == "medium"
 
 
-def test_python_lambda-echo_shape():
+def test_python_lambda_echo_shape():
     handler = load_handler(ROOT / "examples/functions/python/lambda-echo/app.py")
     resp = handler({"query": {"name": "Unit"}})
     assert_response_contract(resp)
@@ -106,7 +106,7 @@ def test_python_lambda-echo_shape():
     assert body["hello"] == "Unit"
 
 
-def test_python_custom-echo_shape():
+def test_python_custom_echo_shape():
     handler = load_handler(ROOT / "examples/functions/python/custom-echo/app.py")
     resp = handler({"query": {"v": "abc"}})
     assert_response_contract(resp)
@@ -150,7 +150,7 @@ def test_python_tools_loop_exec_mock():
     assert all(bool(r.get("mock")) for r in results if isinstance(r, dict) and r.get("tool") in {"ip_lookup", "weather"})
 
 
-def test_python_telegram-ai-reply_py_dry_run():
+def test_python_telegram_ai_reply_py_dry_run():
     demo_path = ROOT / "examples/functions/python/telegram-ai-reply-py/app.py"
     if not require_demo(demo_path):
         return
@@ -175,7 +175,7 @@ def test_python_telegram-ai-reply_py_dry_run():
     assert body["tools"]["enabled"] is True
 
 
-def test_python_telegram-ai-reply_py_exec_with_mocks():
+def test_python_telegram_ai_reply_py_exec_with_mocks():
     demo_path = ROOT / "examples/functions/python/telegram-ai-reply-py/app.py"
     if not require_demo(demo_path):
         return
@@ -184,13 +184,13 @@ def test_python_telegram-ai-reply_py_exec_with_mocks():
 
     calls = {"openai": 0, "send": 0}
     orig_openai = mod._openai_generate_reply
-    orig_send = mod._telegram-send
+    orig_send = mod._telegram_send
     orig_tools = mod._resolve_tools
     try:
         mod._openai_generate_reply = lambda env, user_text, history, tool_summary, timeout_ms: (
             calls.__setitem__("openai", calls["openai"] + 1) or "respuesta desde python"
         )
-        mod._telegram-send = lambda env, chat_id, text, reply_to_message_id=None: (
+        mod._telegram_send = lambda env, chat_id, text, reply_to_message_id=None: (
             calls.__setitem__("send", calls["send"] + 1) or {"ok": True, "result": {"message_id": 77}}
         )
         mod._resolve_tools = lambda text, env, query: {
@@ -224,11 +224,11 @@ def test_python_telegram-ai-reply_py_exec_with_mocks():
         assert calls["send"] == 1
     finally:
         mod._openai_generate_reply = orig_openai
-        mod._telegram-send = orig_send
+        mod._telegram_send = orig_send
         mod._resolve_tools = orig_tools
 
 
-def test_python_telegram-ai-reply_py_scheduler_bypass_loop_token():
+def test_python_telegram_ai_reply_py_scheduler_bypass_loop_token():
     demo_path = ROOT / "examples/functions/python/telegram-ai-reply-py/app.py"
     if not require_demo(demo_path):
         return
@@ -256,7 +256,7 @@ def test_python_telegram-ai-reply_py_scheduler_bypass_loop_token():
     assert body["dry_run"] is True
 
 
-def test_python_gmail-send_dry_run():
+def test_python_gmail_send_dry_run():
     handler = load_handler(ROOT / "examples/functions/python/gmail-send/app.py")
     resp = handler(
         {
@@ -275,7 +275,7 @@ def test_python_gmail-send_dry_run():
     assert body["dry_run"] is True
 
 
-def test_python_gmail-send_requires_to():
+def test_python_gmail_send_requires_to():
     handler = load_handler(ROOT / "examples/functions/python/gmail-send/app.py")
     resp = handler({"query": {}, "body": ""})
     assert_response_contract(resp)
@@ -284,7 +284,7 @@ def test_python_gmail-send_requires_to():
     assert body["error"] == "to is required"
 
 
-def test_python_gmail-send_forced_dry_run_without_credentials():
+def test_python_gmail_send_forced_dry_run_without_credentials():
     handler = load_handler(ROOT / "examples/functions/python/gmail-send/app.py")
     resp = handler(
         {
@@ -299,7 +299,7 @@ def test_python_gmail-send_forced_dry_run_without_credentials():
     assert "forced dry_run" in (body.get("note") or "")
 
 
-def test_python_gmail-send_success_via_mocked_smtp():
+def test_python_gmail_send_success_via_mocked_smtp():
     mod = load_module(ROOT / "examples/functions/python/gmail-send/app.py")
     handler = mod.handler
     sent = {"login": None, "to": None, "subject": None}
@@ -353,7 +353,7 @@ def test_python_gmail-send_success_via_mocked_smtp():
         mod.smtplib.SMTP_SSL = original
 
 
-def test_python_gmail-send_failure_via_mocked_smtp():
+def test_python_gmail_send_failure_via_mocked_smtp():
     mod = load_module(ROOT / "examples/functions/python/gmail-send/app.py")
     handler = mod.handler
 
@@ -400,7 +400,7 @@ def test_python_gmail-send_failure_via_mocked_smtp():
         mod.smtplib.SMTP_SSL = original
 
 
-def test_python_gmail-send_body_parse_variants():
+def test_python_gmail_send_body_parse_variants():
     handler = load_handler(ROOT / "examples/functions/python/gmail-send/app.py")
 
     invalid_json = handler(
@@ -599,20 +599,20 @@ def test_python_prefers_handler_over_main():
 def main():
     test_python_hello()
     test_python_hello_debug()
-    test_python_risk-score()
-    test_python_risk-score_branches()
-    test_python_lambda-echo_shape()
-    test_python_custom-echo_shape()
+    test_python_risk_score()
+    test_python_risk_score_branches()
+    test_python_lambda_echo_shape()
+    test_python_custom_echo_shape()
     test_python_tools_loop_dry_run_plan()
-    test_python_telegram-ai-reply_py_dry_run()
-    test_python_telegram-ai-reply_py_exec_with_mocks()
-    test_python_telegram-ai-reply_py_scheduler_bypass_loop_token()
-    test_python_gmail-send_dry_run()
-    test_python_gmail-send_requires_to()
-    test_python_gmail-send_forced_dry_run_without_credentials()
-    test_python_gmail-send_success_via_mocked_smtp()
-    test_python_gmail-send_failure_via_mocked_smtp()
-    test_python_gmail-send_body_parse_variants()
+    test_python_telegram_ai_reply_py_dry_run()
+    test_python_telegram_ai_reply_py_exec_with_mocks()
+    test_python_telegram_ai_reply_py_scheduler_bypass_loop_token()
+    test_python_gmail_send_dry_run()
+    test_python_gmail_send_requires_to()
+    test_python_gmail_send_forced_dry_run_without_credentials()
+    test_python_gmail_send_success_via_mocked_smtp()
+    test_python_gmail_send_failure_via_mocked_smtp()
+    test_python_gmail_send_body_parse_variants()
     test_python_ip_intel_maxmind_mock()
     test_python_persistent_worker_with_deps_dir()
     test_python_main_fallback_and_node_like_payload()
