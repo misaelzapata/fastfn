@@ -6,6 +6,10 @@ PROJECT_NAME="${COMPOSE_PROJECT_NAME:-fastfn_lua_test_${RANDOM}_$$}"
 DC=(docker compose -p "$PROJECT_NAME" -f "$ROOT_DIR/docker-compose.yml")
 LUA_COVERAGE="${LUA_COVERAGE:-0}"
 COVERAGE_DIR="${COVERAGE_DIR:-$ROOT_DIR/coverage/lua}"
+LUA_BUILD_LOGS="${LUA_BUILD_LOGS:-${CI:+1}}"
+if [[ -z "$LUA_BUILD_LOGS" ]]; then
+  LUA_BUILD_LOGS=0
+fi
 
 cleanup() {
   "${DC[@]}" down --remove-orphans >/dev/null 2>&1 || true
@@ -13,9 +17,17 @@ cleanup() {
 trap cleanup EXIT
 
 # Build image to ensure the exact same OpenResty runtime used in integration.
-"${DC[@]}" build openresty >/dev/null
+echo "[lua] compose project: $PROJECT_NAME"
+echo "[lua] building openresty image..."
+if [[ "$LUA_BUILD_LOGS" == "1" ]]; then
+  "${DC[@]}" build openresty
+else
+  "${DC[@]}" build openresty >/dev/null
+fi
+echo "[lua] build complete"
 
 if [[ "$LUA_COVERAGE" == "1" ]]; then
+  echo "[lua] running lua suite with coverage..."
   if [[ "$COVERAGE_DIR" != /* ]]; then
     COVERAGE_DIR="$ROOT_DIR/$COVERAGE_DIR"
   fi
@@ -107,6 +119,7 @@ if [[ "$LUA_COVERAGE" == "1" ]]; then
       cp /tmp/luacov.report.out /app/coverage/lua/luacov.report.out
     '
 else
+  echo "[lua] running lua suite..."
   "${DC[@]}" run --rm --no-deps \
     -v "$ROOT_DIR/tests:/app/tests" \
     openresty \

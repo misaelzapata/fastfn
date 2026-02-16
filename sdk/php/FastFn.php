@@ -71,13 +71,25 @@ class Response {
         ];
     }
 
-    public static function startProxy(string $path, string $method = 'GET', array $headers = []): array {
+    public static function text(string $body, int $status = 200, array $headers = []): array {
+        return [
+            'status' => $status,
+            'headers' => array_merge(['Content-Type' => 'text/plain; charset=utf-8'], $headers),
+            'body' => $body
+        ];
+    }
+
+    public static function proxy(string $path, string $method = 'GET', array $headers = []): array {
         return [
             'proxy' => [
                 'path' => $path,
-                'method' => $method,
+                'method' => strtoupper($method),
                 'headers' => $headers
             ]
         ];
+    }
+
+    public static function startProxy(string $path, string $method = 'GET', array $headers = []): array {
+        return self::proxy($path, $method, $headers);
     }
 }

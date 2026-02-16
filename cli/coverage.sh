@@ -47,17 +47,18 @@ rm -rf "$OUT_DIR/node"
 mkdir -p "$OUT_DIR/node"
 (
   cd "$ROOT_DIR"
+  echo "[node] running unit tests with c8..."
   env -u NO_COLOR "${C8_CMD[@]}" --reporter=text --reporter=json-summary --reporter=lcov --report-dir "$OUT_DIR/node" \
-    env -u NO_COLOR node "$NODE_TEST_FILE" > "$OUT_DIR/node-coverage.txt"
+    env -u NO_COLOR node "$NODE_TEST_FILE" 2>&1 | tee "$OUT_DIR/node-coverage.txt"
 )
 
 echo "== lua coverage =="
 rm -rf "$OUT_DIR/lua"
 mkdir -p "$OUT_DIR/lua"
 if command -v docker >/dev/null 2>&1; then
-  if ! LUA_COVERAGE=1 COVERAGE_DIR="$OUT_DIR/lua" "$ROOT_DIR/cli/test-lua.sh" > "$OUT_DIR/lua-coverage.txt" 2>&1; then
-    echo "lua coverage failed; dumping logs:"
-    cat "$OUT_DIR/lua-coverage.txt" || true
+  echo "[lua] running Lua coverage suite via Docker..."
+  if ! LUA_COVERAGE=1 COVERAGE_DIR="$OUT_DIR/lua" "$ROOT_DIR/cli/test-lua.sh" 2>&1 | tee "$OUT_DIR/lua-coverage.txt"; then
+    echo "lua coverage failed; see $OUT_DIR/lua-coverage.txt" >&2
     exit 1
   fi
 else
