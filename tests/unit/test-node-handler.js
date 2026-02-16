@@ -346,7 +346,10 @@ async function testEdgeFilterAuthAndRewrite() {
   });
   assert.equal(typeof ok.proxy, "object");
   assert.equal(ok.proxy.method, "GET");
-  assert.ok(String(ok.proxy.path).startsWith("/_fn/openapi.json?edge_user_id=123"));
+  const rewritten = new URL(String(ok.proxy.path), "http://fastfn.local");
+  assert.equal(rewritten.pathname, "/_fn/openapi.json");
+  const rewrittenUserId = rewritten.searchParams.get("edge_user_id") || rewritten.searchParams.get("edge-user-id");
+  assert.equal(rewrittenUserId, "123");
   assert.equal(ok.proxy.timeout_ms, 10000);
 }
 
