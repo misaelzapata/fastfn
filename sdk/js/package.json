@@ -2,10 +2,10 @@
   "name": "@fastfn/runtime",
   "version": "0.1.0",
   "description": "TypeScript/JavaScript definitions for FastFn serverless runtime",
-  "main": "index.d.ts",
+  "main": "index.js",
   "types": "index.d.ts",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node smoke.test.cjs"
   },
   "keywords": [
     "serverless",

@@ -7,7 +7,7 @@ pub struct ClientInfo {
     pub ua: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 pub struct Context {
     pub request_id: String,
     pub function_name: Option<String>,
