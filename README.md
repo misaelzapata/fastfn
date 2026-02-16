@@ -1,226 +1,166 @@
-# 🚀 fastfn
+# FastFN
 
 [![CI](https://github.com/misaelzapata/fastfn/actions/workflows/ci.yml/badge.svg)](https://github.com/misaelzapata/fastfn/actions/workflows/ci.yml)
-[![Coverage](https://codecov.io/gh/misaelzapata/fastfn/graph/badge.svg)](https://codecov.io/gh/misaelzapata/fastfn)
-[![Docs](https://github.com/misaelzapata/fastfn/actions/workflows/docs.yml/badge.svg)](https://github.com/misaelzapata/fastfn/actions/workflows/docs.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
-![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)
-![OpenResty](https://img.shields.io/badge/OpenResty-1.27.1.2-orange)
-![OpenAPI](https://img.shields.io/badge/OpenAPI-3.1-blue)
-![Python](https://img.shields.io/badge/Python-3.x-3776AB)
-![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933)
-![PHP](https://img.shields.io/badge/PHP-8.x-777BB4)
-![Rust](https://img.shields.io/badge/Rust-stable-000000)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
+[![OpenAPI](https://img.shields.io/badge/OpenAPI-3.1-6BA539?logo=openapiinitiative&logoColor=white)](./docs/en/reference/http-api.md)
+[![Runtimes](https://img.shields.io/badge/runtimes-python%20%7C%20node%20%7C%20php%20%7C%20rust%20%7C%20go-0A7EA4)](./docs/en/reference/function-spec.md)
 
-**fastfn** is a local-first function platform on top of OpenResty.
+FastFN is a polyglot function runtime with file-based routing, generated OpenAPI, and a production gateway.
+It is designed to keep local development simple and deployment behavior predictable.
 
-## Highlights
+> [!IMPORTANT]
+> picture_here_X_function
 
-- File-based function discovery (no static routes file required)
-- Per-function policies (`timeout_ms`, `max_concurrency`, `max_body_bytes`, methods)
-- Optional endpoint mapping per function (`invoke.routes`)
-- OpenAPI/Swagger generation from discovered functions
-- Console API for CRUD/config/env/code updates
-- Gateway dashboard in Console (mapped URL -> function + conflict visibility)
-- Single env model: `fn.env.json` with optional `{ "value": "...", "is_secret": true }`
-- Strict filesystem sandbox by default (`FN_STRICT_FS=1`)
+## Table of Contents
 
-## Quick start
+- [Why FastFN](#why-fastfn)
+- [Quick Start (2 commands)](#quick-start-2-commands)
+- [Configuration (`fastfn.json`)](#configuration-fastfnjson)
+- [Domains and Host Restrictions](#domains-and-host-restrictions)
+- [CLI and Test Workflow](#cli-and-test-workflow)
+- [Repository Layout](#repository-layout)
+- [Documentation](#documentation)
+- [License](#license)
 
-```bash
-docker compose up -d --build
-curl -sS 'http://127.0.0.1:8080/_fn/health'
+## Why FastFN
+
+- File-based routes (`functions/hello/get.py` -> `GET /hello`).
+- Same project can mix Python, Node.js, PHP, Rust and Go.
+- OpenAPI and Swagger are generated out of the box.
+- Internal/admin APIs stay hidden from Swagger by default.
+- Native and portable dev modes are aligned under the same CLI.
+
+## Quick Start (2 commands)
+
+1) Create one function:
+
+`functions/hello/get.py`
+
+```python
+def main(req):
+    name = (req.get("query") or {}).get("name", "World")
+    return {"message": f"Hello, {name}!"}
 ```
 
-If `curl` cannot connect but the container is up (and/or `wget` works), common causes are IPv6/proxy settings.
-
-Try:
+2) Run:
 
 ```bash
-# force IPv4
-curl -4 -sS 'http://127.0.0.1:8080/_fn/health'
-
-# ignore proxy env vars (if you have them)
-curl --noproxy '*' -sS 'http://127.0.0.1:8080/_fn/health'
+fastfn dev functions
 ```
 
-If you're in a sandboxed environment that blocks host loopback connections, run the request from inside the container:
+Try it:
 
 ```bash
-docker compose exec -T openresty sh -lc "curl -sS 'http://127.0.0.1:8080/_fn/health'"
+curl -sS "http://127.0.0.1:8080/hello?name=Developer"
 ```
 
-Local (without Docker):
+Open docs:
+
+- Swagger UI: `http://127.0.0.1:8080/docs`
+- OpenAPI JSON: `http://127.0.0.1:8080/_fn/openapi.json`
+
+### Install
+
+Homebrew:
 
 ```bash
-./scripts/start-python.sh
-./scripts/start-node.sh
-./scripts/start-php.sh
-./scripts/start-rust.sh
-./scripts/start-openresty.sh
+brew tap misaelzapata/homebrew-fastfn
+brew install fastfn
 ```
 
-Test a function:
+From source:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/hello?name=World'
+cd cli && go build -o ../bin/fastfn
+./bin/fastfn --help
 ```
 
-Console deep link example:
+## Configuration (`fastfn.json`)
 
-- `http://127.0.0.1:8080/console/explorer/node/node_echo`
-- `http://127.0.0.1:8080/console/gateway` (mapped routes dashboard)
-- `http://127.0.0.1:8080/console/wizard` (step-by-step function creator)
+FastFN reads `fastfn.json` by default in the current directory.
 
-Optional custom endpoint mapping in `fn.config.json`:
+```json
+{
+  "functions-dir": "functions",
+  "public-base-url": "https://api.example.com",
+  "openapi-include-internal": false
+}
+```
+
+Notes:
+
+- `openapi-include-internal` defaults to `false`.
+- You can also control internal OpenAPI visibility via env var `FN_OPENAPI_INCLUDE_INTERNAL`.
+- `public-base-url` controls `servers[0].url` in generated OpenAPI.
+
+Full reference: [`docs/en/reference/fastfn-config.md`](./docs/en/reference/fastfn-config.md)
+
+## Domains and Host Restrictions
+
+`domains` in `fastfn.json` is used by doctor checks.
+It does not enforce routing restrictions by itself.
+
+For inbound host restrictions, use function config:
+
+`fn.config.json`
 
 ```json
 {
   "invoke": {
-    "handler": "main",
-    "methods": ["GET"],
-    "routes": ["/api/hello"]
+    "allow_hosts": ["api.example.com", "admin.example.com"]
   }
 }
 ```
 
-`invoke.handler` is optional (default is `handler`) and lets you use Lambda-style custom names like `main` or `run` (Node/Python runtimes).
+References:
 
-## Function root is configurable
+- [`docs/en/reference/fastfn-config.md`](./docs/en/reference/fastfn-config.md)
+- [`docs/en/reference/function-spec.md`](./docs/en/reference/function-spec.md)
+- [`docs/en/articles/doctor-domains-and-ci.md`](./docs/en/articles/doctor-domains-and-ci.md)
 
-Discovery does not require a hardcoded `srv/fn/functions` path.
+## CLI and Test Workflow
 
-Resolution order:
-
-1. `FN_FUNCTIONS_ROOT`
-2. `/app/srv/fn/functions` (container default)
-3. `$PWD/srv/fn/functions` (local default)
-4. `/srv/fn/functions`
-
-Useful env vars:
-
-- `FN_FUNCTIONS_ROOT`
-- `FN_RUNTIMES`
-- `FN_RUNTIME_SOCKETS`
-- `FN_SOCKET_BASE_DIR`
-- `FN_PREINSTALL_PY_DEPS_ON_START` (`1` = preinstall Python deps on boot)
-- `FN_PREINSTALL_NODE_DEPS_ON_START` (`1` = preinstall Node deps on boot)
-
-Versioned Node URL example:
-
-- `/fn/hello@v2`
-- `/fn/qr@v2`
-
-## Shared dependency packs (optional)
-
-If multiple functions need the same dependencies, you can deduplicate installs with `shared_deps`.
-
-Packs live under:
-
-```text
-<FN_FUNCTIONS_ROOT>/.fastfn/packs/<runtime>/<pack>/
-```
-
-Then attach in `fn.config.json`:
-
-```json
-{
-  "shared_deps": ["qrcode_pack"]
-}
-```
-
-## Schedules (Cron, `every_seconds`)
-
-fastfn includes a simple scheduler that can invoke a function on an interval, **without any extra HTTP server**.
-
-Where it runs:
-- Scheduler runs inside OpenResty (worker 0) and calls the function runtime over the same unix socket protocol as normal HTTP requests.
-
-How to configure (per function):
-- Add `schedule` to `fn.config.json` (in the function folder, or in a version folder).
-
-Example: enable a tick every 1 second:
-
-```json
-{
-  "schedule": {
-    "enabled": true,
-    "every_seconds": 1,
-    "method": "GET",
-    "query": { "action": "inc" },
-    "headers": {},
-    "body": "",
-    "context": {}
-  }
-}
-```
-
-Scheduler status:
-- `GET /_fn/schedules` (internal API; respects console guards)
-
-Demo function included:
-- `GET /fn/cron_tick?action=read`
-
-## Runtime status
-
-Implemented now:
-
-- Python
-- Node
-- PHP
-- Rust
-
-Built-in runtime examples:
-
-- `/fn/hello` (python)
-- `/fn/hello@v2` (node)
-- `/fn/qr` (python + requirements auto-install)
-- `/fn/qr@v2` (node + npm auto-install)
-- `/fn/php_profile` (php)
-- `/fn/rust_profile` (rust)
-- `/fn/gmail_send` (python, Gmail SMTP helper, dry-run default)
-- `/fn/telegram_send` (node, Telegram Bot API helper, dry-run default)
-- `/fn/edge_proxy` (node, edge passthrough demo)
-- `/fn/edge_filter` (node, edge filter auth + rewrite demo)
-- `/fn/edge_auth_gateway` (node, Bearer auth gateway + passthrough demo)
-- `/fn/github_webhook_guard` (node, webhook signature verify demo)
-- `/fn/edge_header_inject` (node, header injection + passthrough demo)
-- `/fn/request_inspector` (node, echo-style inspector for demos)
-- `/fn/telegram_ai_reply` (node, Telegram webhook -> OpenAI -> Telegram reply, dry-run by default)
-
-## Quality checks
+Common local commands:
 
 ```bash
-./scripts/smoke.sh
-./scripts/curl-examples.sh
-./scripts/stress.sh
-./scripts/benchmark-qr.sh default
-./scripts/benchmark-qr.sh no-throttle
-./scripts/coverage.sh
-./scripts/test-playwright.sh
-./scripts/test-all.sh
+fastfn --help
+fastfn dev examples/functions/next-style
 ```
 
-## Playwright UI E2E
-
-Gateway/Console has a real browser E2E flow with Playwright:
-
-- maps endpoint route to function (`invoke.routes`)
-- validates Gateway tab rendering
-- clicks **Edit mapping** in Gateway row
-- verifies deep-link navigation to Configuration tab and mapped route editor
-
-Run:
+Project validation:
 
 ```bash
-./scripts/test-playwright.sh
+cd cli && go test ./...
+bash cli/coverage.sh
+bash cli/test-all.sh
+bash cli/test-playwright.sh
+sh scripts/ci/test-pipeline.sh
 ```
+
+## Repository Layout
+
+- `cli/`: Go CLI source and local test runners.
+- `cli/tools/`: utility scripts used during local development and debugging flows.
+- `openresty/`: gateway/runtime Lua and console assets.
+- `examples/`: runnable function examples and demo workloads.
+- `tests/unit/`: runtime and SDK unit-level checks.
+- `tests/integration/`: API/OpenAPI/native/hot-reload end-to-end tests.
+- `tests/e2e/`: browser/UI tests.
+- `tests/stress/`: benchmark runners and performance scenarios.
+- `tests/results/`: generated artifacts from automated test runs.
+- `docs/`: MkDocs source (`docs/en`, `docs/es`) and theme overrides.
 
 ## Documentation
 
-- [English docs](./docs/en/index.md)
-- [Documentación en Español](./docs/es/index.md)
+- Start here: [`docs/en/index.md`](./docs/en/index.md)
+- First steps: [`docs/en/tutorial/first-steps.md`](./docs/en/tutorial/first-steps.md)
+- Routing: [`docs/en/tutorial/routing.md`](./docs/en/tutorial/routing.md)
+- CLI reference: [`docs/en/reference/cli.md`](./docs/en/reference/cli.md)
+- HTTP/OpenAPI: [`docs/en/reference/http-api.md`](./docs/en/reference/http-api.md)
+- Function spec: [`docs/en/reference/function-spec.md`](./docs/en/reference/function-spec.md)
+- Architecture: [`docs/en/explanation/architecture.md`](./docs/en/explanation/architecture.md)
+- Comparison: [`docs/en/explanation/comparison.md`](./docs/en/explanation/comparison.md)
 
-## Contributing
+## License
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md).
+MIT. See [`LICENSE`](./LICENSE).
