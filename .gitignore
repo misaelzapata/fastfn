@@ -22,4 +22,5 @@ debug_logs.txt
 *.log
 .fastfn/
 target/
+.rust-build/
 callgrind.out.*
