@@ -12,7 +12,7 @@ const edgeFilterHandler = require(path.join(root, "examples/functions/node/edge_
 const requestInspectorHandler = require(path.join(root, "examples/functions/node/request_inspector/app.js")).handler;
 const edgeAuthGatewayHandler = require(path.join(root, "examples/functions/node/edge_auth_gateway/app.js")).handler;
 const githubWebhookGuardHandler = require(path.join(root, "examples/functions/node/github_webhook_guard/app.js")).handler;
-const edgeHeaderInjectHandler = require(path.join(root, "examples/functions/node/edge_header_inject/app.js")).handler;
+const edgeHeaderInjectHandler = require(path.join(root, "examples/functions/node/edge-header-inject/app.js")).handler;
 const telegramAiReplyHandler = require(path.join(root, "examples/functions/node/telegram_ai_reply/app.js")).handler;
 const telegramAiDigestHandler = require(path.join(root, "examples/functions/node/telegram_ai_digest/app.js")).handler;
 const whatsappHandler = require(path.join(root, "examples/functions/node/whatsapp/app.js")).handler;
@@ -2671,7 +2671,7 @@ async function testTelegramAiDigestDryRunMinIntervalAndAiFallbacks() {
         include_weather: "false",
       },
       headers: {},
-      env: {},
+      env: { OPENAI_API_KEY: "test-openai-key" },
       context: { timeout_ms: 2000 },
     });
     assert.equal(sent.status, 200);

@@ -464,13 +464,13 @@ curl -sS -i 'http://127.0.0.1:8080/fn/edge_auth_gateway?target=health' | sed -n 
 curl -sS 'http://127.0.0.1:8080/fn/edge_auth_gateway?target=health' -H 'Authorization: Bearer dev-token' | jq .
 ```
 
-#### `edge_header_inject`
+#### `edge-header-inject`
 
-- Route: `/fn/edge_header_inject`
+- Route: `/fn/edge-header-inject`
 - Goal: inject headers and proxy to `/fn/request_inspector` (so you can see them)
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/edge_header_inject?tenant=acme' -X POST --data 'hello' | jq .
+curl -sS 'http://127.0.0.1:8080/fn/edge-header-inject?tenant=acme' -X POST --data 'hello' | jq .
 ```
 
 #### `github_webhook_guard`

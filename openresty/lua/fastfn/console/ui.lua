@@ -167,7 +167,7 @@ ngx.say([[
                   <option value="edge_filter">Edge filter (auth + rewrite)</option>
                   <option value="edge_auth_gateway">Edge gateway auth (Bearer)</option>
                   <option value="github_webhook_guard">GitHub webhook guard (HMAC)</option>
-                  <option value="edge_header_inject">Edge header injection</option>
+                  <option value="edge-header-inject">Edge header injection</option>
                   <option value="telegram_ai_reply">Telegram AI reply bot</option>
                   <option value="edge_proxy_ts">Edge proxy (TypeScript)</option>
                 </select>

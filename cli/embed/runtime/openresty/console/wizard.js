@@ -287,7 +287,7 @@ function wizardTemplate(runtime, template) {
     }
   }
 
-  if (t === 'edge_header_inject') {
+  if (t === 'edge-header-inject') {
     if (rt === 'node') {
       return {
         summary: 'Edge header injection + passthrough',

@@ -78,8 +78,8 @@ echo "== request_inspector (shows query/body/headers) =="
 curl -sS "$BASE_URL/fn/request_inspector?key=test" -X POST -H 'x-demo: 1' --data 'hello' | jq .
 
 echo
-echo "== edge_header_inject (proxies to request_inspector; injects x-tenant) =="
-curl -sS "$BASE_URL/fn/edge_header_inject?tenant=acme" -X POST -H 'Content-Type: text/plain' --data 'hello' | jq .
+echo "== edge-header-inject (proxies to request_inspector; injects x-tenant) =="
+curl -sS "$BASE_URL/fn/edge-header-inject?tenant=acme" -X POST -H 'Content-Type: text/plain' --data 'hello' | jq .
 
 echo
 echo "== edge_auth_gateway (expect 401 without bearer) =="
