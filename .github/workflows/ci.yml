@@ -45,7 +45,7 @@ jobs:
           path: bin/fastfn
 
   unit:
-    name: Unit + Coverage (Python + Node)
+    name: Unit + Coverage (Python + Node + PHP + Lua)
     runs-on: ubuntu-latest
     needs: cli
     timeout-minutes: 15

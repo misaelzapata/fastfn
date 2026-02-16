@@ -23,7 +23,7 @@ function json(status, payload, extraHeaders) {
 function normalizeTarget(raw) {
   const t = String(raw || "openapi").trim().toLowerCase();
   if (t === "health") return "/_fn/health";
-  if (t === "openapi") return "/openapi.json";
+  if (t === "openapi") return "/_fn/openapi.json";
   return null;
 }
 
@@ -57,4 +57,3 @@ exports.handler = async (event) => {
     },
   };
 };
-
