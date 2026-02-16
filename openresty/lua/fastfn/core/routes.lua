@@ -1,19 +1,213 @@
 local cjson = require "cjson.safe"
 local invoke_rules = require "fastfn.core.invoke_rules"
+local watchdog = require "fastfn.core.watchdog"
 
 local M = {}
 
 local CACHE = ngx.shared.fn_cache
+local CONC = ngx.shared.fn_conc
 local DEFAULT_TIMEOUT_MS = 2500
 local DEFAULT_MAX_CONCURRENCY = 20
 local DEFAULT_MAX_BODY_BYTES = 1024 * 1024
 local DEFAULT_HEALTH_INTERVAL = 2
 local DEFAULT_HOT_RELOAD_INTERVAL = 2
+local DEFAULT_KEEP_WARM_MIN_WARM = 1
+local DEFAULT_KEEP_WARM_PING_SECONDS = 45
+local DEFAULT_KEEP_WARM_IDLE_TTL_SECONDS = 300
+local DEFAULT_POOL_MIN_WARM = 0
+local DEFAULT_POOL_MAX_QUEUE = 0
+local DEFAULT_POOL_IDLE_TTL_SECONDS = 300
+local DEFAULT_POOL_QUEUE_TIMEOUT_MS = 0
+local DEFAULT_POOL_QUEUE_POLL_MS = 20
+local DEFAULT_POOL_OVERFLOW_STATUS = 429
+local CATALOG_SCAN_LOCK_KEY = "catalog:scan:running"
+local CATALOG_WATCHDOG_ACTIVE_KEY = "catalog:watchdog:active"
+local CATALOG_WATCHDOG_BACKEND_KEY = "catalog:watchdog:backend"
+local CATALOG_WATCHDOG_ERROR_KEY = "catalog:watchdog:error"
+local CATALOG_WATCHDOG_LAST_SCAN_KEY = "catalog:watchdog:last_scan_at"
 local DEFAULT_METHODS = invoke_rules.DEFAULT_METHODS
 local parse_methods = invoke_rules.parse_methods
 local ALLOWED_METHODS = invoke_rules.ALLOWED_METHODS
 local normalize_single_route = invoke_rules.normalize_route
 local parse_invoke_routes = invoke_rules.parse_invoke_routes
+local read_json_file
+local load_runtime_config
+local KNOWN_RUNTIMES = {
+  node = true,
+  python = true,
+  php = true,
+  lua = true,
+  rust = true,
+  go = true,
+}
+local EXPERIMENTAL_RUNTIMES = {
+  rust = true,
+  go = true,
+}
+local ALL_METHODS = { "GET", "POST", "PUT", "PATCH", "DELETE" }
+
+local function normalize_allow_hosts(input)
+  local hosts = {}
+  local seen = {}
+
+  local function add_host(raw)
+    local h = tostring(raw or ""):gsub("^%s+", ""):gsub("%s+$", ""):lower()
+    if h == "" or #h > 200 then
+      return
+    end
+    if h:find("[/%s]") then
+      return
+    end
+    if not h:match("^[a-z0-9%*%-%._:%[%]]+$") then
+      return
+    end
+    if not seen[h] then
+      seen[h] = true
+      hosts[#hosts + 1] = h
+    end
+  end
+
+  if type(input) == "string" then
+    for token in input:gmatch("[^,]+") do
+      add_host(token)
+    end
+  elseif type(input) == "table" then
+    for _, item in ipairs(input) do
+      add_host(item)
+    end
+  end
+
+  if #hosts == 0 then
+    return nil
+  end
+  return hosts
+end
+
+local function normalize_host_token(raw)
+  local h = tostring(raw or ""):gsub("^%s+", ""):gsub("%s+$", ""):lower()
+  if h == "" then
+    return nil
+  end
+  return h
+end
+
+local function split_host_port(authority)
+  local v = normalize_host_token(authority)
+  if not v then
+    return "", ""
+  end
+  local ipv6 = v:match("^%[([^%]]+)%]")
+  if ipv6 then
+    return ipv6, v
+  end
+  local host = v:match("^([^:]+)") or v
+  return host, v
+end
+
+local function host_matches_pattern(host, pattern)
+  host = normalize_host_token(host) or ""
+  pattern = normalize_host_token(pattern) or ""
+  if host == "" or pattern == "" then
+    return false
+  end
+  if host == pattern then
+    return true
+  end
+  local wildcard = pattern:match("^%*%.(.+)$")
+  if wildcard then
+    if host == wildcard then
+      return false
+    end
+    return host:sub(-(#wildcard + 1)) == ("." .. wildcard)
+  end
+  return false
+end
+
+local function host_allowlist_matches(allow_hosts, request_host, request_authority)
+  if type(allow_hosts) ~= "table" or #allow_hosts == 0 then
+    return true
+  end
+  if request_host == "" and request_authority == "" then
+    return false
+  end
+  for _, raw in ipairs(allow_hosts) do
+    local allowed = normalize_host_token(raw)
+    if allowed then
+      local allowed_host = split_host_port(allowed)
+      if host_matches_pattern(request_host, allowed_host) or host_matches_pattern(request_authority, allowed) then
+        return true
+      end
+    end
+  end
+  return false
+end
+
+local function resolve_request_host_values(raw_host, raw_forwarded_host)
+  local forwarded = raw_forwarded_host
+  if type(forwarded) == "string" and forwarded ~= "" then
+    forwarded = forwarded:match("^%s*([^,]+)")
+    local host_only, authority = split_host_port(forwarded)
+    if host_only ~= "" then
+      return host_only, authority
+    end
+  end
+
+  local host_hdr = raw_host
+  if type(host_hdr) == "string" and host_hdr ~= "" then
+    local host_only, authority = split_host_port(host_hdr)
+    if host_only ~= "" then
+      return host_only, authority
+    end
+  end
+
+  if ngx and ngx.var then
+    local host_only, authority = split_host_port(ngx.var.host)
+    return host_only, authority
+  end
+  return "", ""
+end
+
+local function host_constraints_overlap(a, b)
+  local list_a = type(a) == "table" and a or {}
+  local list_b = type(b) == "table" and b or {}
+
+  -- Empty means "all hosts".
+  if #list_a == 0 or #list_b == 0 then
+    return true
+  end
+
+  -- Conservatively treat wildcard patterns as potentially overlapping.
+  for _, item in ipairs(list_a) do
+    local v = normalize_host_token(item)
+    if v and v:find("%*") then
+      return true
+    end
+  end
+  for _, item in ipairs(list_b) do
+    local v = normalize_host_token(item)
+    if v and v:find("%*") then
+      return true
+    end
+  end
+
+  local set_b = {}
+  for _, item in ipairs(list_b) do
+    local v = normalize_host_token(item)
+    if v then
+      set_b[v] = true
+    end
+  end
+
+  for _, item in ipairs(list_a) do
+    local v = normalize_host_token(item)
+    if v and set_b[v] then
+      return true
+    end
+  end
+
+  return false
+end
+
 local function normalize_edge(obj)
   if type(obj) ~= "table" then
     return nil
@@ -63,8 +257,243 @@ local function normalize_edge(obj)
   }
 end
 
+local function normalize_keep_warm(source)
+  if type(source) ~= "table" then
+    return nil
+  end
+
+  local enabled = source.enabled == true
+  local min_warm = tonumber(source.min_warm)
+  if min_warm then
+    min_warm = math.floor(min_warm)
+    if min_warm < 0 then
+      min_warm = nil
+    end
+  end
+
+  local ping_every_seconds = tonumber(source.ping_every_seconds)
+  if ping_every_seconds then
+    ping_every_seconds = math.floor(ping_every_seconds)
+    if ping_every_seconds <= 0 then
+      ping_every_seconds = nil
+    end
+  end
+
+  local idle_ttl_seconds = tonumber(source.idle_ttl_seconds)
+  if idle_ttl_seconds then
+    idle_ttl_seconds = math.floor(idle_ttl_seconds)
+    if idle_ttl_seconds <= 0 then
+      idle_ttl_seconds = nil
+    end
+  end
+
+  if not enabled and not min_warm and not ping_every_seconds and not idle_ttl_seconds then
+    return nil
+  end
+
+  local resolved = {
+    enabled = enabled,
+    min_warm = min_warm or DEFAULT_KEEP_WARM_MIN_WARM,
+    ping_every_seconds = ping_every_seconds or DEFAULT_KEEP_WARM_PING_SECONDS,
+    idle_ttl_seconds = idle_ttl_seconds or DEFAULT_KEEP_WARM_IDLE_TTL_SECONDS,
+  }
+
+  if not enabled and resolved.min_warm < 1 then
+    resolved.min_warm = 0
+  end
+
+  return resolved
+end
+
+local function normalize_worker_pool(source, fallback_max_workers)
+  if type(source) ~= "table" then
+    return nil
+  end
+
+  local enabled = source.enabled ~= false
+
+  local min_warm = tonumber(source.min_warm)
+  if min_warm ~= nil then
+    min_warm = math.floor(min_warm)
+    if min_warm < 0 then
+      min_warm = nil
+    end
+  end
+
+  local max_workers = tonumber(source.max_workers)
+  if max_workers == nil then
+    max_workers = tonumber(fallback_max_workers)
+  end
+  if max_workers ~= nil then
+    max_workers = math.floor(max_workers)
+    if max_workers < 0 then
+      max_workers = nil
+    end
+  end
+
+  local max_queue = tonumber(source.max_queue)
+  if max_queue ~= nil then
+    max_queue = math.floor(max_queue)
+    if max_queue < 0 then
+      max_queue = nil
+    end
+  end
+
+  local idle_ttl_seconds = tonumber(source.idle_ttl_seconds)
+  if idle_ttl_seconds ~= nil then
+    idle_ttl_seconds = math.floor(idle_ttl_seconds)
+    if idle_ttl_seconds <= 0 then
+      idle_ttl_seconds = nil
+    end
+  end
+
+  local queue_timeout_ms = tonumber(source.queue_timeout_ms)
+  if queue_timeout_ms ~= nil then
+    queue_timeout_ms = math.floor(queue_timeout_ms)
+    if queue_timeout_ms < 0 then
+      queue_timeout_ms = nil
+    end
+  end
+
+  local queue_poll_ms = tonumber(source.queue_poll_ms)
+  if queue_poll_ms ~= nil then
+    queue_poll_ms = math.floor(queue_poll_ms)
+    if queue_poll_ms < 1 then
+      queue_poll_ms = nil
+    end
+  end
+
+  local overflow_status = tonumber(source.overflow_status)
+  if overflow_status ~= nil then
+    overflow_status = math.floor(overflow_status)
+    if overflow_status ~= 429 and overflow_status ~= 503 then
+      overflow_status = nil
+    end
+  end
+
+  if not enabled and not max_workers and not max_queue then
+    return nil
+  end
+
+  local resolved = {
+    enabled = enabled,
+    min_warm = min_warm or DEFAULT_POOL_MIN_WARM,
+    max_workers = max_workers,
+    max_queue = max_queue or DEFAULT_POOL_MAX_QUEUE,
+    idle_ttl_seconds = idle_ttl_seconds or DEFAULT_POOL_IDLE_TTL_SECONDS,
+    queue_timeout_ms = queue_timeout_ms or DEFAULT_POOL_QUEUE_TIMEOUT_MS,
+    queue_poll_ms = queue_poll_ms or DEFAULT_POOL_QUEUE_POLL_MS,
+    overflow_status = overflow_status or DEFAULT_POOL_OVERFLOW_STATUS,
+  }
+
+  if resolved.max_workers and resolved.max_workers > 0 and resolved.min_warm > resolved.max_workers then
+    resolved.min_warm = resolved.max_workers
+  end
+
+  return resolved
+end
+
+local function warm_state_for_key(full_key, keep_warm_cfg)
+  local warm_at = CACHE:get("warm:" .. tostring(full_key))
+  if warm_at == nil then
+    return "cold", nil
+  end
+
+  local idle_ttl = keep_warm_cfg and tonumber(keep_warm_cfg.idle_ttl_seconds) or nil
+  if idle_ttl and idle_ttl > 0 then
+    local age = ngx.now() - tonumber(warm_at)
+    if age > idle_ttl then
+      return "stale", warm_at
+    end
+  end
+
+  return "warm", warm_at
+end
+
+local function pool_active_metric_key(full_key)
+  return "pool:active:" .. tostring(full_key)
+end
+
+local function pool_queue_metric_key(full_key)
+  return "pool:queue:" .. tostring(full_key)
+end
+
+local function pool_drop_metric_key(full_key, reason)
+  return "pool:drops:" .. tostring(reason or "unknown") .. ":" .. tostring(full_key)
+end
+
+local function read_nonneg_counter(dict, key)
+  if not dict then
+    return 0
+  end
+  local raw = dict:get(key)
+  local value = tonumber(raw)
+  if not value or value < 0 then
+    return 0
+  end
+  return math.floor(value)
+end
+
+local function worker_pool_snapshot(full_key, policy)
+  local cfg = type((policy or {}).worker_pool) == "table" and policy.worker_pool or nil
+  if not cfg then
+    return nil
+  end
+
+  local active = read_nonneg_counter(CONC, pool_active_metric_key(full_key))
+  local queued = read_nonneg_counter(CONC, pool_queue_metric_key(full_key))
+  local drops_overflow = read_nonneg_counter(CONC, pool_drop_metric_key(full_key, "overflow"))
+  local drops_timeout = read_nonneg_counter(CONC, pool_drop_metric_key(full_key, "queue_timeout"))
+  local overflow_status = math.floor(tonumber(cfg.overflow_status) or DEFAULT_POOL_OVERFLOW_STATUS)
+  if overflow_status ~= 429 and overflow_status ~= 503 then
+    overflow_status = DEFAULT_POOL_OVERFLOW_STATUS
+  end
+
+  return {
+    enabled = cfg.enabled ~= false,
+    min_warm = math.floor(tonumber(cfg.min_warm) or DEFAULT_POOL_MIN_WARM),
+    max_workers = math.floor(tonumber(cfg.max_workers) or 0),
+    max_queue = math.floor(tonumber(cfg.max_queue) or DEFAULT_POOL_MAX_QUEUE),
+    idle_ttl_seconds = math.floor(tonumber(cfg.idle_ttl_seconds) or DEFAULT_POOL_IDLE_TTL_SECONDS),
+    queue_timeout_ms = math.floor(tonumber(cfg.queue_timeout_ms) or DEFAULT_POOL_QUEUE_TIMEOUT_MS),
+    queue_poll_ms = math.floor(tonumber(cfg.queue_poll_ms) or DEFAULT_POOL_QUEUE_POLL_MS),
+    overflow_status = overflow_status,
+    active = active,
+    queued = queued,
+    queue_drops = {
+      overflow = drops_overflow,
+      timeout = drops_timeout,
+      total = drops_overflow + drops_timeout,
+    },
+  }
+end
+
+function M.record_worker_pool_drop(full_key, reason)
+  if type(full_key) ~= "string" or full_key == "" then
+    return false
+  end
+  local kind = tostring(reason or "")
+  if kind ~= "overflow" and kind ~= "queue_timeout" then
+    return false
+  end
+  if not CONC then
+    return false
+  end
+  local value, err = CONC:incr(pool_drop_metric_key(full_key, kind), 1, 0)
+  return value ~= nil and err == nil
+end
+
 local function hot_reload_enabled()
   local raw = os.getenv("FN_HOT_RELOAD")
+  if raw == nil or raw == "" then
+    return true
+  end
+  raw = string.lower(raw)
+  return not (raw == "0" or raw == "false" or raw == "off" or raw == "no")
+end
+
+local function hot_reload_watchdog_enabled()
+  local raw = os.getenv("FN_HOT_RELOAD_WATCHDOG")
   if raw == nil or raw == "" then
     return true
   end
@@ -130,9 +559,36 @@ local function list_dirs(path)
   return out
 end
 
+local function list_files(path)
+  local cmd = string.format("find %s -mindepth 1 -maxdepth 1 -type f -print 2>/dev/null", shell_quote(path))
+  local p = io.popen(cmd)
+  if not p then
+    return {}
+  end
+
+  local out = {}
+  for line in p:lines() do
+    out[#out + 1] = line
+  end
+  p:close()
+  table.sort(out)
+  return out
+end
+
+local function file_exists(path)
+  local cmd = string.format("[ -f %s ] && echo 1 || true", shell_quote(path))
+  local p = io.popen(cmd)
+  if not p then
+    return false
+  end
+  local out = p:read("*l")
+  p:close()
+  return out == "1"
+end
+
 local function has_app_file(path)
   local cmd = string.format(
-    "find %s -mindepth 1 -maxdepth 1 -type f \\( -name 'app.py' -o -name 'handler.py' -o -name 'app.js' -o -name 'handler.js' -o -name 'app.ts' -o -name 'handler.ts' -o -name 'app.php' -o -name 'handler.php' -o -name 'app.rs' -o -name 'handler.rs' \\) -print -quit 2>/dev/null",
+    "find %s -mindepth 1 -maxdepth 1 -type f \\( -name 'app.py' -o -name 'handler.py' -o -name 'main.py' -o -name 'app.js' -o -name 'handler.js' -o -name 'index.js' -o -name 'app.ts' -o -name 'handler.ts' -o -name 'index.ts' -o -name 'app.php' -o -name 'handler.php' -o -name 'index.php' -o -name 'app.lua' -o -name 'handler.lua' -o -name 'main.lua' -o -name 'index.lua' -o -name 'app.rs' -o -name 'handler.rs' -o -name 'app.go' -o -name 'handler.go' -o -name 'main.go' \\) -print -quit 2>/dev/null",
     shell_quote(path)
   )
   local p = io.popen(cmd)
@@ -144,7 +600,352 @@ local function has_app_file(path)
   return first ~= nil
 end
 
-local function read_json_file(path)
+local function has_valid_config_entrypoint(path)
+  local cfg = read_json_file(path .. "/fn.config.json")
+  if type(cfg) ~= "table" then
+    return false
+  end
+  local entry = cfg.entrypoint
+  if type(entry) ~= "string" or entry == "" then
+    return false
+  end
+  local full = path .. "/" .. entry
+  return file_exists(full)
+end
+
+local function detect_runtime_from_file(file_path)
+  local ext = tostring(file_path):match("%.([A-Za-z0-9]+)$")
+  if not ext then
+    return nil
+  end
+  ext = string.lower(ext)
+  if ext == "js" or ext == "ts" then
+    return "node"
+  end
+  if ext == "py" then
+    return "python"
+  end
+  if ext == "php" then
+    return "php"
+  end
+  if ext == "lua" then
+    return "lua"
+  end
+  if ext == "rs" then
+    return "rust"
+  end
+  if ext == "go" then
+    return "go"
+  end
+  return nil
+end
+
+local function is_safe_relative_path(path)
+  if type(path) ~= "string" or path == "" then
+    return false
+  end
+  if path:sub(1, 1) == "/" then
+    return false
+  end
+  if path:find("\\", 1, true) or path:find("//", 1, true) then
+    return false
+  end
+  for segment in path:gmatch("[^/]+") do
+    if segment == "." or segment == ".." then
+      return false
+    end
+  end
+  return true
+end
+
+local function runtime_entrypoint_candidates(runtime)
+  if runtime == "python" then
+    return { "app.py", "handler.py", "main.py" }
+  end
+  if runtime == "node" then
+    return { "app.js", "handler.js", "index.js", "app.ts", "handler.ts", "index.ts" }
+  end
+  if runtime == "php" then
+    return { "app.php", "handler.php", "index.php" }
+  end
+  if runtime == "lua" then
+    return { "app.lua", "handler.lua", "main.lua", "index.lua" }
+  end
+  if runtime == "rust" then
+    return { "app.rs", "handler.rs" }
+  end
+  if runtime == "go" then
+    return { "app.go", "handler.go", "main.go" }
+  end
+  return {}
+end
+
+local function resolve_runtime_file_target(functions_root, runtime, fn_name)
+  if not is_safe_relative_path(fn_name) then
+    return nil
+  end
+  local full = tostring(functions_root or "") .. "/" .. runtime .. "/" .. fn_name
+  if file_exists(full) then
+    return full
+  end
+  return nil
+end
+
+local function resolve_runtime_function_dir(functions_root, runtime, fn_name, version)
+  if not is_safe_relative_path(fn_name) then
+    return nil
+  end
+  local dir = tostring(functions_root or "") .. "/" .. runtime .. "/" .. fn_name
+  if version ~= nil and version ~= "" then
+    if not tostring(version):match("^[a-zA-Z0-9_.-]+$") then
+      return nil
+    end
+    dir = dir .. "/" .. version
+  end
+  if dir_exists(dir) then
+    return dir
+  end
+  return nil
+end
+
+function M.resolve_function_entrypoint(runtime, fn_name, version)
+  if type(runtime) ~= "string" or runtime == "" then
+    return nil, "runtime required"
+  end
+  if type(fn_name) ~= "string" or fn_name == "" then
+    return nil, "function name required"
+  end
+
+  local cfg = load_runtime_config(false)
+  local functions_root = cfg.functions_root
+  if type(functions_root) ~= "string" or functions_root == "" then
+    return nil, "functions root not configured"
+  end
+
+  local direct_file = fn_name:find("/", 1, true) ~= nil or fn_name:match("%.[A-Za-z0-9]+$") ~= nil
+  if direct_file then
+    local target = resolve_runtime_file_target(functions_root, runtime, fn_name)
+    if not target then
+      return nil, "entrypoint not found"
+    end
+    return target
+  end
+
+  local dir = resolve_runtime_function_dir(functions_root, runtime, fn_name, version)
+  if not dir then
+    return nil, "function directory not found"
+  end
+
+  local fn_cfg = read_json_file(dir .. "/fn.config.json")
+  local entrypoint = type(fn_cfg) == "table" and fn_cfg.entrypoint or nil
+  if type(entrypoint) == "string" and entrypoint ~= "" then
+    if not is_safe_relative_path(entrypoint) then
+      return nil, "invalid entrypoint path"
+    end
+    local configured = dir .. "/" .. entrypoint
+    if file_exists(configured) then
+      return configured
+    end
+  end
+
+  for _, candidate in ipairs(runtime_entrypoint_candidates(runtime)) do
+    local full = dir .. "/" .. candidate
+    if file_exists(full) then
+      return full
+    end
+  end
+
+  for _, file in ipairs(list_files(dir)) do
+    local base = basename(file)
+    if base and detect_runtime_from_file(base) == runtime then
+      return file
+    end
+  end
+
+  return nil, "entrypoint not found"
+end
+
+local function should_ignore_file_base(base)
+  local lower = string.lower(tostring(base or ""))
+  if lower:match("%.test$") or lower:match("%.spec$") then
+    return true
+  end
+  return lower:sub(1, 1) == "_"
+end
+
+local function split_file_tokens(base)
+  local out = {}
+  local cur = {}
+  local bracket_depth = 0
+  for i = 1, #base do
+    local ch = base:sub(i, i)
+    if ch == "[" then
+      bracket_depth = bracket_depth + 1
+      cur[#cur + 1] = ch
+    elseif ch == "]" then
+      if bracket_depth > 0 then
+        bracket_depth = bracket_depth - 1
+      end
+      cur[#cur + 1] = ch
+    elseif ch == "." and bracket_depth == 0 then
+      local token = table.concat(cur):gsub("^%s+", ""):gsub("%s+$", "")
+      if token ~= "" then
+        out[#out + 1] = token
+      end
+      cur = {}
+    else
+      cur[#cur + 1] = ch
+    end
+  end
+  local last = table.concat(cur):gsub("^%s+", ""):gsub("%s+$", "")
+  if last ~= "" then
+    out[#out + 1] = last
+  end
+  if #out == 0 then
+    return { base }
+  end
+  return out
+end
+
+local function parse_method_and_tokens(base_no_ext)
+  local method = "GET"
+  local parts = split_file_tokens(base_no_ext)
+  if #parts > 1 then
+    local head = string.lower(parts[1])
+    if head == "get" then
+      method = "GET"
+      table.remove(parts, 1)
+    elseif head == "post" then
+      method = "POST"
+      table.remove(parts, 1)
+    elseif head == "put" then
+      method = "PUT"
+      table.remove(parts, 1)
+    elseif head == "patch" then
+      method = "PATCH"
+      table.remove(parts, 1)
+    elseif head == "delete" then
+      method = "DELETE"
+      table.remove(parts, 1)
+    end
+  end
+  return method, parts
+end
+
+local function normalize_route_token(segment)
+  local s = tostring(segment or ""):gsub("^%s+", ""):gsub("%s+$", "")
+  if s == "" then
+    return nil
+  end
+  local lower = string.lower(s)
+  if lower == "index" or lower == "handler" or lower == "app" or lower == "main" then
+    return nil
+  end
+  local opt = s:match("^%[%[%.%.%.([A-Za-z0-9_]+)%]%]$")
+  if opt then
+    return ":" .. string.lower(opt) .. "*"
+  end
+  local catch_all = s:match("^%[%.%.%.([A-Za-z0-9_]+)%]$")
+  if catch_all then
+    return ":" .. string.lower(catch_all) .. "*"
+  end
+  local dyn = s:match("^%[([A-Za-z0-9_]+)%]$")
+  if dyn then
+    return ":" .. string.lower(dyn)
+  end
+  lower = lower:gsub("_+", "-")
+  lower = lower:gsub("[^a-z0-9-]+", "-")
+  lower = lower:gsub("^-+", ""):gsub("-+$", "")
+  if lower == "" then
+    return nil
+  end
+  return lower
+end
+
+local function is_optional_catchall_token(segment)
+  return tostring(segment or ""):match("^%[%[%.%.%.[A-Za-z0-9_]+%]%]$") ~= nil
+end
+
+local function split_rel_segments(rel)
+  local out = {}
+  local norm = tostring(rel or ""):gsub("^%./", "")
+  if norm == "" or norm == "." then
+    return out
+  end
+  for part in norm:gmatch("[^/]+") do
+    local token = normalize_route_token(part)
+    if token then
+      out[#out + 1] = token
+    end
+  end
+  return out
+end
+
+local function detect_file_based_routes_in_dir(abs_dir, rel_dir)
+  local cfg = read_json_file(abs_dir .. "/fn.config.json")
+  if type(cfg) == "table" and next(cfg) ~= nil then
+    return {}
+  end
+
+  local discovered = {}
+  for _, file_path in ipairs(list_files(abs_dir)) do
+    local filename = basename(file_path)
+    local lower_name = string.lower(filename)
+    if lower_name:sub(-5) ~= ".d.ts" then
+      local runtime = detect_runtime_from_file(filename)
+      if runtime then
+        local base_no_ext = filename:gsub("%.[^.]+$", "")
+        if not should_ignore_file_base(base_no_ext) then
+          local method, file_tokens = parse_method_and_tokens(base_no_ext)
+          local segments = split_rel_segments(rel_dir)
+          for _, t in ipairs(file_tokens) do
+            local normalized = normalize_route_token(t)
+            if normalized then
+              segments[#segments + 1] = normalized
+            end
+          end
+          local route = "/" .. table.concat(segments, "/")
+          route = normalize_single_route(route)
+          if route and route ~= "/" then
+            local rel_file = filename
+            if rel_dir and rel_dir ~= "" and rel_dir ~= "." then
+              rel_file = rel_dir .. "/" .. filename
+            end
+            discovered[#discovered + 1] = {
+              route = route,
+              runtime = runtime,
+              target = rel_file,
+              methods = { method },
+            }
+
+            if #file_tokens > 0 and is_optional_catchall_token(file_tokens[#file_tokens]) then
+              local base_segments = split_rel_segments(rel_dir)
+              for i = 1, (#file_tokens - 1) do
+                local normalized_base = normalize_route_token(file_tokens[i])
+                if normalized_base then
+                  base_segments[#base_segments + 1] = normalized_base
+                end
+              end
+              local base_route = "/" .. table.concat(base_segments, "/")
+              base_route = normalize_single_route(base_route)
+              if base_route and base_route ~= "/" then
+                discovered[#discovered + 1] = {
+                  route = base_route,
+                  runtime = runtime,
+                  target = rel_file,
+                  methods = { method },
+                }
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+  return discovered
+end
+
+read_json_file = function(path)
   local f = io.open(path, "rb")
   if not f then
     return nil
@@ -163,6 +964,50 @@ local function read_json_file(path)
   end
 
   return obj
+end
+
+local function detect_manifest_routes_in_dir(abs_dir, rel_dir)
+  local manifest = read_json_file(abs_dir .. "/fn.routes.json")
+  if type(manifest) ~= "table" or type(manifest.routes) ~= "table" then
+    return {}, false
+  end
+
+  local discovered = {}
+  for route_def, target in pairs(manifest.routes) do
+    if type(route_def) == "string" and type(target) == "string" and target ~= "" then
+      local methods_str, path = route_def:match("^([A-Z, ]+)%s+(.+)$")
+      if not path then
+        path = route_def:gsub("^%s+", "")
+        methods_str = nil
+      end
+      path = normalize_single_route(path)
+      if path then
+        local methods
+        if methods_str then
+          methods = {}
+          for m in methods_str:gmatch("[A-Z]+") do
+            methods[#methods + 1] = m
+          end
+        else
+          methods = DEFAULT_METHODS
+        end
+
+        local runtime = detect_runtime_from_file(target) or "node"
+        local rel_target = target
+        if rel_dir and rel_dir ~= "" and rel_dir ~= "." then
+          rel_target = rel_dir .. "/" .. target
+        end
+
+        discovered[#discovered + 1] = {
+          route = path,
+          runtime = runtime,
+          target = rel_target,
+          methods = methods,
+        }
+      end
+    end
+  end
+  return discovered, true
 end
 
 local function normalize_policy(obj)
@@ -193,6 +1038,11 @@ local function normalize_policy(obj)
     out.max_body_bytes = max_body_bytes
   end
 
+  local worker_pool = normalize_worker_pool(obj.worker_pool, obj.max_concurrency)
+  if worker_pool then
+    out.worker_pool = worker_pool
+  end
+
   if obj.include_debug_headers == true then
     out.include_debug_headers = true
   end
@@ -214,6 +1064,12 @@ local function normalize_policy(obj)
   local routes = parse_invoke_routes(invoke)
   if routes ~= nil then
     out.routes = routes
+  end
+  if type(invoke) == "table" and invoke.allow_hosts ~= nil then
+    local allow_hosts = normalize_allow_hosts(invoke.allow_hosts)
+    if allow_hosts then
+      out.allow_hosts = allow_hosts
+    end
   end
 
   local schedule = obj.schedule
@@ -264,6 +1120,11 @@ local function normalize_policy(obj)
     end
 
     out.schedule = sched
+  end
+
+  local keep_warm = normalize_keep_warm(obj.keep_warm)
+  if keep_warm then
+    out.keep_warm = keep_warm
   end
 
   local shared_deps = obj.shared_deps
@@ -323,7 +1184,7 @@ local function detect_socket_base_dir()
   return "/tmp/fastfn"
 end
 
-local function load_runtime_config(force)
+load_runtime_config = function(force)
   if not force then
     local raw = CACHE:get("runtime:config")
     if raw then
@@ -339,9 +1200,16 @@ local function load_runtime_config(force)
   if #runtime_names == 0 then
     for _, runtime_dir in ipairs(list_dirs(functions_root)) do
       local runtime_name = basename(runtime_dir)
-      if runtime_name and runtime_name:match("^[a-zA-Z0-9_-]+$") then
+      if runtime_name
+        and runtime_name:match("^[a-zA-Z0-9_-]+$")
+        and KNOWN_RUNTIMES[runtime_name]
+        and not EXPERIMENTAL_RUNTIMES[runtime_name]
+      then
         runtime_names[#runtime_names + 1] = runtime_name
       end
+    end
+    if #runtime_names == 0 then
+      runtime_names = { "node", "python", "php", "lua" }
     end
     table.sort(runtime_names)
   end
@@ -361,11 +1229,19 @@ local function load_runtime_config(force)
   local runtimes = {}
   for _, runtime in ipairs(runtime_names) do
     if runtime:match("^[a-zA-Z0-9_-]+$") then
-      local socket = socket_map[runtime] or ("unix:" .. socket_base .. "/fn-" .. runtime .. ".sock")
-      runtimes[runtime] = {
-        socket = socket,
-        timeout_ms = runtime_timeout_ms,
-      }
+      if runtime == "lua" then
+        runtimes[runtime] = {
+          socket = "inprocess:lua",
+          timeout_ms = runtime_timeout_ms,
+          in_process = true,
+        }
+      else
+        local socket = socket_map[runtime] or ("unix:" .. socket_base .. "/fn-" .. runtime .. ".sock")
+        runtimes[runtime] = {
+          socket = socket,
+          timeout_ms = runtime_timeout_ms,
+        }
+      end
     end
   end
 
@@ -438,6 +1314,9 @@ function M.runtime_status(runtime)
 end
 
 function M.check_runtime_socket(socket_uri, timeout_ms)
+  if type(socket_uri) ~= "string" or socket_uri == "" then
+    return false, "missing runtime socket"
+  end
   local sock = ngx.socket.tcp()
   local connect_timeout = math.max(25, math.floor((timeout_ms or 250) * 0.5))
   sock:settimeouts(connect_timeout, connect_timeout, connect_timeout)
@@ -449,12 +1328,29 @@ function M.check_runtime_socket(socket_uri, timeout_ms)
   return false, tostring(err)
 end
 
+function M.runtime_is_in_process(runtime, runtime_cfg)
+  if runtime == "lua" then
+    return true
+  end
+  return type(runtime_cfg) == "table" and runtime_cfg.in_process == true
+end
+
+function M.check_runtime_health(runtime, runtime_cfg)
+  local cfg = runtime_cfg or M.get_runtime_config(runtime)
+  if M.runtime_is_in_process(runtime, cfg) then
+    return true, "in-process"
+  end
+  if type(cfg) ~= "table" then
+    return false, "runtime config missing"
+  end
+  return M.check_runtime_socket(cfg.socket, cfg.timeout_ms or 250)
+end
+
 function M.healthcheck_once(cfg)
   local config = cfg or load_runtime_config(false)
   for runtime, rt_cfg in pairs(config.runtimes or {}) do
-    local timeout_ms = tonumber(rt_cfg.timeout_ms) or 250
-    local ok, err = M.check_runtime_socket(rt_cfg.socket, timeout_ms)
-    M.set_runtime_health(runtime, ok, ok and "ok" or err)
+    local ok, reason = M.check_runtime_health(runtime, rt_cfg)
+    M.set_runtime_health(runtime, ok, ok and (reason or "ok") or reason)
   end
 end
 
@@ -487,29 +1383,131 @@ function M.discover_functions(force)
     return a.runtime == runtime and a.fn_name == fn_name and (a.version or nil) == (version or nil)
   end
 
-  local function register_route(route, runtime, fn_name, version, methods)
+  local function methods_overlap(a, b)
+    if not a or not b then return true end -- nil means ALL methods
+    local map = {}
+    for _, m in ipairs(a) do map[m] = true end
+    for _, m in ipairs(b) do
+      if map[m] then return true end
+    end
+    return false
+  end
+
+  local function register_route(route, runtime, fn_name, version, methods, source_rank, allow_hosts)
     if type(route) ~= "string" or route == "" then
+      return
+    end
+    if type(runtime) ~= "string" or not ((cfg.runtimes or {})[runtime]) then
       return
     end
     if catalog.mapped_route_conflicts[route] then
       return
     end
-    local current = catalog.mapped_routes[route]
-    if current then
-      if same_target(current, runtime, fn_name, version) then
-        return
-      end
-      catalog.mapped_routes[route] = nil
-      catalog.mapped_route_conflicts[route] = true
-      return
-    end
-    catalog.mapped_routes[route] = {
+    
+    local new_entry = {
       runtime = runtime,
       fn_name = fn_name,
       version = version,
       methods = methods,
+      source_rank = tonumber(source_rank) or 1,
+      allow_hosts = normalize_allow_hosts(allow_hosts),
     }
+
+    local current_list = catalog.mapped_routes[route]
+    if not current_list then
+      catalog.mapped_routes[route] = { new_entry }
+      return
+    end
+
+    -- Check for conflicts with existing entries
+    -- Precedence: config/policy (3) > manifest (2) > file-based (1)
+    local to_remove = {}
+    for _, existing in ipairs(current_list) do
+      if not same_target(existing, runtime, fn_name, version) then
+        if methods_overlap(existing.methods, methods)
+          and host_constraints_overlap(existing.allow_hosts, new_entry.allow_hosts) then
+          local er = tonumber(existing.source_rank) or 1
+          local nr = tonumber(new_entry.source_rank) or 1
+          if er == nr then
+            -- Same priority and overlap on different target => real conflict.
+            catalog.mapped_routes[route] = nil
+            catalog.mapped_route_conflicts[route] = true
+            return
+          elseif er > nr then
+            -- Existing has higher precedence; ignore new route.
+            return
+          else
+            -- New has higher precedence; remove lower-priority overlapping entries.
+            to_remove[existing] = true
+          end
+        end
+      end
+    end
+
+    if next(to_remove) ~= nil then
+      local filtered = {}
+      for _, existing in ipairs(current_list) do
+        if not to_remove[existing] then
+          filtered[#filtered + 1] = existing
+        end
+      end
+      current_list = filtered
+      catalog.mapped_routes[route] = current_list
+    end
+
+    -- No conflict, append.
+    table.insert(current_list, new_entry)
   end
+
+
+  do
+    local root_manifest_routes, root_has_manifest = detect_manifest_routes_in_dir(functions_root, ".")
+    if root_has_manifest then
+      for _, item in ipairs(root_manifest_routes) do
+        register_route(item.route, item.runtime, item.target, nil, item.methods, 2)
+      end
+    end
+  end
+
+  local function discover_zero_config_dir(abs_dir, rel_dir, depth)
+    if depth > 2 then
+      return
+    end
+
+    local has_manifest = false
+    local manifest_routes, manifest_found = detect_manifest_routes_in_dir(abs_dir, rel_dir)
+    if manifest_found then
+      has_manifest = true
+      for _, item in ipairs(manifest_routes) do
+        register_route(item.route, item.runtime, item.target, nil, item.methods, 2)
+      end
+    end
+
+    local file_routes = detect_file_based_routes_in_dir(abs_dir, rel_dir)
+    for _, item in ipairs(file_routes) do
+      register_route(item.route, item.runtime, item.target, nil, item.methods, 1)
+    end
+
+    local cfg = read_json_file(abs_dir .. "/fn.config.json")
+    local has_explicit_cfg = type(cfg) == "table" and next(cfg) ~= nil
+    local detected_here = has_manifest or (#file_routes > 0) or has_explicit_cfg
+
+    if depth == 2 then
+      return
+    end
+    if detected_here and rel_dir ~= "." then
+      return
+    end
+
+    for _, sub_dir in ipairs(list_dirs(abs_dir)) do
+      local sub_name = basename(sub_dir)
+      if sub_name and sub_name ~= "" and sub_name:sub(1, 1) ~= "." then
+        local sub_rel = (rel_dir and rel_dir ~= "" and rel_dir ~= ".") and (rel_dir .. "/" .. sub_name) or sub_name
+        discover_zero_config_dir(sub_dir, sub_rel, depth + 1)
+      end
+    end
+  end
+  discover_zero_config_dir(functions_root, ".", 0)
 
   for _, runtime in ipairs(sorted_keys(cfg.runtimes or {})) do
     local runtime_dir = functions_root .. "/" .. runtime
@@ -521,7 +1519,7 @@ function M.discover_functions(force)
       local fn_name = basename(fn_dir)
       if fn_name and fn_name:match("^[a-zA-Z0-9_-]+$") then
         local fn_entry = {
-          has_default = has_app_file(fn_dir),
+          has_default = has_app_file(fn_dir) or has_valid_config_entrypoint(fn_dir),
           versions = {},
           policy = normalize_policy(read_json_file(fn_dir .. "/fn.config.json")),
           versions_policy = {},
@@ -529,7 +1527,7 @@ function M.discover_functions(force)
 
         for _, ver_dir in ipairs(list_dirs(fn_dir)) do
           local ver = basename(ver_dir)
-          if ver and ver:match("^[a-zA-Z0-9_.-]+$") and has_app_file(ver_dir) then
+          if ver and ver:match("^[a-zA-Z0-9_.-]+$") and (has_app_file(ver_dir) or has_valid_config_entrypoint(ver_dir)) then
             fn_entry.versions[#fn_entry.versions + 1] = ver
             fn_entry.versions_policy[ver] = normalize_policy(read_json_file(ver_dir .. "/fn.config.json"))
           end
@@ -543,19 +1541,22 @@ function M.discover_functions(force)
           if fn_entry.has_default then
             local root_methods = fn_entry.policy and fn_entry.policy.methods or DEFAULT_METHODS
             local policy_routes = (fn_entry.policy and fn_entry.policy.routes) or {}
+            local root_allow_hosts = fn_entry.policy and fn_entry.policy.allow_hosts or nil
             if #policy_routes == 0 then
-              policy_routes = { "/" .. fn_name, "/" .. fn_name .. "/*" }
+              local canonical_name = normalize_route_token(fn_name) or fn_name
+              policy_routes = { "/" .. canonical_name, "/" .. canonical_name .. "/*" }
             end
             for _, route in ipairs(policy_routes) do
-              register_route(route, runtime, fn_name, nil, root_methods)
+              register_route(route, runtime, fn_name, nil, root_methods, 3, root_allow_hosts)
             end
           end
 
           for _, ver in ipairs(fn_entry.versions) do
             local ver_policy = (fn_entry.versions_policy or {})[ver] or {}
             local ver_methods = ver_policy.methods or (fn_entry.policy and fn_entry.policy.methods) or DEFAULT_METHODS
+            local ver_allow_hosts = ver_policy.allow_hosts or (fn_entry.policy and fn_entry.policy.allow_hosts) or nil
             for _, route in ipairs(ver_policy.routes or {}) do
-              register_route(route, runtime, fn_name, ver, ver_methods)
+              register_route(route, runtime, fn_name, ver, ver_methods, 3, ver_allow_hosts)
             end
           end
         end
@@ -570,20 +1571,130 @@ function M.discover_functions(force)
   return catalog
 end
 
-function M.resolve_mapped_target(path)
+local function contains_method_local(list, m)
+  if not list then
+    return true
+  end
+  for _, v in ipairs(list) do
+    if v == m then
+      return true
+    end
+  end
+  return false
+end
+
+local function compile_dynamic_route_pattern(mapped_route)
+  if mapped_route == "/" then
+    return "^/$", {}
+  end
+
+  local parts = {}
+  local names = {}
+  local used_names = {}
+  for seg in tostring(mapped_route):gmatch("[^/]+") do
+    local name, catch_all = seg:match("^:([A-Za-z0-9_]+)(%*?)$")
+    if name then
+      used_names[name] = true
+      names[#names + 1] = name
+      if catch_all == "*" then
+        parts[#parts + 1] = "(.+)"
+      else
+        parts[#parts + 1] = "([^/]+)"
+      end
+    elseif seg == "*" then
+      local wildcard_name = "wildcard"
+      if used_names[wildcard_name] then
+        local i = 2
+        while used_names[wildcard_name .. tostring(i)] do
+          i = i + 1
+        end
+        wildcard_name = wildcard_name .. tostring(i)
+      end
+      used_names[wildcard_name] = true
+      names[#names + 1] = wildcard_name
+      parts[#parts + 1] = "(.+)"
+    else
+      parts[#parts + 1] = seg:gsub("([%^%$%(%)%%%.%[%]%+%-%?%*])", "%%%1")
+    end
+  end
+
+  return "^/" .. table.concat(parts, "/") .. "$", names
+end
+
+local function extract_dynamic_route_params(mapped_route, path)
+  local pattern, names = compile_dynamic_route_pattern(mapped_route)
+  local captures = { tostring(path or ""):match(pattern) }
+  if #captures == 0 then
+    return nil
+  end
+
+  local params = {}
+  local unescape = ngx and ngx.unescape_uri
+  for i, name in ipairs(names) do
+    local v = captures[i]
+    if v ~= nil then
+      if unescape then
+        params[name] = unescape(v)
+      else
+        params[name] = v
+      end
+    end
+  end
+  return params
+end
+
+function M.resolve_mapped_target(path, method, host_ctx)
   local route = normalize_single_route(path)
   if not route then
-    return nil, nil, nil
+    return nil, nil, nil, nil, nil
   end
+  local request_host, request_authority = resolve_request_host_values(
+    type(host_ctx) == "table" and host_ctx.host or nil,
+    type(host_ctx) == "table" and host_ctx.x_forwarded_host or nil
+  )
+  local saw_host_mismatch = false
+  -- Use hot-reload cache; avoid full filesystem rescans on every request.
   local catalog = M.discover_functions(false)
-  if (catalog.mapped_route_conflicts or {})[route] then
-    return nil, nil, nil, "ambiguous mapped route"
+
+  -- 1. Try Exact Match
+  local entries = (catalog.mapped_routes or {})[route]
+  if entries then
+    for _, entry in ipairs(entries) do
+      if contains_method_local(entry.methods, method) then
+        if host_allowlist_matches(entry.allow_hosts, request_host, request_authority) then
+          return entry.runtime, entry.fn_name, entry.version, {}, nil
+        end
+        if type(entry.allow_hosts) == "table" and #entry.allow_hosts > 0 then
+          saw_host_mismatch = true
+        end
+      end
+    end
   end
-  local entry = (catalog.mapped_routes or {})[route]
-  if not entry then
-    return nil, nil, nil
+
+  -- 2. Try Pattern Matching (Dynamic Routes)
+  for mapped_route, route_entries in pairs(catalog.mapped_routes or {}) do
+    if mapped_route:find(":") or mapped_route:find("*", 1, true) then
+      local params = extract_dynamic_route_params(mapped_route, route)
+      if params ~= nil then
+        for _, entry in ipairs(route_entries) do
+          if contains_method_local(entry.methods, method) then
+            if host_allowlist_matches(entry.allow_hosts, request_host, request_authority) then
+              return entry.runtime, entry.fn_name, entry.version, params, nil
+            end
+            if type(entry.allow_hosts) == "table" and #entry.allow_hosts > 0 then
+              saw_host_mismatch = true
+            end
+          end
+        end
+      end
+    end
   end
-  return entry.runtime, entry.fn_name, entry.version
+
+  if saw_host_mismatch then
+    return nil, nil, nil, nil, "host not allowed"
+  end
+
+  return nil, nil, nil, nil, nil
 end
 
 function M.resolve_function_policy(runtime, fn_name, version)
@@ -594,9 +1705,23 @@ function M.resolve_function_policy(runtime, fn_name, version)
     return nil, "unknown runtime"
   end
 
-  local fn_entry = (runtime_entry.functions or {})[fn_name]
+  local functions = runtime_entry.functions or {}
+  local fn_entry = functions[fn_name]
+  
+  -- Fallback: If map lookup fails, try iterating (in case it became a sequence)
   if not fn_entry then
-    return nil, "unknown function"
+    -- Check if it's a direct file path (Zero-Config / fn.routes.json)
+    if fn_name:find("/") or fn_name:match("%.[a-z0-9]+$") then
+       -- Synthetic entry
+       fn_entry = {
+         has_default = true,
+         policy = {
+           methods = ALL_METHODS,
+         }
+       }
+     else
+       return nil, "unknown function"
+     end
   end
 
   if version then
@@ -619,6 +1744,7 @@ function M.resolve_function_policy(runtime, fn_name, version)
   local root_policy = fn_entry.policy or {}
   local ver_policy = (version and fn_entry.versions_policy and fn_entry.versions_policy[version]) or {}
   local methods = ver_policy.methods or root_policy.methods or DEFAULT_METHODS
+  local allow_hosts = ver_policy.allow_hosts or root_policy.allow_hosts
 
   local resolved = {
     timeout_ms = tonumber(ver_policy.timeout_ms or root_policy.timeout_ms or defaults.timeout_ms) or DEFAULT_TIMEOUT_MS,
@@ -627,6 +1753,31 @@ function M.resolve_function_policy(runtime, fn_name, version)
     include_debug_headers = (ver_policy.include_debug_headers == true) or (root_policy.include_debug_headers == true),
     methods = methods,
   }
+  if type(allow_hosts) == "table" then
+    resolved.allow_hosts = {}
+    for _, host in ipairs(allow_hosts) do
+      resolved.allow_hosts[#resolved.allow_hosts + 1] = host
+    end
+  end
+
+  local worker_pool = normalize_worker_pool(ver_policy.worker_pool or root_policy.worker_pool, resolved.max_concurrency)
+  if worker_pool then
+    resolved.worker_pool = worker_pool
+  end
+
+  local keep_warm = normalize_keep_warm(ver_policy.keep_warm or root_policy.keep_warm)
+  if keep_warm then
+    resolved.keep_warm = keep_warm
+  end
+
+  -- Rust/Go handlers may compile on first invoke; avoid first-hit timeouts.
+  if runtime == "rust" or runtime == "go"
+    or (type(fn_name) == "string" and (fn_name:match("%.rs$") or fn_name:match("%.go$")))
+  then
+    if (resolved.timeout_ms or 0) < 180000 then
+      resolved.timeout_ms = 180000
+    end
+  end
 
   local edge = ver_policy.edge or root_policy.edge
   if type(edge) == "table" then
@@ -714,10 +1865,33 @@ function M.health_snapshot()
     hot_reload = {
       enabled = hot_reload_enabled(),
       last_catalog_scan_at = CACHE:get("catalog:scanned_at"),
+      watchdog = {
+        enabled = hot_reload_watchdog_enabled(),
+        active = CACHE:get(CATALOG_WATCHDOG_ACTIVE_KEY) == 1,
+        backend = CACHE:get(CATALOG_WATCHDOG_BACKEND_KEY),
+        last_scan_at = CACHE:get(CATALOG_WATCHDOG_LAST_SCAN_KEY),
+        error = CACHE:get(CATALOG_WATCHDOG_ERROR_KEY),
+      },
     },
     routing = {
       mapped_routes = mapped_count,
       mapped_route_conflicts = mapped_conflicts,
+    },
+    functions = {
+      summary = {
+        total = 0,
+        warm = 0,
+        stale = 0,
+        cold = 0,
+        keep_warm_enabled = 0,
+        pool_enabled = 0,
+        pool_active = 0,
+        pool_queued = 0,
+        pool_queue_drops = 0,
+        pool_queue_overflow_drops = 0,
+        pool_queue_timeout_drops = 0,
+      },
+      states = {},
     },
     runtimes = {},
   }
@@ -728,6 +1902,60 @@ function M.health_snapshot()
       timeout_ms = rt_cfg.timeout_ms,
       health = M.runtime_status(runtime),
     }
+  end
+
+  for runtime, rt_entry in pairs((catalog and catalog.runtimes) or {}) do
+    for fn_name, fn_entry in pairs((rt_entry and rt_entry.functions) or {}) do
+      local function add_function_state(version)
+        local key = runtime .. "/" .. fn_name .. "@" .. (version or "default")
+        local policy = M.resolve_function_policy(runtime, fn_name, version) or {}
+        local keep_warm_cfg = type(policy.keep_warm) == "table" and policy.keep_warm or nil
+        local pool_state = worker_pool_snapshot(key, policy)
+        local state, warm_at = warm_state_for_key(key, keep_warm_cfg)
+        local row = {
+          runtime = runtime,
+          name = fn_name,
+          version = version or nil,
+          key = key,
+          state = state,
+          warm_at = warm_at,
+          keep_warm = keep_warm_cfg,
+          worker_pool = pool_state,
+        }
+        out.functions.states[#out.functions.states + 1] = row
+        out.functions.summary.total = out.functions.summary.total + 1
+        if keep_warm_cfg and keep_warm_cfg.enabled == true and tonumber(keep_warm_cfg.min_warm or 0) > 0 then
+          out.functions.summary.keep_warm_enabled = out.functions.summary.keep_warm_enabled + 1
+        end
+        if state == "warm" then
+          out.functions.summary.warm = out.functions.summary.warm + 1
+        elseif state == "stale" then
+          out.functions.summary.stale = out.functions.summary.stale + 1
+        else
+          out.functions.summary.cold = out.functions.summary.cold + 1
+        end
+        if pool_state then
+          if pool_state.enabled == true then
+            out.functions.summary.pool_enabled = out.functions.summary.pool_enabled + 1
+          end
+          out.functions.summary.pool_active = out.functions.summary.pool_active + (tonumber(pool_state.active) or 0)
+          out.functions.summary.pool_queued = out.functions.summary.pool_queued + (tonumber(pool_state.queued) or 0)
+          local drops = pool_state.queue_drops or {}
+          local drops_overflow = tonumber(drops.overflow) or 0
+          local drops_timeout = tonumber(drops.timeout) or 0
+          out.functions.summary.pool_queue_overflow_drops = out.functions.summary.pool_queue_overflow_drops + drops_overflow
+          out.functions.summary.pool_queue_timeout_drops = out.functions.summary.pool_queue_timeout_drops + drops_timeout
+          out.functions.summary.pool_queue_drops = out.functions.summary.pool_queue_drops + drops_overflow + drops_timeout
+        end
+      end
+
+      if fn_entry.has_default then
+        add_function_state(nil)
+      end
+      for _, ver in ipairs(fn_entry.versions or {}) do
+        add_function_state(ver)
+      end
+    end
   end
 
   return out
@@ -742,7 +1970,7 @@ function M.init()
     return
   end
 
-  load_runtime_config(true)
+  local init_cfg = load_runtime_config(true)
   M.discover_functions(true)
 
   local interval = tonumber(os.getenv("FN_HEALTH_INTERVAL")) or DEFAULT_HEALTH_INTERVAL
@@ -770,7 +1998,42 @@ function M.init()
     ngx.log(ngx.ERR, "failed to start health timer: ", timer_err)
   end
 
-  if hot_reload_enabled() then
+  local watchdog_started = false
+  if hot_reload_enabled() and hot_reload_watchdog_enabled() then
+    local ok_watch, watch_meta_or_err = watchdog.start({
+      root = init_cfg.functions_root,
+      poll_interval_s = tonumber(os.getenv("FN_HOT_RELOAD_WATCHDOG_POLL")) or 0.20,
+      debounce_ms = tonumber(os.getenv("FN_HOT_RELOAD_DEBOUNCE_MS")) or 150,
+      on_change = function()
+        local acquired = CACHE:add(CATALOG_SCAN_LOCK_KEY, ngx.now(), 2)
+        if not acquired then
+          return
+        end
+        local ok_scan, scan_err = pcall(M.discover_functions, true)
+        CACHE:delete(CATALOG_SCAN_LOCK_KEY)
+        if not ok_scan then
+          ngx.log(ngx.ERR, "catalog watchdog reload failed: ", tostring(scan_err))
+          return
+        end
+        CACHE:set(CATALOG_WATCHDOG_LAST_SCAN_KEY, ngx.now())
+      end,
+    })
+    if ok_watch then
+      watchdog_started = true
+      CACHE:set(CATALOG_WATCHDOG_ACTIVE_KEY, 1)
+      CACHE:set(CATALOG_WATCHDOG_BACKEND_KEY, tostring((watch_meta_or_err or {}).backend or "watchdog"))
+      CACHE:delete(CATALOG_WATCHDOG_ERROR_KEY)
+      ngx.log(ngx.INFO, "catalog watchdog enabled backend=", tostring((watch_meta_or_err or {}).backend or "watchdog"))
+    else
+      CACHE:set(CATALOG_WATCHDOG_ACTIVE_KEY, 0)
+      CACHE:set(CATALOG_WATCHDOG_ERROR_KEY, tostring(watch_meta_or_err))
+      ngx.log(ngx.WARN, "catalog watchdog unavailable: ", tostring(watch_meta_or_err), "; falling back to interval hot reload")
+    end
+  else
+    CACHE:set(CATALOG_WATCHDOG_ACTIVE_KEY, 0)
+  end
+
+  if hot_reload_enabled() and not watchdog_started then
     local hot_interval = tonumber(os.getenv("FN_HOT_RELOAD_INTERVAL")) or DEFAULT_HOT_RELOAD_INTERVAL
     if hot_interval < 1 then
       hot_interval = DEFAULT_HOT_RELOAD_INTERVAL
@@ -780,7 +2043,15 @@ function M.init()
       if premature then
         return
       end
-      M.discover_functions(true)
+      local acquired = CACHE:add(CATALOG_SCAN_LOCK_KEY, ngx.now(), math.max(2, hot_interval))
+      if not acquired then
+        return
+      end
+      local ok_scan, scan_err = pcall(M.discover_functions, true)
+      CACHE:delete(CATALOG_SCAN_LOCK_KEY)
+      if not ok_scan then
+        ngx.log(ngx.ERR, "catalog hot reload failed: ", tostring(scan_err))
+      end
     end)
 
     if not ok_hot then

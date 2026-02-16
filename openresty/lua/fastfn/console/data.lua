@@ -6,6 +6,7 @@ local M = {}
 
 local CACHE = ngx.shared.fn_cache
 local NAME_RE = "^[a-zA-Z0-9_-]+$"
+local FILE_TARGET_RE = "^[a-zA-Z0-9_/%[%]%.%-]+$"
 local VERSION_RE = "^[a-zA-Z0-9_.-]+$"
 local MAX_CODE_BYTES = 2 * 1024 * 1024
 local MAX_REQ_BYTES = 128 * 1024
@@ -75,20 +76,95 @@ local function allowed_handler_filenames(runtime)
   if runtime == "php" then
     return { "app.php", "handler.php" }
   end
+  if runtime == "lua" then
+    return { "app.lua", "handler.lua", "main.lua", "index.lua" }
+  end
   if runtime == "rust" then
     return { "app.rs", "handler.rs" }
   end
+  if runtime == "go" then
+    return { "app.go", "handler.go", "main.go" }
+  end
   return {}
+end
+
+local function detect_runtime_from_file_path(path)
+  local ext = tostring(path):match("%.([A-Za-z0-9]+)$")
+  if not ext then
+    return nil
+  end
+  ext = string.lower(ext)
+  if ext == "js" or ext == "ts" then
+    return "node"
+  end
+  if ext == "py" then
+    return "python"
+  end
+  if ext == "php" then
+    return "php"
+  end
+  if ext == "lua" then
+    return "lua"
+  end
+  if ext == "rs" then
+    return "rust"
+  end
+  if ext == "go" then
+    return "go"
+  end
+  return nil
+end
+
+local function is_file_target_name(name)
+  if type(name) ~= "string" then
+    return false
+  end
+  return name:find("/", 1, true) ~= nil or name:match("%.[A-Za-z0-9]+$") ~= nil
+end
+
+local function file_target_name_allowed(name)
+  if type(name) ~= "string" or name == "" then
+    return false
+  end
+  if not name:match(FILE_TARGET_RE) then
+    return false
+  end
+  if name:sub(1, 1) == "/" or name:find("\\", 1, true) then
+    return false
+  end
+  if name:find("//", 1, true) then
+    return false
+  end
+  for segment in name:gmatch("[^/]+") do
+    if segment == "." or segment == ".." then
+      return false
+    end
+  end
+  return true
+end
+
+local function function_name_allowed(name)
+  if type(name) ~= "string" then
+    return false
+  end
+  if name:match(NAME_RE) then
+    return true
+  end
+  return file_target_name_allowed(name)
 end
 
 local function path_is_under(root, path)
   if type(root) ~= "string" or type(path) ~= "string" then
     return false
   end
-  local prefix = root
-  if prefix:sub(-1) ~= "/" then
-    prefix = prefix .. "/"
+  local base = root:gsub("/+$", "")
+  if base == "" then
+    return false
   end
+  if path == base then
+    return true
+  end
+  local prefix = base .. "/"
   return path:sub(1, #prefix) == prefix
 end
 
@@ -197,6 +273,19 @@ function handler(array $event): array
 }
 ]]
   end
+  if runtime == "lua" then
+    return [[local cjson = require("cjson.safe")
+
+function handler(event)
+    local query = (type(event) == "table" and event.query) or {}
+    return {
+        status = 200,
+        headers = { ["Content-Type"] = "application/json" },
+        body = cjson.encode({ query = query }),
+    }
+end
+]]
+  end
   if runtime == "rust" then
     return [[use serde_json::{json, Value};
 
@@ -207,6 +296,30 @@ pub fn handler(event: Value) -> Value {
         "headers": {"Content-Type": "application/json"},
         "body": json!({"query": query}).to_string()
     })
+}
+]]
+  end
+  if runtime == "go" then
+    return [[package main
+
+import "encoding/json"
+
+func handler(event map[string]interface{}) map[string]interface{} {
+    queryAny := event["query"]
+    query, _ := queryAny.(map[string]interface{})
+
+    body, _ := json.Marshal(map[string]interface{}{
+        "runtime": "go",
+        "query":   query,
+    })
+
+    return map[string]interface{}{
+        "status": 200,
+        "headers": map[string]interface{}{
+            "Content-Type": "application/json",
+        },
+        "body": string(body),
+    }
 }
 ]]
   end
@@ -573,6 +686,52 @@ local function validate_invoke_routes_payload(invoke_cfg)
   return true
 end
 
+local function normalize_allow_hosts_payload(raw)
+  if raw == nil then
+    return nil
+  end
+  if raw == cjson.null then
+    return cjson.null
+  end
+
+  local items = {}
+  if type(raw) == "string" then
+    for token in raw:gmatch("[^,]+") do
+      items[#items + 1] = token
+    end
+  elseif type(raw) == "table" then
+    items = raw
+  else
+    return nil, "invoke.allow_hosts must be an array of host strings or null"
+  end
+
+  local out = {}
+  local seen = {}
+  for _, item in ipairs(items) do
+    if type(item) ~= "string" then
+      return nil, "invoke.allow_hosts must be an array of host strings or null"
+    end
+    local host = item:gsub("^%s+", ""):gsub("%s+$", ""):lower()
+    if host ~= "" then
+      if #host > 200 then
+        return nil, "invoke.allow_hosts host length must be <= 200"
+      end
+      if host:find("[/%s]") then
+        return nil, "invoke.allow_hosts host entries may not include spaces or '/'"
+      end
+      if not host:match("^[a-z0-9%*%-%._:%[%]]+$") then
+        return nil, "invoke.allow_hosts contains invalid host characters"
+      end
+      if not seen[host] then
+        seen[host] = true
+        out[#out + 1] = host
+      end
+    end
+  end
+
+  return out
+end
+
 local function parse_handler_hints(path)
   local hints = {}
   local f = io.open(path, "rb")
@@ -644,9 +803,21 @@ local function normalize_invoke_config(invoke_cfg)
   if type(invoke_cfg.default_method) == "string" then
     out.default_method = string.upper(invoke_cfg.default_method)
   end
+  if type(invoke_cfg.handler) == "string" then
+    local h = invoke_cfg.handler:gsub("^%s+", ""):gsub("%s+$", "")
+    if h ~= "" and h:match("^[A-Za-z_][A-Za-z0-9_]*$") then
+      out.handler = h
+    end
+  end
   local routes_cfg = normalize_routes_from_invoke(invoke_cfg)
   if routes_cfg ~= nil then
     out.routes = routes_cfg
+  end
+  if invoke_cfg.allow_hosts ~= nil then
+    local hosts = normalize_allow_hosts_payload(invoke_cfg.allow_hosts)
+    if type(hosts) == "table" then
+      out.allow_hosts = hosts
+    end
   end
   return out
 end
@@ -670,6 +841,50 @@ local function build_query_string(query_obj)
   return table.concat(parts, "&")
 end
 
+local function merge_unique_routes(primary, extra)
+  local out = {}
+  local seen = {}
+  local function push(v)
+    if type(v) == "string" and v ~= "" and not seen[v] then
+      seen[v] = true
+      out[#out + 1] = v
+    end
+  end
+  for _, v in ipairs(type(primary) == "table" and primary or {}) do
+    push(v)
+  end
+  for _, v in ipairs(type(extra) == "table" and extra or {}) do
+    push(v)
+  end
+  return out
+end
+
+local function mapped_public_routes_for_target(runtime, name, version)
+  local catalog = routes.discover_functions(false)
+  local mapped = (catalog and catalog.mapped_routes) or {}
+  local out = {}
+
+  for _, route in ipairs(sorted_keys(mapped)) do
+    local entries = mapped[route]
+    if type(entries) == "table" and entries.runtime ~= nil then
+      entries = { entries }
+    end
+    if type(entries) == "table" then
+      for _, entry in ipairs(entries) do
+        if type(entry) == "table"
+          and entry.runtime == runtime
+          and entry.fn_name == name
+          and (entry.version or nil) == (version or nil) then
+          out[#out + 1] = route
+          break
+        end
+      end
+    end
+  end
+
+  return out
+end
+
 local function merge_invoke(route, hint_invoke, config_invoke)
   local methods = config_invoke.methods or hint_invoke.methods or { "GET" }
   local query_example = config_invoke.query_example
@@ -691,7 +906,9 @@ local function merge_invoke(route, hint_invoke, config_invoke)
   local summary = config_invoke.summary or hint_invoke.summary
   local content_type = config_invoke.content_type or hint_invoke.content_type
   local default_method = config_invoke.default_method or methods[1] or "GET"
+  local handler_name = type(config_invoke.handler) == "string" and config_invoke.handler or nil
   local mapped_routes = type(config_invoke.routes) == "table" and config_invoke.routes or {}
+  local allow_hosts = type(config_invoke.allow_hosts) == "table" and config_invoke.allow_hosts or nil
   local primary_route = (#mapped_routes > 0 and mapped_routes[1]) or route
 
   local query_string = build_query_string(query_example)
@@ -718,12 +935,14 @@ local function merge_invoke(route, hint_invoke, config_invoke)
     summary = summary,
     methods = methods,
     default_method = default_method,
+    handler = handler_name,
     query_example = query_example,
     body_example = body_example,
     content_type = content_type,
     route = primary_route,
     canonical_route = route,
     mapped_routes = mapped_routes,
+    allow_hosts = allow_hosts,
     public_routes = public_routes,
     full_route_example = full_route,
     curl_get_example = "curl -sS 'http://127.0.0.1:8080" .. full_route .. "'",
@@ -744,6 +963,60 @@ local function ensure_function_exists(runtime, name, version)
     return nil, err
   end
   return policy
+end
+
+local function resolve_function_paths(cfg, runtime, name, version)
+  local is_file_target = is_file_target_name(name)
+  if is_file_target then
+    if version ~= nil and version ~= "" then
+      return nil, "version not supported for file targets"
+    end
+    if not file_target_name_allowed(name) then
+      return nil, "invalid function"
+    end
+
+    local app_path = cfg.functions_root .. "/" .. name
+    local fn_dir = app_path:match("^(.*)/[^/]+$") or cfg.functions_root
+    if not path_is_under(cfg.functions_root, fn_dir) or not path_is_under(cfg.functions_root, app_path) then
+      return nil, "invalid function path"
+    end
+    if is_symlink(app_path) then
+      return nil, "invalid function code path"
+    end
+    if not file_exists(app_path) then
+      return nil, "function code not found"
+    end
+    local detected = detect_runtime_from_file_path(app_path)
+    if detected and detected ~= runtime then
+      return nil, "runtime mismatch for function file"
+    end
+
+    return {
+      fn_dir = fn_dir,
+      app_path = app_path,
+      conf_path = fn_dir .. "/fn.config.json",
+      env_path = fn_dir .. "/fn.env.json",
+    }
+  end
+
+  local fn_dir = build_fn_dir(cfg.functions_root, runtime, name, version)
+  if not path_is_under(cfg.functions_root, fn_dir) then
+    return nil, "invalid function path"
+  end
+  local app_path = detect_app_file(fn_dir, runtime)
+  if not app_path then
+    return nil, "function code not found"
+  end
+  if not path_is_under(fn_dir, app_path) or not handler_name_allowed(app_path, runtime) then
+    return nil, "invalid function code path"
+  end
+
+  return {
+    fn_dir = fn_dir,
+    app_path = app_path,
+    conf_path = fn_dir .. "/fn.config.json",
+    env_path = fn_dir .. "/fn.env.json",
+  }
 end
 
 local function normalize_config_payload(payload)
@@ -826,6 +1099,39 @@ local function normalize_config_payload(payload)
         out.invoke = {}
       end
       out.invoke.routes = invoke_routes
+    end
+
+    if payload.invoke.handler ~= nil then
+      if out.invoke == nil then
+        out.invoke = {}
+      end
+
+      local raw_handler = payload.invoke.handler
+      if raw_handler == cjson.null then
+        out.invoke.handler = cjson.null
+      elseif type(raw_handler) ~= "string" then
+        return nil, "invoke.handler must be a string or null"
+      else
+        local h = raw_handler:gsub("^%s+", ""):gsub("%s+$", "")
+        if h == "" then
+          out.invoke.handler = cjson.null
+        elseif not h:match("^[A-Za-z_][A-Za-z0-9_]*$") then
+          return nil, "invoke.handler must match ^[A-Za-z_][A-Za-z0-9_]*$"
+        else
+          out.invoke.handler = h
+        end
+      end
+    end
+
+    if payload.invoke.allow_hosts ~= nil then
+      if out.invoke == nil then
+        out.invoke = {}
+      end
+      local hosts, hosts_err = normalize_allow_hosts_payload(payload.invoke.allow_hosts)
+      if hosts_err then
+        return nil, hosts_err
+      end
+      out.invoke.allow_hosts = hosts
     end
   end
 
@@ -1063,6 +1369,33 @@ local function sched_state_key(runtime, name, version, suffix)
   return "sched:" .. key .. ":" .. suffix
 end
 
+local function function_state(runtime, name, version, keep_warm_cfg)
+  local key = runtime .. "/" .. name .. "@" .. (version or "default")
+  local warm_at = CACHE:get("warm:" .. key)
+  local state = "cold"
+  local idle_ttl = nil
+  if type(keep_warm_cfg) == "table" then
+    idle_ttl = tonumber(keep_warm_cfg.idle_ttl_seconds)
+  end
+  if warm_at ~= nil then
+    if idle_ttl and idle_ttl > 0 and (ngx.now() - tonumber(warm_at)) > idle_ttl then
+      state = "stale"
+    else
+      state = "warm"
+    end
+  end
+  return {
+    key = key,
+    state = state,
+    warm_at = warm_at,
+    keep_warm = keep_warm_cfg,
+    keep_warm_next = CACHE:get(sched_state_key(runtime, name, version, "keep_warm_next")),
+    keep_warm_last = CACHE:get(sched_state_key(runtime, name, version, "keep_warm_last")),
+    keep_warm_last_status = CACHE:get(sched_state_key(runtime, name, version, "keep_warm_last_status")),
+    keep_warm_last_error = CACHE:get(sched_state_key(runtime, name, version, "keep_warm_last_error")),
+  }
+end
+
 function M.catalog()
   local cfg = routes.get_config()
   local catalog = routes.discover_functions(false)
@@ -1088,15 +1421,99 @@ function M.catalog()
       functions = {},
     }
 
-    for _, name in ipairs(sorted_keys(rt_src.functions or {})) do
-      local fn_entry = rt_src.functions[name]
-      rt_out.functions[#rt_out.functions + 1] = {
+    local fn_index = {}
+    local function ensure_fn_entry(name)
+      local existing = fn_index[name]
+      if existing then
+        return existing
+      end
+      local created = {
         name = name,
-        has_default = fn_entry.has_default,
-        versions = fn_entry.versions or {},
-        policy = fn_entry.policy or {},
-        versions_policy = fn_entry.versions_policy or {},
+        has_default = false,
+        versions = {},
+        policy = { methods = {}, routes = {} },
+        versions_policy = {},
+        default_state = nil,
+        versions_state = {},
+        _methods_seen = {},
+        _routes_seen = {},
       }
+      fn_index[name] = created
+      return created
+    end
+
+    for _, name in ipairs(sorted_keys(rt_src.functions or {})) do
+      local fn_entry = rt_src.functions[name] or {}
+      local out_entry = ensure_fn_entry(name)
+      out_entry.has_default = fn_entry.has_default == true
+      out_entry.versions = fn_entry.versions or {}
+      out_entry.versions_policy = fn_entry.versions_policy or {}
+      out_entry.policy = fn_entry.policy or {}
+      if type(out_entry.policy) ~= "table" then
+        out_entry.policy = {}
+      end
+      if type(out_entry.policy.methods) ~= "table" then
+        out_entry.policy.methods = {}
+      end
+      if type(out_entry.policy.routes) ~= "table" then
+        out_entry.policy.routes = {}
+      end
+      for _, m in ipairs(out_entry.policy.methods) do
+        out_entry._methods_seen[m] = true
+      end
+      for _, r in ipairs(out_entry.policy.routes) do
+        out_entry._routes_seen[r] = true
+      end
+    end
+
+    for _, route in ipairs(sorted_keys(catalog.mapped_routes or {})) do
+      local entries = (catalog.mapped_routes or {})[route]
+      if type(entries) == "table" and entries.runtime ~= nil then
+        entries = { entries }
+      end
+      if type(entries) == "table" then
+        for _, entry in ipairs(entries) do
+          if type(entry) == "table"
+            and entry.runtime == runtime
+            and type(entry.fn_name) == "string"
+            and entry.fn_name ~= "" then
+            local out_entry = ensure_fn_entry(entry.fn_name)
+            out_entry.has_default = true
+            out_entry.policy = type(out_entry.policy) == "table" and out_entry.policy or {}
+            out_entry.policy.methods = type(out_entry.policy.methods) == "table" and out_entry.policy.methods or {}
+            out_entry.policy.routes = type(out_entry.policy.routes) == "table" and out_entry.policy.routes or {}
+            for _, m in ipairs(type(entry.methods) == "table" and entry.methods or {}) do
+              if not out_entry._methods_seen[m] then
+                out_entry._methods_seen[m] = true
+                out_entry.policy.methods[#out_entry.policy.methods + 1] = m
+              end
+            end
+            if not out_entry._routes_seen[route] then
+              out_entry._routes_seen[route] = true
+              out_entry.policy.routes[#out_entry.policy.routes + 1] = route
+            end
+          end
+        end
+      end
+    end
+
+    for _, name in ipairs(sorted_keys(fn_index)) do
+      local out_entry = fn_index[name]
+      if out_entry.has_default then
+        local policy = routes.resolve_function_policy(runtime, name, nil)
+        local keep_warm_cfg = type(policy) == "table" and type(policy.keep_warm) == "table" and policy.keep_warm or nil
+        out_entry.default_state = function_state(runtime, name, nil, keep_warm_cfg)
+      end
+      local versions_state = {}
+      for _, ver in ipairs(out_entry.versions or {}) do
+        local policy = routes.resolve_function_policy(runtime, name, ver)
+        local keep_warm_cfg = type(policy) == "table" and type(policy.keep_warm) == "table" and policy.keep_warm or nil
+        versions_state[ver] = function_state(runtime, name, ver, keep_warm_cfg)
+      end
+      out_entry.versions_state = versions_state
+      out_entry._methods_seen = nil
+      out_entry._routes_seen = nil
+      rt_out.functions[#rt_out.functions + 1] = out_entry
     end
 
     out.runtimes[runtime] = rt_out
@@ -1109,7 +1526,7 @@ function M.function_detail(runtime, name, version, include_code)
   if type(runtime) ~= "string" or not runtime:match(NAME_RE) then
     return nil, "invalid runtime"
   end
-  if type(name) ~= "string" or not name:match(NAME_RE) then
+  if not function_name_allowed(name) then
     return nil, "invalid function"
   end
   if version ~= nil and version ~= "" and (type(version) ~= "string" or not version:match(VERSION_RE)) then
@@ -1122,24 +1539,18 @@ function M.function_detail(runtime, name, version, include_code)
   end
 
   local cfg = routes.get_config()
-  local dir = build_fn_dir(cfg.functions_root, runtime, name, version)
-  if not path_is_under(cfg.functions_root, dir) then
-    return nil, "invalid function path"
+  local target, target_err = resolve_function_paths(cfg, runtime, name, version)
+  if not target then
+    return nil, target_err
   end
-  local app_path = detect_app_file(dir, runtime)
-  if not app_path then
-    return nil, "function code not found"
-  end
-  if not path_is_under(dir, app_path) or not handler_name_allowed(app_path, runtime) then
-    return nil, "invalid function code path"
-  end
-
-  local conf_path = dir .. "/fn.config.json"
+  local dir = target.fn_dir
+  local app_path = target.app_path
+  local conf_path = target.conf_path
   if not path_is_under(dir, conf_path) or not is_allowed_config_path(conf_path) then
     return nil, "invalid config path"
   end
   local fn_config = read_json_file(conf_path)
-  local env_path = dir .. "/fn.env.json"
+  local env_path = target.env_path
   local env_exists = file_exists(env_path)
   local fn_env = normalize_env_file(read_json_file(env_path))
   local env_keys = sorted_keys(fn_env or {})
@@ -1198,15 +1609,26 @@ function M.function_detail(runtime, name, version, include_code)
   local cargo_raw = read_file(cargo_toml_path, MAX_REQ_BYTES)
   local cargo_dependencies = parse_cargo_dependency_names(cargo_raw)
 
-  local route = "/fn/" .. name
-  if version and version ~= "" then
-    route = route .. "@" .. version
+  local mapped_public_routes = mapped_public_routes_for_target(runtime, name, version)
+  local route = mapped_public_routes[1]
+  if not route then
+    route = "/" .. name
+    if version and version ~= "" then
+      route = route .. "@" .. version
+    end
   end
   local hint_invoke = parse_handler_hints(app_path)
   local config_invoke = normalize_invoke_config(invoke_cfg)
   local invoke = merge_invoke(route, hint_invoke, config_invoke)
+  local effective_mapped_routes = merge_unique_routes(invoke.mapped_routes or {}, mapped_public_routes)
+  local effective_public_routes = merge_unique_routes(invoke.public_routes or {}, mapped_public_routes)
+  if #effective_public_routes == 0 then
+    effective_public_routes = { route }
+  end
+  invoke.mapped_routes = effective_mapped_routes
+  invoke.public_routes = effective_public_routes
   local public_urls = {}
-  for _, r in ipairs(invoke.public_routes or { invoke.route }) do
+  for _, r in ipairs(effective_public_routes) do
     if type(r) == "string" and r ~= "" then
       public_urls[#public_urls + 1] = "http://127.0.0.1:8080" .. r
     end
@@ -1248,8 +1670,8 @@ function M.function_detail(runtime, name, version, include_code)
       group = (type(group_cfg) == "string" and group_cfg) or nil,
       endpoints = {
         public_route = route,
-        mapped_routes = invoke.mapped_routes or {},
-        public_routes = invoke.public_routes or { route },
+        mapped_routes = effective_mapped_routes,
+        public_routes = effective_public_routes,
         public_urls = public_urls,
         preferred_public_route = invoke.route or route,
         preferred_public_url = (#public_urls > 0 and public_urls[1]) or ("http://127.0.0.1:8080" .. route),
@@ -1290,6 +1712,10 @@ function M.function_detail(runtime, name, version, include_code)
         dev_dependencies = composer_require_dev,
         auto_install_enabled = env_enabled("FN_AUTO_PHP_DEPS", true),
       },
+      lua = {
+        sandbox = "in-process",
+        requires = { "cjson.safe" },
+      },
       rust = {
         cargo_toml_path = cargo_toml_path,
         cargo_toml_exists = cargo_raw ~= nil,
@@ -1314,7 +1740,7 @@ function M.set_function_config(runtime, name, version, payload)
   if type(runtime) ~= "string" or not runtime:match(NAME_RE) then
     return nil, "invalid runtime"
   end
-  if type(name) ~= "string" or not name:match(NAME_RE) then
+  if not function_name_allowed(name) then
     return nil, "invalid function"
   end
   if version ~= nil and version ~= "" and (type(version) ~= "string" or not version:match(VERSION_RE)) then
@@ -1332,8 +1758,12 @@ function M.set_function_config(runtime, name, version, payload)
   end
 
   local cfg = routes.get_config()
-  local fn_dir = build_fn_dir(cfg.functions_root, runtime, name, version)
-  local conf_path = fn_dir .. "/fn.config.json"
+  local target, target_err = resolve_function_paths(cfg, runtime, name, version)
+  if not target then
+    return nil, target_err
+  end
+  local fn_dir = target.fn_dir
+  local conf_path = target.conf_path
   if not path_is_under(fn_dir, conf_path) or not is_allowed_config_path(conf_path) then
     return nil, "invalid config path"
   end
@@ -1384,7 +1814,7 @@ function M.set_function_env(runtime, name, version, payload)
   if type(runtime) ~= "string" or not runtime:match(NAME_RE) then
     return nil, "invalid runtime"
   end
-  if type(name) ~= "string" or not name:match(NAME_RE) then
+  if not function_name_allowed(name) then
     return nil, "invalid function"
   end
   if version ~= nil and version ~= "" and (type(version) ~= "string" or not version:match(VERSION_RE)) then
@@ -1402,8 +1832,12 @@ function M.set_function_env(runtime, name, version, payload)
   end
 
   local cfg = routes.get_config()
-  local fn_dir = build_fn_dir(cfg.functions_root, runtime, name, version)
-  local env_path = fn_dir .. "/fn.env.json"
+  local target, target_err = resolve_function_paths(cfg, runtime, name, version)
+  if not target then
+    return nil, target_err
+  end
+  local fn_dir = target.fn_dir
+  local env_path = target.env_path
   if not path_is_under(fn_dir, env_path) or not is_allowed_config_path(env_path) then
     return nil, "invalid env path"
   end
@@ -1472,7 +1906,7 @@ function M.set_function_code(runtime, name, version, payload)
   if type(runtime) ~= "string" or not runtime:match(NAME_RE) then
     return nil, "invalid runtime"
   end
-  if type(name) ~= "string" or not name:match(NAME_RE) then
+  if not function_name_allowed(name) then
     return nil, "invalid function"
   end
   if version ~= nil and version ~= "" and (type(version) ~= "string" or not version:match(VERSION_RE)) then
@@ -1494,17 +1928,11 @@ function M.set_function_code(runtime, name, version, payload)
   end
 
   local cfg = routes.get_config()
-  local fn_dir = build_fn_dir(cfg.functions_root, runtime, name, version)
-  if not path_is_under(cfg.functions_root, fn_dir) then
-    return nil, "invalid function path"
+  local target, target_err = resolve_function_paths(cfg, runtime, name, version)
+  if not target then
+    return nil, target_err
   end
-  local app_path = detect_app_file(fn_dir, runtime)
-  if not app_path then
-    return nil, "function code not found"
-  end
-  if not path_is_under(fn_dir, app_path) or not handler_name_allowed(app_path, runtime) then
-    return nil, "invalid function code path"
-  end
+  local app_path = target.app_path
 
   local ok, w_err = write_file(app_path, payload.code)
   if not ok then
@@ -1685,6 +2113,8 @@ function M.delete_function(runtime, name, version)
     rm_path(fn_dir .. "/npm-shrinkwrap.json")
     rm_path(fn_dir .. "/composer.json")
     rm_path(fn_dir .. "/composer.lock")
+    rm_path(fn_dir .. "/go.mod")
+    rm_path(fn_dir .. "/go.sum")
     rm_path(fn_dir .. "/Cargo.toml")
     rm_path(fn_dir .. "/Cargo.lock")
     rm_path(fn_dir .. "/.deps")
@@ -1700,6 +2130,69 @@ function M.delete_function(runtime, name, version)
 
   routes.discover_functions(true)
   return { ok = true, runtime = runtime, name = name, version = version or nil }
+end
+
+function M.list_secrets()
+    local s = ngx.shared.fn_cache:get("sys:secrets_list")
+    if s then return cjson.decode(s) end
+    return {}
+end
+
+function M.set_secret(key, value)
+    local list = M.list_secrets()
+    local found = false
+    -- Check if exists
+    for i, item in ipairs(list) do
+        if item.key == key then
+            item.updated = os.time()
+            found = true
+            break
+        end
+    end
+    if not found then
+        table.insert(list, { key = key, created = os.time() })
+    end
+    
+    -- In a real system, store value in encrypted vault.
+    -- We're storing it in shared dict for this MVP.
+    local enc_list = cjson.encode(list)
+    ngx.shared.fn_cache:set("sys:secrets_list", enc_list)
+    ngx.shared.fn_cache:set("sys:secret:val:"..key, value)
+    
+    return true
+end
+
+function M.delete_secret(key)
+    local list = M.list_secrets()
+    local new_list = {}
+    local changed = false
+    for i, item in ipairs(list) do
+        if item.key ~= key then
+            table.insert(new_list, item)
+        else
+            changed = true
+        end
+    end
+    
+    if changed then
+        local enc_list = cjson.encode(new_list)
+        ngx.shared.fn_cache:set("sys:secrets_list", enc_list)
+        ngx.shared.fn_cache:delete("sys:secret:val:"..key)
+    end
+    return true
+end
+
+function M.get_dashboard_metrics()
+    -- Mock metrics aggregation
+    return {
+        requests_24h = 1000 + math.random(0, 100),
+        errors_24h = math.random(0, 5),
+        avg_latency_ms = 45,
+        invocations_chart = {
+            labels = {"00:00", "04:00", "08:00", "12:00", "16:00", "20:00"},
+            data = {120, 132, 101, 134, 90, 230}
+        }
+    }
 end
 
 return M

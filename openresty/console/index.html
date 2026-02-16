@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FastFn Console</title>
+    <link rel="stylesheet" href="/console/assets/style.css?v=3.2">
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
+    <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div id="app">
+        <nav class="top-nav">
+            <div class="nav-left">
+                <div class="logo">
+                     <span class="logo-icon"><ion-icon name="flash"></ion-icon></span>
+                     <span class="logo-text">FastFN</span>
+                </div>
+                <div class="nav-links">
+                    <a href="#" class="active" onclick="location.reload()">Console Home</a>
+                    <a href="/_fn/docs" target="_blank">Docs</a>
+                </div>
+            </div>
+            <div class="nav-center">
+                <div class="search-bar">
+                    <ion-icon name="search"></ion-icon>
+                    <input type="text" id="globalSearch" placeholder="Search functions, resources, docs (Alt+S)">
+                </div>
+            </div>
+            <div class="nav-right">
+                <span class="region" id="consoleRegion">localhost:8080</span>
+                <div class="user-menu">
+                    <ion-icon name="person-circle-outline"></ion-icon>
+                    <span id="consoleUser">local</span>
+                </div>
+            </div>
+        </nav>
+
+        <div class="main-layout">
+            <aside class="sidebar">
+                <div class="sidebar-section">
+                    <h3>Compute</h3>
+                    <ul>
+                        <li class="active" id="navFunctions"><a href="#" onclick="app.showFunctionList()"><ion-icon name="cube-outline"></ion-icon> Functions</a></li>
+                        <li id="navGateway"><a href="#" onclick="app.showGateway()"><ion-icon name="git-branch-outline"></ion-icon> Gateway</a></li>
+                        <li id="navWizard"><a href="#" onclick="app.showWizard()"><ion-icon name="build-outline"></ion-icon> Wizard</a></li>
+                        <li id="navDashboard"><a href="#" onclick="app.switchTab('monitor')"><ion-icon name="speedometer-outline"></ion-icon> Dashboard</a></li>
+                    </ul>
+                </div>
+                <div class="sidebar-section">
+                    <h3>Access Control</h3>
+                    <ul>
+                        <li><a href="#" onclick="app.switchTab('configuration')"><ion-icon name="key-outline"></ion-icon> Secrets</a></li>
+                    </ul>
+                </div>
+            </aside>
+
+            <main class="content-area">
+                <div class="breadcrumbs">
+                    <span onclick="app.showFunctionList()" style="cursor:pointer">Functions</span>
+                    <span class="separator">/</span>
+                    <span id="breadcrumbFnName" class="current">Select a function</span>
+                </div>
+
+                <div id="functionListView" class="view-panel active">
+                    <span id="gatewayShellMarker" style="display:none">Gateway Routes</span>
+                    <div class="page-header">
+                        <h1>Functions</h1>
+                        <div class="actions">
+                            <button class="btn btn-secondary" onclick="app.loadFunctions()"><ion-icon name="refresh"></ion-icon></button>
+                            <button class="btn btn-primary" onclick="app.showWizard()">Create function</button>
+                        </div>
+                    </div>
+                    <div class="filter-bar">
+                        <input type="text" id="fnListFilter" placeholder="Filter functions by name" onkeyup="app.filterFunctions()">
+                    </div>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Function name</th>
+                                    <th>Runtime</th>
+                                    <th>Method</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="fnTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="gatewayView" class="view-panel" style="display:none;">
+                    <div class="page-header">
+                        <h1>Gateway Routes</h1>
+                        <div class="actions">
+                            <button class="btn btn-secondary" onclick="app.loadFunctions()"><ion-icon name="refresh"></ion-icon></button>
+                        </div>
+                    </div>
+                    <div class="filter-bar">
+                        <input type="text" id="routeSearch" placeholder="Filter routes by path, target, method">
+                    </div>
+                    <div class="code-block" id="gatewaySummary" style="margin-bottom:12px;">Mapped routes: 0 | visible: 0</div>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Route</th>
+                                    <th>Target</th>
+                                    <th>Methods</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="routeTableBody"></tbody>
+                        </table>
+                    </div>
+                    <div class="config-card" style="max-width:none; margin-top:16px;">
+                        <h3>Route conflicts</h3>
+                        <div id="routeConflicts" class="code-block">No conflicts.</div>
+                    </div>
+                </div>
+
+                <div id="wizardView" class="view-panel" style="display: none;">
+                    <div class="page-header">
+                        <h1>Function Wizard</h1>
+                        <div class="actions">
+                            <button class="btn btn-secondary" onclick="app.showFunctionList()">Back to Functions</button>
+                        </div>
+                    </div>
+                    <div class="config-layout">
+                        <div class="config-card wizard-card wizard-card-template">
+                            <h3>Create from templates</h3>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Runtime</label>
+                                    <select id="wizRuntime">
+                                        <option value="node">node</option>
+                                        <option value="python">python</option>
+                                        <option value="php">php</option>
+                                        <option value="lua">lua</option>
+                                        <option value="rust">rust</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Name</label>
+                                    <input id="wizName" type="text" placeholder="my_fn" />
+                                </div>
+                                <div class="form-group">
+                                    <label>Version (optional)</label>
+                                    <input id="wizVersion" type="text" placeholder="v2" />
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Template</label>
+                                    <select id="wizTemplate">
+                                        <option value="hello_json">hello_json</option>
+                                        <option value="echo">echo</option>
+                                        <option value="html">html</option>
+                                        <option value="csv">csv</option>
+                                        <option value="png">png</option>
+                                        <option value="edge_proxy">edge_proxy</option>
+                                        <option value="edge_filter">edge_filter</option>
+                                        <option value="edge_auth_gateway">edge_auth_gateway</option>
+                                        <option value="edge_header_inject">edge_header_inject</option>
+                                        <option value="github_webhook_guard">github_webhook_guard</option>
+                                        <option value="hello_ts">hello_ts</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="actions">
+                                <button class="btn btn-primary" id="wizCreateBtn">Create</button>
+                                <button class="btn btn-secondary" id="wizCreateOpenBtn">Create and open</button>
+                            </div>
+                        </div>
+                        <div class="config-card wizard-card wizard-card-ai">
+                            <h3>AI Code Generator</h3>
+                            <div class="form-group">
+                                <label>Prompt</label>
+                                <textarea id="wizPrompt" class="code-input" rows="6" placeholder="Build me a GET endpoint that returns user profile JSON"></textarea>
+                            </div>
+                            <div class="actions">
+                                <button class="btn btn-primary" id="wizAiBtn">Generate with AI</button>
+                                <button class="btn btn-secondary" id="wizAiCreateBtn">Create from AI code</button>
+                            </div>
+                            <div class="form-group" style="margin-top: 12px;">
+                                <label>AI Output</label>
+                                <pre id="wizAiOut" class="code-block">(empty)</pre>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="config-card wizard-card wizard-card-status" style="max-width:none; margin-top:16px;">
+                        <h3>Wizard Status</h3>
+                        <pre id="wizStatus" class="code-block">(idle)</pre>
+                    </div>
+                </div>
+
+                <div id="functionDetailView" class="view-panel" style="display: none;">
+                    <div class="page-header">
+                        <h1 id="detailFnName">my-function</h1>
+                        <div class="header-meta">
+                            <span class="badge" id="detailRuntime">python 3.12</span>
+                            <span class="badge success" id="detailStatus">Active</span>
+                        </div>
+                        <div class="actions">
+                            <button class="btn btn-secondary" onclick="app.reloadCurrentFunction()">Refresh</button>
+                            <button class="btn btn-secondary btn-xs" data-tab-btn="explorer" onclick="app.showCompatExplorer()">Explorer</button>
+                            <button class="btn btn-primary" id="topTestBtn" onclick="app.switchTab('test')">Test</button>
+                        </div>
+                    </div>
+
+                    <div class="tabs-nav">
+                        <button class="tab-btn active" data-tab="code" onclick="app.switchTab('code')">Code</button>
+                        <button class="tab-btn" data-tab="test" onclick="app.switchTab('test')">Test</button>
+                        <button class="tab-btn" data-tab="monitor" onclick="app.switchTab('monitor')">Monitor</button>
+                        <button class="tab-btn" data-tab="api" onclick="app.switchTab('api')">API Guide</button>
+                        <button class="tab-btn" data-tab="configuration" onclick="app.switchTab('configuration')">Configuration</button>
+                    </div>
+
+                    <div id="compatExplorerPanel" data-tab-panel="explorer" class="config-card compat-explorer-panel">
+                        <h3>Explorer (Gateway Invoke)</h3>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Route</label>
+                                <input id="invokeRoute" type="text" value="" />
+                                <div id="invokeRouteHint" style="font-size:12px; color:#666; margin-top:4px;"></div>
+                            </div>
+                            <div class="form-group">
+                                <label>Path Params (JSON)</label>
+                                <textarea id="pathParams" class="code-input" rows="4">{}</textarea>
+                            </div>
+                            <div class="form-group">
+                                <label>Query (JSON or ?a=1&b=2)</label>
+                                <input id="query" type="text" value="" />
+                            </div>
+                        </div>
+                        <div class="code-block" id="invokeUrlPreview" style="margin-bottom:12px;"></div>
+                        <div class="actions" style="margin-bottom:12px;">
+                            <button id="invokeBtn" class="btn btn-primary" type="button" onclick="app.invokeFromCompat()">Invoke</button>
+                            <input id="savedEventName" type="text" placeholder="saved event name" style="max-width:220px;" />
+                            <select id="savedEventSelect" style="max-width:220px;"></select>
+                            <button id="saveEventBtn" class="btn btn-secondary" type="button">Save Event</button>
+                            <button id="loadEventBtn" class="btn btn-secondary" type="button">Load Event</button>
+                        </div>
+                        <pre id="invokeMeta" class="code-block" style="margin-bottom:12px;"></pre>
+                        <pre id="invokeOut" class="code-block"></pre>
+                        <details class="invoke-advanced" style="margin-top:12px;">
+                            <summary>Event JSON (Lambda style)</summary>
+                            <div style="margin-top:8px;">
+                                <textarea id="invokeEvent" class="code-input" rows="10">{}</textarea>
+                                <div class="actions" style="margin-top:8px;">
+                                    <button id="runEventBtn" class="btn btn-secondary" type="button">Apply + Run</button>
+                                </div>
+                            </div>
+                        </details>
+                    </div>
+
+                    <div id="tab-code" class="tab-content active">
+                        <div class="code-layout">
+                            <div class="file-tree">
+                                <div class="tree-header">Function Files</div>
+                                <div id="fileList" class="tree-content"></div>
+                            </div>
+                            <div class="editor-area">
+                                <div class="editor-toolbar">
+                                    <span id="currentFileLabel">handler.py</span>
+                                    <button class="btn btn-xs btn-primary" id="saveCodeBtn" onclick="app.saveCode()">Deploy</button>
+                                </div>
+                                <textarea id="codeEditor" spellcheck="false"></textarea>
+                            </div>
+                            <div class="ai-panel">
+                                <div class="ai-header">
+                                    <span><ion-icon name="sparkles"></ion-icon> FastFn AI</span>
+                                    <div class="ai-mode-switch" role="group" aria-label="AI mode">
+                                        <button id="aiModeAuto" type="button" class="btn btn-xs btn-secondary active">Auto</button>
+                                        <button id="aiModeChat" type="button" class="btn btn-xs btn-secondary">Chat</button>
+                                        <button id="aiModeEdit" type="button" class="btn btn-xs btn-secondary">Edit</button>
+                                    </div>
+                                </div>
+                                <div class="ai-body">
+                                    <div class="ai-messages" id="aiOutput">
+                                        <div class="ai-msg system">How can I help you write this function?</div>
+                                    </div>
+                                    <div class="ai-input-area">
+                                        <textarea id="aiPrompt" placeholder="Ask AI to write code..."></textarea>
+                                        <button id="aiGenerateBtn" onclick="app.generateCode()"><ion-icon name="send"></ion-icon></button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="tab-test" class="tab-content">
+                        <div class="test-layout">
+                            <div class="test-config card">
+                                <h3>Test Event</h3>
+                                <div class="form-group">
+                                    <label>Event Name</label>
+                                    <select id="testEventSelector" onchange="app.loadTemplate()">
+                                        <option value="empty">Template: Empty JSON</option>
+                                        <option value="hello">Template: Hello World</option>
+                                        <option value="path-query">Template: Route + Query</option>
+                                        <option value="post-json">Template: POST JSON Body</option>
+                                        <option value="context-debug">Template: Context + Body</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Event JSON</label>
+                                    <textarea id="testEventJson" class="code-input" rows="10">{}</textarea>
+                                </div>
+                                <button class="btn btn-primary" onclick="app.invokeFunction()">Test</button>
+                            </div>
+                            <div class="test-result card" id="testResultPanel" style="display:none;">
+                                <div class="result-header">
+                                    <h3 id="testResultTitle">Execution Result: Succeeded</h3>
+                                </div>
+                                <div class="result-section">
+                                    <label>Response</label>
+                                    <pre id="testResponseOutput" class="code-block"></pre>
+                                </div>
+                                <div class="result-section">
+                                    <label>Details</label>
+                                    <div id="testDetailsOutput" style="font-size:12px; color:#666;"></div>
+                                </div>
+                            </div>
+                            <div class="test-exec card">
+                                <div class="result-header">
+                                    <h3>Recent Executions</h3>
+                                </div>
+                                <div class="execution-toolbar">
+                                    <label style="font-size:12px; color:#666;">Filter
+                                        <select id="executionFilter" style="width:140px; margin-left:6px;">
+                                            <option value="all">All</option>
+                                            <option value="ok">Success only</option>
+                                            <option value="fail">Failed only</option>
+                                            <option value="explorer">Source: Explorer</option>
+                                            <option value="test">Source: Test</option>
+                                        </select>
+                                    </label>
+                                    <input id="executionSearch" type="text" placeholder="Search route/body/status" style="max-width:210px;">
+                                    <button id="clearExecutionBtn" class="btn btn-secondary" type="button">Clear</button>
+                                </div>
+                                <div id="executionSummary" style="font-size:12px; color:#666; margin-bottom:10px;">No executions yet.</div>
+                                <div id="executionList" class="execution-list"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="tab-monitor" class="tab-content">
+                        <div class="monitor-toolbar">
+                            <div class="actions">
+                                <label style="font-size:12px; color:#666;">Lines
+                                    <input id="monitorLogLines" type="number" min="20" max="1000" value="160" style="width:90px; margin-left:6px;">
+                                </label>
+                                <label style="font-size:12px; color:#666;">Mode
+                                    <select id="monitorLogMode" style="width:170px; margin-left:6px;">
+                                        <option value="function">Current function</option>
+                                        <option value="all">All lines</option>
+                                        <option value="errors">Errors only</option>
+                                        <option value="access">Access only</option>
+                                    </select>
+                                </label>
+                                <label style="font-size:12px; color:#666;">Refresh
+                                    <select id="monitorRefreshInterval" style="width:130px; margin-left:6px;">
+                                        <option value="0">Manual</option>
+                                        <option value="2">Every 2s</option>
+                                        <option value="5" selected>Every 5s</option>
+                                        <option value="10">Every 10s</option>
+                                    </select>
+                                </label>
+                                <input id="monitorSearch" type="text" placeholder="Filter log lines" style="max-width:220px;">
+                                <button class="btn btn-secondary" type="button" onclick="app.refreshMonitor()">Refresh logs</button>
+                                <span id="monitorStatus" style="font-size:12px; color:#666;"></span>
+                            </div>
+                        </div>
+                        <div class="monitor-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+                            <div class="chart-card">
+                                <h3>Invocations (24h)</h3>
+                                <canvas id="monitorRequestsChart" style="max-height:220px;"></canvas>
+                                <div id="monitorRequests" style="font-size:12px; margin-top:6px; color:#666;">-</div>
+                            </div>
+                            <div class="chart-card">
+                                <h3>Errors & Latency</h3>
+                                <canvas id="monitorErrorsChart" style="max-height:220px;"></canvas>
+                                <div id="monitorErrors" style="font-size:12px; margin-top:6px; color:#666;">-</div>
+                            </div>
+                        </div>
+                        <div class="monitor-grid">
+                            <div class="chart-card" style="margin-top:12px;">
+                                <h3>Worker Status</h3>
+                                <div id="workerPoolStatus" style="font-size:12px; margin-top:6px; font-family:monospace; white-space:pre-wrap;">(loading pool state...)</div>
+                            </div>
+                        </div>
+                        <div class="config-card" style="max-width:none; margin-top:16px;">
+                            <h3>Recent Runtime Logs</h3>
+                            <pre id="monitorLogs" class="code-block">(loading...)</pre>
+                        </div>
+                    </div>
+
+                    <div id="tab-api" class="tab-content">
+                        <div class="api-guide-grid">
+                            <div class="config-card">
+                                <h3>Function API</h3>
+                                <pre id="apiSummary" class="code-block" style="margin-bottom:12px;">Select a function to inspect routes and invoke contract.</pre>
+                                <h3 style="margin-top:0;">Function Routes</h3>
+                                <div id="apiRoutes" class="api-route-list"></div>
+                            </div>
+                            <div class="config-card">
+                                <h3>Invoke Helper</h3>
+                                <div class="actions" style="margin-bottom:12px;">
+                                    <button id="apiUsePrimaryBtn" class="btn btn-primary" type="button">Use Primary Route in Test</button>
+                                    <button id="apiRunPrimaryBtn" class="btn btn-secondary" type="button">Use + Run Now</button>
+                                </div>
+                                <pre id="apiQuick" class="code-block" style="margin-bottom:12px;">Select a function to see route + invoke payload examples.</pre>
+                                <div class="actions" style="margin-bottom: 12px;">
+                                    <a class="btn btn-secondary" href="/_fn/docs" target="_blank">Open Swagger UI</a>
+                                    <a class="btn btn-secondary" href="/_fn/openapi.json" target="_blank">Open OpenAPI JSON</a>
+                                </div>
+                                <div class="code-block">
+                                    Use this tab to understand the current function contract.
+                                    For execution, we auto-fill the Test/Explorer event and can run immediately.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="tab-configuration" class="tab-content">
+                        <div class="config-layout">
+                            <div class="config-card">
+                                <h3>General configuration</h3>
+                                <div class="kv-editor" style="margin-bottom:16px;">
+                                    <div class="kv-row">
+                                        <label for="configTimeout"><code>timeout_ms</code></label>
+                                        <input type="number" id="configTimeout" value="3000" placeholder="3000">
+                                    </div>
+                                    <div class="kv-row">
+                                        <label for="configConcurrency"><code>max_concurrency</code></label>
+                                        <input type="number" id="configConcurrency" value="20" placeholder="20">
+                                    </div>
+                                    <div class="kv-row">
+                                        <label for="configMaxBody"><code>max_body_bytes</code></label>
+                                        <input type="number" id="configMaxBody" value="1048576" placeholder="1048576">
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label><code>invoke.methods</code></label>
+                                    <div class="actions methods-pills">
+                                        <label><input type="checkbox" id="configMethodGet" value="GET"> GET</label>
+                                        <label><input type="checkbox" id="configMethodPost" value="POST"> POST</label>
+                                        <label><input type="checkbox" id="configMethodPut" value="PUT"> PUT</label>
+                                        <label><input type="checkbox" id="configMethodPatch" value="PATCH"> PATCH</label>
+                                        <label><input type="checkbox" id="configMethodDelete" value="DELETE"> DELETE</label>
+                                    </div>
+                                </div>
+                                <div class="kv-editor">
+                                    <div class="kv-row kv-row-block">
+                                        <label for="configRoutes"><code>invoke.routes</code></label>
+                                        <textarea id="configRoutes" class="code-input" rows="4" placeholder="/hello&#10;/hello/:id"></textarea>
+                                    </div>
+                                    <div class="kv-row kv-row-block">
+                                        <label for="configSharedDeps"><code>shared_deps</code></label>
+                                        <textarea id="configSharedDeps" class="code-input" rows="4" placeholder="qrcode_pack&#10;ts_pack"></textarea>
+                                    </div>
+                                    <div class="kv-row">
+                                        <label for="configHandler"><code>invoke.handler</code></label>
+                                        <input type="text" id="configHandler" placeholder="handler | main">
+                                    </div>
+                                </div>
+                                <div class="kv-editor" style="margin-top:16px;">
+                                    <div class="kv-row">
+                                        <label for="configScheduleEnabled"><code>schedule.enabled</code></label>
+                                        <label><input type="checkbox" id="configScheduleEnabled"> Enabled</label>
+                                    </div>
+                                    <div class="kv-row">
+                                        <label for="configScheduleEverySeconds"><code>schedule.every_seconds</code></label>
+                                        <input type="number" id="configScheduleEverySeconds" min="1" placeholder="60">
+                                    </div>
+                                    <div class="kv-row">
+                                        <label for="configScheduleMethod"><code>schedule.method</code></label>
+                                        <select id="configScheduleMethod">
+                                            <option value="GET">GET</option>
+                                            <option value="POST">POST</option>
+                                            <option value="PUT">PUT</option>
+                                            <option value="PATCH">PATCH</option>
+                                            <option value="DELETE">DELETE</option>
+                                        </select>
+                                    </div>
+                                    <div class="kv-row kv-row-block">
+                                        <label for="configScheduleQuery"><code>schedule.query</code></label>
+                                        <textarea id="configScheduleQuery" class="code-input" rows="3" placeholder="{&quot;action&quot;:&quot;tick&quot;}"></textarea>
+                                    </div>
+                                    <div class="kv-row kv-row-block">
+                                        <label for="configScheduleHeaders"><code>schedule.headers</code></label>
+                                        <textarea id="configScheduleHeaders" class="code-input" rows="3" placeholder="{&quot;x-fastfn-job&quot;:&quot;1&quot;}"></textarea>
+                                    </div>
+                                    <div class="kv-row kv-row-block">
+                                        <label for="configScheduleBody"><code>schedule.body</code></label>
+                                        <textarea id="configScheduleBody" class="code-input" rows="2" placeholder="optional body"></textarea>
+                                    </div>
+                                    <div class="kv-row kv-row-block">
+                                        <label for="configScheduleContext"><code>schedule.context</code></label>
+                                        <textarea id="configScheduleContext" class="code-input" rows="3" placeholder="{&quot;source&quot;:&quot;scheduler&quot;}"></textarea>
+                                    </div>
+                                </div>
+                                <div id="configScheduleState" style="font-size:12px; color:#666; margin-top:8px;"></div>
+                                <div style="font-size:12px; color:#666; margin-top:8px;">Use one route/dependency per line. Handler override and schedule are optional.</div>
+                                <div class="actions">
+                                    <button class="btn btn-primary" onclick="app.saveConfig()">Save</button>
+                                    <button class="btn btn-secondary" onclick="app.reloadCurrentFunction()">Reload</button>
+                                </div>
+                                <div id="configStatus" style="font-size:12px; color:#666; margin-top:8px;"></div>
+                            </div>
+                            <div class="config-card">
+                                <h3>Environment</h3>
+                                <div class="actions" style="margin-bottom:10px;">
+                                    <button class="btn btn-secondary btn-xs" id="envAddRowBtn" type="button">Add Variable</button>
+                                    <button class="btn btn-secondary btn-xs" id="envApplyJsonBtn" type="button">Apply JSON</button>
+                                </div>
+                                <div class="env-dict-head">
+                                    <span>Key</span>
+                                    <span>Value</span>
+                                    <span>Secret</span>
+                                    <span></span>
+                                </div>
+                                <div id="envDictRows" class="env-dict-editor"></div>
+                                <div style="font-size:12px; color:#666; margin-top:8px;">
+                                    Plain variables are saved as strings. Mark <code>Secret</code> to store as
+                                    <code>{"value":"...","is_secret":true}</code>.
+                                </div>
+                                <details class="env-advanced" style="margin-top:10px;">
+                                    <summary>Advanced JSON</summary>
+                                    <textarea id="configEnvJson" class="code-input" rows="10">{}</textarea>
+                                </details>
+                                <div class="actions" style="margin-top:10px;">
+                                    <button class="btn btn-secondary" id="saveEnvBtn" onclick="app.saveEnv()">Save Env</button>
+                                </div>
+                                <div id="envStatus" style="font-size:12px; color:#666; margin-top:8px;"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script type="module" src="/console/assets/console.js?v=3.2"></script>
+</body>
+</html>

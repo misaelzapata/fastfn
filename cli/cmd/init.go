@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -13,11 +14,24 @@ var template string
 
 var initCmd = &cobra.Command{
 	Use:   "init [name]",
-	Short: "Create a new function structure",
-	Args:  cobra.ExactArgs(1),
+	Short: "Create a new function scaffold",
+	Long: `Create a new function scaffold under <runtime>/<name>.
+
+Generated files include fn.config.json and runtime-specific entry files.
+Stable templates: node, python, php, lua.
+Experimental template: rust.
+Go runtime is experimental and currently created manually (file-based routing).
+Experimental runtimes are disabled by default unless FN_RUNTIMES explicitly includes them.`,
+	Example: `  fastfn init hello -t node
+  fastfn init risk-score -t python
+  fastfn init export-report -t php
+  fastfn init quick-hook -t lua
+  fastfn init profile -t rust`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		name := args[0]
-		dirPath := filepath.Join(".", name)
+		runtimeRoot := strings.ToLower(strings.TrimSpace(template))
+		dirPath := filepath.Join(".", runtimeRoot, name)
 
 		// 1. Create directory
 		if err := os.MkdirAll(dirPath, 0755); err != nil {
@@ -32,16 +46,18 @@ var initCmd = &cobra.Command{
 			createNodeFunction(name, dirPath)
 		case "php":
 			createPhpFunction(name, dirPath)
+		case "lua":
+			createLuaFunction(name, dirPath)
 		case "rust":
 			createRustFunction(name, dirPath)
 		default:
-			log.Fatalf("Unknown template: %s. Supported: node, python, php, rust", template)
+			log.Fatalf("Unknown template: %s. Supported templates: node, python, php, lua, rust (experimental)", template)
 		}
 
-		fmt.Printf("Created function '%s' in %s (runtime: %s)\n", name, dirPath, template)
+		fmt.Printf("Created function '%s' in %s (runtime: %s)\n", name, dirPath, runtimeRoot)
 		fmt.Println("Files created:")
 		fmt.Println(" - fn.config.json")
-		
+
 		switch template {
 		case "python":
 			fmt.Println(" - main.py")
@@ -50,16 +66,18 @@ var initCmd = &cobra.Command{
 			fmt.Println(" - handler.js")
 		case "php":
 			fmt.Println(" - handler.php")
+		case "lua":
+			fmt.Println(" - handler.lua")
 		case "rust":
 			fmt.Println(" - handler.rs")
 		}
-		fmt.Println("\nRun 'fastfn dev' in the parent directory to start all functions.")
+		fmt.Println("\nRun 'fastfn dev' in the project root to auto-discover this function.")
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(initCmd)
-	initCmd.Flags().StringVarP(&template, "template", "t", "node", "Function runtime (node, python, php, rust)")
+	initCmd.Flags().StringVarP(&template, "template", "t", "node", "Runtime template: node|python|php|lua|rust (rust is experimental)")
 }
 
 func createNodeFunction(name, dirPath string) {
@@ -74,26 +92,17 @@ func createNodeFunction(name, dirPath string) {
 
 	// handler.js
 	handlerContent := `/**
- * @typedef {Object} Context
- * @property {string} request_id
- * @property {Object} debug
- */
-
-/**
- * Handle the request.
- * @param {import('@fastfn/runtime').Request} event - The input event (including context)
- * @returns {Promise<Object>} The response
+ * @param {Record<string, any>} event
  */
 module.exports.handler = async (event) => {
-  const context = event.context || {};
-  
+  const query = (event && event.query) || {};
   return {
     status: 200,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       message: "Hello from FastFn Node!",
-      input: event,
-      requestId: context.request_id
+      input: { query },
+      debug: "You can return objects directly and they will be JSON responses!"
     })
   };
 };
@@ -112,22 +121,16 @@ func createPythonFunction(name, dirPath string) {
 	writeFile(filepath.Join(dirPath, "fn.config.json"), configContent)
 
 	// main.py
-	mainContent := `from typing import Any, Dict
-
-def handler(event: Dict[str, Any]) -> Dict[str, Any]:
+	mainContent := `def handler(context):
     """
     Handle the request.
+    Valid returns: dict (JSON), str (Text), or {"status": 200, "body": ...}
     """
-    context = event.get("context", {})
+    name = context.request.args.get("name", "World")
     
     return {
-        "status": 200,
-        "headers": {"Content-Type": "application/json"},
-        "body": {
-            "message": "Hello from FastFn Python!",
-            "input": event,
-            "requestId": context.get("request_id")
-        }
+        "message": f"Hello, {name} from FastFn Python!",
+        "input_args": context.request.args
     }
 `
 	writeFile(filepath.Join(dirPath, "main.py"), mainContent)
@@ -149,18 +152,44 @@ func createPhpFunction(name, dirPath string) {
 	// handler.php
 	handlerContent := `<?php
 
-function handler(array $event): array {
+function handler(array $context): array {
+    // Return array -> JSON automatically
     return [
-        'status' => 200,
-        'headers' => ['Content-Type' => 'application/json'],
-        'body' => json_encode([
-            'message' => 'Hello from FastFn PHP!',
-            'input' => $event
-        ]),
+        'message' => 'Hello from FastFn PHP!',
+        'input' => $context
     ];
 }
 `
 	writeFile(filepath.Join(dirPath, "handler.php"), handlerContent)
+}
+
+func createLuaFunction(name, dirPath string) {
+	// fn.config.json
+	configContent := `{
+  "runtime": "lua",
+  "name": "` + name + `",
+  "version": "1.0.0",
+  "entrypoint": "handler.lua"
+}`
+	writeFile(filepath.Join(dirPath, "fn.config.json"), configContent)
+
+	// handler.lua
+	handlerContent := `local cjson = require("cjson.safe")
+
+function handler(event)
+    local query = event.query or {}
+    local name = query.name or "World"
+    return {
+        status = 200,
+        headers = { ["Content-Type"] = "application/json" },
+        body = cjson.encode({
+            message = "Hello, " .. tostring(name) .. " from FastFn Lua!",
+            input_query = query
+        })
+    }
+end
+`
+	writeFile(filepath.Join(dirPath, "handler.lua"), handlerContent)
 }
 
 func createRustFunction(name, dirPath string) {
@@ -176,14 +205,11 @@ func createRustFunction(name, dirPath string) {
 	// handler.rs
 	handlerContent := `use serde_json::{json, Value};
 
-pub fn handler(event: Value) -> Value {
+pub fn handler(context: Value) -> Value {
+    // Return JSON value directly
     json!({
-        "status": 200,
-        "headers": { "Content-Type": "application/json" },
-        "body": json!({
-            "message": "Hello from FastFn Rust!",
-            "input": event
-        }).to_string()
+        "message": "Hello from FastFn Rust!",
+        "input": context
     })
 }
 `
