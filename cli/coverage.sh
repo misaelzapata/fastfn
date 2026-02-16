@@ -53,7 +53,11 @@ echo "== lua coverage =="
 rm -rf "$OUT_DIR/lua"
 mkdir -p "$OUT_DIR/lua"
 if command -v docker >/dev/null 2>&1; then
-  LUA_COVERAGE=1 COVERAGE_DIR="$OUT_DIR/lua" "$ROOT_DIR/cli/test-lua.sh" > "$OUT_DIR/lua-coverage.txt"
+  if ! LUA_COVERAGE=1 COVERAGE_DIR="$OUT_DIR/lua" "$ROOT_DIR/cli/test-lua.sh" > "$OUT_DIR/lua-coverage.txt" 2>&1; then
+    echo "lua coverage failed; dumping logs:"
+    cat "$OUT_DIR/lua-coverage.txt" || true
+    exit 1
+  fi
 else
   echo "lua coverage skipped (docker not found)" | tee "$OUT_DIR/lua-coverage.txt"
 fi
