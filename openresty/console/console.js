@@ -1,1381 +1,2866 @@
 import { esc, getJson } from './base.js';
 import { initWizard } from './wizard.js';
 
-(() => {
-  const LS_SELECTED_KEY = 'fn_console_selected_v1';
-  const LS_HISTORY_KEY = 'fn_console_history_v1';
-  const LS_UI_KEY = 'fn_console_ui_v1';
-  const LS_INVOKE_DRAFTS_KEY = 'fn_console_invoke_drafts_v1';
-  const MAX_HISTORY = 12;
-  const MAX_DRAFTS = 80;
-  const state = {
-    catalog: null,
-    packs: null,
-    selected: null,
-    history: [],
-    invokeDrafts: {},
-    ui: { search: '', routeSearch: '', activeTab: 'explorer' },
-  };
+const DEFAULT_TABS = new Set(['code', 'test', 'monitor', 'api', 'configuration']);
+const ALLOWED_HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
+const CONFIG_METHOD_TOGGLE_IDS = {
+  GET: 'configMethodGet',
+  POST: 'configMethodPost',
+  PUT: 'configMethodPut',
+  PATCH: 'configMethodPatch',
+  DELETE: 'configMethodDelete',
+};
+const EXEC_HISTORY_STORAGE_KEY = 'fastfn_execution_history_v1';
+const EXEC_HISTORY_LIMIT_PER_FN = 30;
+const AI_CHAT_HISTORY_STORAGE_KEY = 'fastfn_ai_chat_history_v1';
+const AI_CHAT_HISTORY_LIMIT_PER_FN = 40;
+const AI_MODE_STORAGE_KEY = 'fastfn_ai_mode_v1';
 
-  const fnListEl = document.getElementById('fnList');
-  const historyListEl = document.getElementById('historyList');
-  const detailsEl = document.getElementById('details');
-  const codeOutEl = document.getElementById('codeOut');
-  const invokeOutEl = document.getElementById('invokeOut');
-  const invokeMetaEl = document.getElementById('invokeMeta');
-  const cfgStatusEl = document.getElementById('cfgStatus');
-  const codeStatusEl = document.getElementById('codeStatus');
-  const crudStatusEl = document.getElementById('crudStatus');
-  const jobsStatusEl = document.getElementById('jobsStatus');
-  const uiStateStatusEl = document.getElementById('uiStateStatus');
-  const metaEl = document.getElementById('meta');
-  const searchEl = document.getElementById('search');
-  const crudRuntimeEl = document.getElementById('crudRuntime');
-  const crudNameEl = document.getElementById('crudName');
-  const crudVersionEl = document.getElementById('crudVersion');
-  const crudRouteEl = document.getElementById('crudRoute');
+function toFunctionArray(value) {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== 'object') return [];
+  return Object.keys(value)
+    .sort((a, b) => Number(a) - Number(b))
+    .map((k) => value[k])
+    .filter((v) => v && typeof v === 'object');
+}
 
-  const cfgTimeoutEl = document.getElementById('cfgTimeout');
-  const cfgConcEl = document.getElementById('cfgConc');
-  const cfgBodyEl = document.getElementById('cfgBody');
-  const cfgGroupEl = document.getElementById('cfgGroup');
-  const cfgDebugHeadersEl = document.getElementById('cfgDebugHeaders');
-  const cfgSharedDepsEl = document.getElementById('cfgSharedDeps');
-  const cfgRoutesEl = document.getElementById('cfgRoutes');
-  const cfgMethodEls = Array.from(document.querySelectorAll('input[name="cfgMethods"]'));
-  const edgeBaseUrlEl = document.getElementById('edgeBaseUrl');
-  const edgeAllowHostsEl = document.getElementById('edgeAllowHosts');
-  const edgeAllowPrivateEl = document.getElementById('edgeAllowPrivate');
-  const edgeMaxRespEl = document.getElementById('edgeMaxResp');
-  const schedEnabledEl = document.getElementById('schedEnabled');
-  const schedEveryEl = document.getElementById('schedEvery');
-  const schedMethodEl = document.getElementById('schedMethod');
-  const schedQueryEl = document.getElementById('schedQuery');
-  const schedHeadersEl = document.getElementById('schedHeaders');
-  const schedBodyEl = document.getElementById('schedBody');
-  const schedContextEl = document.getElementById('schedContext');
-  const schedStatusEl = document.getElementById('schedStatus');
-  const schedStateEl = document.getElementById('schedState');
-  const envEditorEl = document.getElementById('envEditor');
-  const envStatusEl = document.getElementById('envStatus');
-  const methodEl = document.getElementById('method');
-  const queryEl = document.getElementById('query');
-  const contextEl = document.getElementById('context');
-  const bodyEl = document.getElementById('body');
-  const enqueueBtn = document.getElementById('enqueueBtn');
-  const uiStateUiEnabledEl = document.getElementById('uiStateUiEnabled');
-  const uiStateApiEnabledEl = document.getElementById('uiStateApiEnabled');
-  const uiStateWriteEnabledEl = document.getElementById('uiStateWriteEnabled');
-  const uiStateLocalOnlyEl = document.getElementById('uiStateLocalOnly');
-  const uiStateLoginEnabledEl = document.getElementById('uiStateLoginEnabled');
-  const uiStateLoginApiEnabledEl = document.getElementById('uiStateLoginApiEnabled');
-  const routeSearchEl = document.getElementById('routeSearch');
-  const gatewaySummaryEl = document.getElementById('gatewaySummary');
-  const routeTableBodyEl = document.getElementById('routeTableBody');
-  const routeConflictsEl = document.getElementById('routeConflicts');
-  const jobsTableBodyEl = document.getElementById('jobsTableBody');
-  const jobDetailEl = document.getElementById('jobDetail');
-  const refreshJobsBtn = document.getElementById('refreshJobsBtn');
-  const packsListEl = document.getElementById('packsList');
-  const refreshPacksBtn = document.getElementById('refreshPacksBtn');
-  const tabButtons = Array.from(document.querySelectorAll('[data-tab-btn]'));
-  const tabPanels = Array.from(document.querySelectorAll('[data-tab-panel]'));
-  async function loadPacks() {
-    try {
-      state.packs = await getJson('/_fn/packs');
-    } catch (err) {
-      state.packs = null;
-      if (packsListEl) packsListEl.textContent = `Failed to load packs: ${String(err && err.message ? err.message : err)}`;
-      return;
-    }
-    if (state.selected && packsListEl) {
-      renderPacksForRuntime(state.selected.runtime);
-    }
+function toVersionArray(value) {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== 'object') return [];
+  return Object.keys(value)
+    .sort()
+    .filter((k) => value[k] === true || typeof value[k] === 'string' || typeof value[k] === 'number');
+}
+
+function parseRouteParams(route) {
+  const specs = [];
+  const re = /:([A-Za-z0-9_]+)(\*?)/g;
+  let m;
+  while ((m = re.exec(String(route || ''))) !== null) {
+    specs.push({ name: m[1], catchAll: m[2] === '*' });
   }
+  return specs;
+}
 
-  async function loadJobs() {
-    if (!jobsTableBodyEl) return;
-    let out;
-    try {
-      out = await getJson('/_fn/jobs?limit=60');
-    } catch (err) {
-      if (jobsStatusEl) jobsStatusEl.textContent = String(err && err.message ? err.message : err);
-      jobsTableBodyEl.innerHTML = '';
-      return;
-    }
+function defaultParamsForRoute(route) {
+  const obj = {};
+  for (const spec of parseRouteParams(route)) {
+    obj[spec.name] = spec.catchAll ? 'example/a/b' : '123';
+  }
+  return obj;
+}
 
-    const jobs = (out && Array.isArray(out.jobs)) ? out.jobs : [];
-    if (jobsStatusEl) jobsStatusEl.textContent = `Jobs loaded: ${jobs.length}`;
+function parseJsonObject(raw, label) {
+  const text = String(raw || '').trim();
+  if (!text) return {};
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error(`${label} must be valid JSON`);
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`${label} must be a JSON object`);
+  }
+  return parsed;
+}
 
-    jobsTableBodyEl.innerHTML = '';
-    if (jobs.length === 0) {
-      const tr = document.createElement('tr');
-      const td = document.createElement('td');
-      td.colSpan = 5;
-      td.className = 'muted';
-      td.textContent = 'No jobs yet. Use "Enqueue Job" from a function invoke.';
-      tr.appendChild(td);
-      jobsTableBodyEl.appendChild(tr);
-      return;
-    }
+function parseOptionalJsonObject(raw, label) {
+  const text = String(raw || '').trim();
+  if (!text) return undefined;
+  return parseJsonObject(text, label);
+}
 
-    for (const j of jobs) {
-      const tr = document.createElement('tr');
-      tr.style.cursor = 'pointer';
-      tr.addEventListener('click', () => selectJob(j.id));
+function formatUnixSeconds(raw) {
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) return '';
+  try {
+    return new Date(value * 1000).toISOString();
+  } catch {
+    return '';
+  }
+}
 
-      const tdId = document.createElement('td');
-      tdId.innerHTML = `<code>${esc(j.id || '')}</code>`;
-      tr.appendChild(tdId);
+function parseCsvList(raw) {
+  return String(raw || '')
+    .split(/[\n,]/)
+    .map((x) => x.trim())
+    .filter((x) => x.length > 0);
+}
 
-      const tdSt = document.createElement('td');
-      tdSt.textContent = j.status || '';
-      tr.appendChild(tdSt);
-
-      const tdT = document.createElement('td');
-      tdT.textContent = `${j.runtime || ''}/${publicLabel(j.name || '', j.version || null)}`;
-      tr.appendChild(tdT);
-
-      const tdM = document.createElement('td');
-      tdM.textContent = j.method || '';
-      tr.appendChild(tdM);
-
-      const tdA = document.createElement('td');
-      tdA.textContent = `${j.attempt || 0}/${j.max_attempts || 1}`;
-      tr.appendChild(tdA);
-
-      jobsTableBodyEl.appendChild(tr);
+function normalizeMethodsFromCsv(raw) {
+  const allowed = new Set(ALLOWED_HTTP_METHODS);
+  const out = [];
+  const seen = new Set();
+  for (const item of parseCsvList(raw)) {
+    const m = item.toUpperCase();
+    if (allowed.has(m) && !seen.has(m)) {
+      seen.add(m);
+      out.push(m);
     }
   }
+  return out;
+}
 
-  async function selectJob(id) {
-    if (!jobDetailEl) return;
-    try {
-      const meta = await getJson(`/_fn/jobs/${encodeURIComponent(id)}`);
-      let result = null;
-      try {
-        result = await getJson(`/_fn/jobs/${encodeURIComponent(id)}/result`);
-      } catch (_) {
-        // no result yet
-      }
-      jobDetailEl.textContent = JSON.stringify({ meta, result }, null, 2);
-    } catch (err) {
-      jobDetailEl.textContent = `Error: ${String(err && err.message ? err.message : err)}`;
-    }
-  }
-
-  function renderPacksForRuntime(runtime) {
-    if (!packsListEl) return;
-    const packs = state.packs && state.packs.runtimes && state.packs.runtimes[runtime] && Array.isArray(state.packs.runtimes[runtime].packs)
-      ? state.packs.runtimes[runtime].packs
-      : [];
-    if (!state.packs) {
-      packsListEl.textContent = 'No packs loaded. Click "Refresh Packs".';
-      return;
-    }
-    if (!packs || packs.length === 0) {
-      packsListEl.textContent = `No packs for runtime ${runtime}. Create under ${state.packs.packs_root || '<FN_FUNCTIONS_ROOT>/.fastfn/packs'}/${runtime}/...`;
-      return;
-    }
-    packsListEl.innerHTML = packs
-      .map((p) => `<div><code>${esc(p.name)}</code></div>`)
-      .join('');
-  }
-
-  function publicLabel(name, version) {
-    return version ? `${name}@${version}` : name;
-  }
-
-  function yesNo(v) {
-    return v ? 'yes' : 'no';
-  }
-
-  function asJson(obj) {
-    if (!obj || typeof obj !== 'object') return '{}';
-    return JSON.stringify(obj, null, 2);
-  }
-
-  function asJsonOneLine(obj) {
-    if (!obj || typeof obj !== 'object') return '{}';
-    return JSON.stringify(obj);
-  }
-
-  function parseJsonObject(raw, label) {
-    const trimmed = String(raw || '').trim();
-    if (!trimmed) return {};
-    let obj;
-    try { obj = JSON.parse(trimmed); } catch { throw new Error(`${label} must be valid JSON`); }
-    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
-      throw new Error(`${label} must be a JSON object`);
-    }
-    return obj;
-  }
-
-  function selectionRecord(runtime, name, version) {
-    return { runtime, name, version: version || null };
-  }
-
-  function selectionKey(runtime, name, version) {
-    return `${runtime || ''}/${name || ''}@${version || 'default'}`;
-  }
-
-  function parseConsolePath(pathname) {
-    const path = String(pathname || '');
-    if (path === '/console' || path === '/console/') {
-      return { tab: null, selection: null };
-    }
-    const raw = path.startsWith('/console/') ? path.slice('/console/'.length) : path;
-    const segs = raw.split('/').filter(Boolean);
-    if (segs.length === 0) return { tab: null, selection: null };
-
-    const knownTabs = new Set(['explorer', 'wizard', 'gateway', 'configuration', 'crud']);
-    const first = segs[0];
-
-    // New-style: /console/<tab>/...
-    if (knownTabs.has(first)) {
-      const tab = first;
-      if (tab !== 'explorer') return { tab, selection: null };
-
-      // Explorer deep link: /console/explorer/<runtime>/<name>@<version?>
-      if (segs.length >= 3) {
-        const runtime = segs[1];
-        const fnPart = segs[2];
-        const m = String(fnPart).match(/^([A-Za-z0-9_-]+)(?:@([A-Za-z0-9_.-]+))?$/);
-        if (m) return { tab, selection: selectionRecord(runtime, m[1], m[2] || null) };
-      }
-      return { tab, selection: null };
-    }
-
-    // Legacy deep link: /console/<runtime>/<name>@<version?>
-    if (segs.length >= 2) {
-      const runtime = segs[0];
-      const fnPart = segs[1];
-      const m = String(fnPart).match(/^([A-Za-z0-9_-]+)(?:@([A-Za-z0-9_.-]+))?$/);
-      if (m) return { tab: 'explorer', selection: selectionRecord(runtime, m[1], m[2] || null) };
-    }
-
-    // Unknown console subpath -> treat as base console.
-    return { tab: null, selection: null };
-  }
-
-  function buildConsolePath(activeTab, selection) {
-    const tab = activeTab || 'explorer';
-    if (tab === 'explorer' && selection && selection.runtime && selection.name) {
-      return `/console/explorer/${selection.runtime}/${selection.name}${selection.version ? `@${selection.version}` : ''}`;
-    }
-    return `/console/${tab}`;
-  }
-
-  function parseUrlState() {
-    const url = new URL(window.location.href);
-    const out = { ui: {}, selection: null };
-
-    const byPath = parseConsolePath(url.pathname);
-    if (byPath && byPath.tab) out.ui.activeTab = byPath.tab;
-
-    const q = url.searchParams.get('q');
-    if (q !== null) out.ui.search = q;
-    const rq = url.searchParams.get('rq');
-    if (rq !== null) out.ui.routeSearch = rq;
-
-    if (byPath && byPath.selection) out.selection = byPath.selection;
-
-    const runtime = url.searchParams.get('runtime');
-    const name = url.searchParams.get('name');
-    const version = url.searchParams.get('version');
-    if (runtime && name) {
-      out.selection = selectionRecord(runtime, name, version || null);
-    }
-    return out;
-  }
-
-  function syncUrl(opts = {}) {
-    const replace = opts.replace === true;
-    const url = new URL(window.location.href);
-    url.pathname = buildConsolePath(state.ui.activeTab, state.selected);
-    url.search = '';
-    if (state.ui.search && state.ui.search.trim() !== '') {
-      url.searchParams.set('q', state.ui.search.trim());
-    }
-    if (state.ui.routeSearch && state.ui.routeSearch.trim() !== '') {
-      url.searchParams.set('rq', state.ui.routeSearch.trim());
-    }
-    // Preserve selection for non-explorer tabs so refresh/deep links keep context.
-    if (state.selected && state.ui.activeTab && state.ui.activeTab !== 'explorer') {
-      url.searchParams.set('runtime', state.selected.runtime);
-      url.searchParams.set('name', state.selected.name);
-      if (state.selected.version) url.searchParams.set('version', state.selected.version);
-    }
-    const next = `${url.pathname}${url.search}${url.hash}`;
-    const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    if (next === current) return;
-    if (replace) {
-      window.history.replaceState({}, '', next);
-    } else {
-      window.history.pushState({}, '', next);
-    }
-  }
-
-  function sameSelection(a, b) {
-    return !!a && !!b
-      && a.runtime === b.runtime
-      && a.name === b.name
-      && (a.version || null) === (b.version || null);
-  }
-
-  function loadPersistedState() {
-    try {
-      const rawSel = localStorage.getItem(LS_SELECTED_KEY);
-      if (rawSel) {
-        const parsed = JSON.parse(rawSel);
-        if (parsed && parsed.runtime && parsed.name) {
-          state.selected = selectionRecord(parsed.runtime, parsed.name, parsed.version || null);
-        }
-      }
-    } catch (_) {}
-
-    try {
-      const rawHist = localStorage.getItem(LS_HISTORY_KEY);
-      const parsed = rawHist ? JSON.parse(rawHist) : [];
-      if (Array.isArray(parsed)) {
-        state.history = parsed
-          .filter((v) => v && typeof v.runtime === 'string' && typeof v.name === 'string')
-          .map((v) => selectionRecord(v.runtime, v.name, v.version || null))
-          .slice(0, MAX_HISTORY);
-      }
-    } catch (_) {
-      state.history = [];
-    }
-
-    try {
-      const rawUi = localStorage.getItem(LS_UI_KEY);
-      const parsed = rawUi ? JSON.parse(rawUi) : {};
-      if (parsed && typeof parsed === 'object') {
-        if (typeof parsed.search === 'string') state.ui.search = parsed.search;
-        if (typeof parsed.routeSearch === 'string') state.ui.routeSearch = parsed.routeSearch;
-        if (typeof parsed.activeTab === 'string') state.ui.activeTab = parsed.activeTab;
-      }
-    } catch (_) {}
-
-    try {
-      const rawDrafts = localStorage.getItem(LS_INVOKE_DRAFTS_KEY);
-      const parsed = rawDrafts ? JSON.parse(rawDrafts) : {};
-      if (parsed && typeof parsed === 'object') {
-        state.invokeDrafts = parsed;
-      }
-    } catch (_) {
-      state.invokeDrafts = {};
-    }
-  }
-
-  function savePersistedState() {
-    try {
-      if (state.selected) localStorage.setItem(LS_SELECTED_KEY, JSON.stringify(state.selected));
-      localStorage.setItem(LS_HISTORY_KEY, JSON.stringify(state.history.slice(0, MAX_HISTORY)));
-      localStorage.setItem(LS_UI_KEY, JSON.stringify(state.ui));
-      localStorage.setItem(LS_INVOKE_DRAFTS_KEY, JSON.stringify(state.invokeDrafts));
-    } catch (_) {}
-  }
-
-  function addHistory(runtime, name, version) {
-    const current = selectionRecord(runtime, name, version);
-    state.history = [current, ...state.history.filter((x) => !sameSelection(x, current))].slice(0, MAX_HISTORY);
-    savePersistedState();
-    renderHistory();
-  }
-
-  function selectionExistsInCatalog(sel) {
-    if (!sel || !state.catalog) return false;
-    const rt = (state.catalog.runtimes || {})[sel.runtime];
-    if (!rt) return false;
-    const fn = toFunctionArray(rt.functions).find((f) => f.name === sel.name);
-    if (!fn) return false;
-    if (!sel.version) return !!fn.has_default;
-    return toVersionArray(fn.versions).includes(sel.version);
-  }
-
-  function firstAvailableSelection() {
-    if (!state.catalog) return null;
-    for (const runtime of Object.keys(state.catalog.runtimes || {}).sort()) {
-      const rt = state.catalog.runtimes[runtime];
-      for (const fn of toFunctionArray(rt.functions)) {
-        if (fn.has_default) return selectionRecord(runtime, fn.name, null);
-        const versions = toVersionArray(fn.versions);
-        if (versions.length > 0) return selectionRecord(runtime, fn.name, versions[0]);
-      }
-    }
-    return null;
-  }
-
-  function historyFallbackSelection() {
-    for (const entry of state.history) {
-      if (selectionExistsInCatalog(entry)) return entry;
-    }
-    return null;
-  }
-
-  function renderHistory() {
-    if (!historyListEl) return;
-    historyListEl.innerHTML = '';
-    for (const entry of state.history) {
-      if (!selectionExistsInCatalog(entry)) continue;
-      const b = document.createElement('button');
-      b.textContent = publicLabel(entry.name, entry.version);
-      b.onclick = () => selectFn(entry.runtime, entry.name, entry.version);
-      if (selectedMatches(entry.runtime, entry.name, entry.version)) b.classList.add('active');
-      historyListEl.appendChild(b);
-    }
-  }
-
-  function ensureMethodOptions(methods, selected) {
-    const fallback = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
-    const options = Array.isArray(methods) && methods.length > 0 ? methods : fallback;
-    methodEl.innerHTML = '';
-    for (const method of options) {
-      const opt = document.createElement('option');
-      opt.value = method;
-      opt.textContent = method;
-      methodEl.appendChild(opt);
-    }
-    methodEl.value = options.includes(selected) ? selected : options[0];
-  }
-
-  function setConfigMethods(methods) {
-    const set = new Set(Array.isArray(methods) ? methods.map((m) => String(m).toUpperCase()) : ['GET']);
-    for (const el of cfgMethodEls) {
-      el.checked = set.has(String(el.value).toUpperCase());
-    }
-  }
-
-  function normalizeRoutePath(raw) {
-    if (typeof raw !== 'string') return null;
-    let route = raw.trim();
-    if (!route.startsWith('/')) return null;
-    route = route.replace(/\/+/g, '/');
+function normalizeRoutesFromCsv(raw) {
+  const out = [];
+  const seen = new Set();
+  for (const item of parseCsvList(raw)) {
+    if (!item.startsWith('/')) continue;
+    let route = item.replace(/\/+/g, '/');
     if (route.length > 1) route = route.replace(/\/+$/, '');
-    if (!route || route.includes('..')) return null;
-    return route;
-  }
-
-  function parseRoutesText(raw) {
-    const lines = String(raw || '')
-      .split(/\r?\n/)
-      .map((x) => x.trim())
-      .filter(Boolean);
-    const out = [];
-    const seen = new Set();
-    for (const line of lines) {
-      const route = normalizeRoutePath(line);
-      if (!route) throw new Error(`Invalid route path: ${line}`);
-      if (!seen.has(route)) {
-        seen.add(route);
-        out.push(route);
-      }
+    if (route.includes('..') || route.includes('?') || route.includes('#')) continue;
+    if (!seen.has(route)) {
+      seen.add(route);
+      out.push(route);
     }
-    return out;
+  }
+  return out;
+}
+
+function hasConfigMethodToggles() {
+  return Object.values(CONFIG_METHOD_TOGGLE_IDS).some((id) => document.getElementById(id));
+}
+
+function readMethodsFromToggles() {
+  const selected = [];
+  for (const method of ALLOWED_HTTP_METHODS) {
+    const el = document.getElementById(CONFIG_METHOD_TOGGLE_IDS[method]);
+    if (el && el.checked) selected.push(method);
+  }
+  return selected;
+}
+
+function writeMethodsToToggles(methods) {
+  const selected = new Set((Array.isArray(methods) ? methods : []).map((m) => String(m || '').toUpperCase()));
+  for (const method of ALLOWED_HTTP_METHODS) {
+    const el = document.getElementById(CONFIG_METHOD_TOGGLE_IDS[method]);
+    if (el) el.checked = selected.has(method);
+  }
+}
+
+function stringifyPretty(obj) {
+  try {
+    return JSON.stringify(obj, null, 2);
+  } catch {
+    return '{}';
+  }
+}
+
+function parseQueryInput(raw) {
+  const text = String(raw || '').trim();
+  if (!text) return {};
+  if (text.startsWith('{')) {
+    return parseJsonObject(text, 'query');
+  }
+  const queryText = text.startsWith('?') ? text.slice(1) : text;
+  if (!queryText.includes('=')) {
+    throw new Error('query must be JSON or querystring (?a=1&b=2)');
+  }
+  const out = {};
+  const params = new URLSearchParams(queryText);
+  for (const [k, v] of params.entries()) {
+    out[k] = v;
+  }
+  return out;
+}
+
+function renderRouteWithParams(route, params) {
+  const source = String(route || '');
+  return source.replace(/:([A-Za-z0-9_]+)(\*?)/g, (_, key) => {
+    const value = params && params[key] !== undefined ? String(params[key]) : '';
+    return value;
+  });
+}
+
+function normalizeMappedEntries(raw) {
+  if (!raw || typeof raw !== 'object') return [];
+  if (Array.isArray(raw)) return raw.filter((entry) => entry && typeof entry === 'object');
+  if (raw.runtime || raw.fn_name || raw.target) return [raw];
+  return [];
+}
+
+function publicLabel(name, version) {
+  return version ? `${name}@${version}` : name;
+}
+
+class ConsoleApp {
+  constructor() {
+    this.currentView = 'functionList';
+    this.currentFn = null;
+    this.currentDetail = null;
+    this.currentTab = 'code';
+    this.catalog = null;
+    this.functionRows = [];
+    this.gatewayRows = [];
+    this.currentFile = '';
+    this.handlerFile = '';
+    this.fileContents = {};
+    this.wizardState = {};
+    this.currentGatewayRoute = null;
+    this.savedEvents = this.loadSavedEvents();
+    this.executionHistory = this.loadExecutionHistory();
+    this.aiHistory = this.loadAiHistory();
+    this.monitorRefreshTimer = null;
+    this.catalogRefreshTimer = null;
+    this.catalogRefreshInFlight = false;
+    this.lastCatalogFingerprint = '';
+    this.assistantStatus = null;
+    this.assistantStatusAt = 0;
+    this.apiPrimary = null;
+    this.envUnsupportedEntries = {};
+    this.aiMode = this.loadAiMode();
+    this.uiState = null;
   }
 
-  function parseAllowHostsText(raw) {
-    const lines = String(raw || '')
-      .split(/\r?\n/)
-      .map((x) => x.trim())
-      .filter(Boolean);
-    const out = [];
-    const seen = new Set();
-    for (const line of lines) {
-      const host = line.trim();
-      if (!host) continue;
-      if (host.includes('..') || host.includes('/') || host.includes(' ')) {
-        throw new Error(`Invalid host entry: ${host}`);
-      }
-      if (!seen.has(host)) {
-        seen.add(host);
-        out.push(host);
-      }
+  loadSavedEvents() {
+    try {
+      const raw = localStorage.getItem('fastfn_saved_test_events_v1');
+      const parsed = raw ? JSON.parse(raw) : {};
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
     }
-    return out;
   }
 
-  function saveCurrentInvokeDraft() {
-    if (!state.selected) return;
-    const key = selectionKey(state.selected.runtime, state.selected.name, state.selected.version);
-    state.invokeDrafts[key] = {
-      method: methodEl.value,
-      query: queryEl.value,
-      context: contextEl.value,
-      body: bodyEl.value,
+  persistSavedEvents() {
+    try {
+      localStorage.setItem('fastfn_saved_test_events_v1', JSON.stringify(this.savedEvents));
+    } catch {
+      // ignore
+    }
+  }
+
+  loadExecutionHistory() {
+    try {
+      const raw = localStorage.getItem(EXEC_HISTORY_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : {};
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  persistExecutionHistory() {
+    try {
+      localStorage.setItem(EXEC_HISTORY_STORAGE_KEY, JSON.stringify(this.executionHistory));
+    } catch {
+      // ignore storage errors
+    }
+  }
+
+  loadAiHistory() {
+    try {
+      const raw = localStorage.getItem(AI_CHAT_HISTORY_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : {};
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  persistAiHistory() {
+    try {
+      localStorage.setItem(AI_CHAT_HISTORY_STORAGE_KEY, JSON.stringify(this.aiHistory));
+    } catch {
+      // ignore storage errors
+    }
+  }
+
+  loadAiMode() {
+    try {
+      const raw = String(localStorage.getItem(AI_MODE_STORAGE_KEY) || 'auto').toLowerCase();
+      if (raw === 'chat' || raw === 'edit' || raw === 'auto') return raw;
+      return 'auto';
+    } catch {
+      return 'auto';
+    }
+  }
+
+  persistAiMode() {
+    try {
+      localStorage.setItem(AI_MODE_STORAGE_KEY, String(this.aiMode || 'auto'));
+    } catch {
+      // ignore storage errors
+    }
+  }
+
+  setAiMode(mode) {
+    const value = String(mode || '').toLowerCase();
+    this.aiMode = (value === 'chat' || value === 'edit' || value === 'auto') ? value : 'auto';
+    this.persistAiMode();
+    this.updateAiModeSwitch();
+  }
+
+  updateAiModeSwitch() {
+    const map = {
+      auto: document.getElementById('aiModeAuto'),
+      chat: document.getElementById('aiModeChat'),
+      edit: document.getElementById('aiModeEdit'),
     };
-    const keys = Object.keys(state.invokeDrafts);
-    if (keys.length > MAX_DRAFTS) {
-      keys.sort();
-      for (const k of keys.slice(0, keys.length - MAX_DRAFTS)) delete state.invokeDrafts[k];
-    }
-    savePersistedState();
-  }
-
-  function applyInvokeDraft(runtime, name, version, defaults) {
-    const key = selectionKey(runtime, name, version);
-    const draft = state.invokeDrafts[key];
-    if (!draft || typeof draft !== 'object') return false;
-    ensureMethodOptions(defaults.methods, draft.method || defaults.defaultMethod);
-    queryEl.value = typeof draft.query === 'string' ? draft.query : defaults.queryRaw;
-    contextEl.value = typeof draft.context === 'string' ? draft.context : '';
-    bodyEl.value = typeof draft.body === 'string' ? draft.body : defaults.bodyRaw;
-    return true;
-  }
-
-  function populateCrudRuntimeOptions() {
-    if (!crudRuntimeEl) return;
-    const runtimes = Object.keys((state.catalog && state.catalog.runtimes) || {}).sort();
-    const selected = crudRuntimeEl.value;
-    crudRuntimeEl.innerHTML = '';
-    for (const rt of runtimes) {
-      const opt = document.createElement('option');
-      opt.value = rt;
-      opt.textContent = rt;
-      crudRuntimeEl.appendChild(opt);
-    }
-    if (selected && runtimes.includes(selected)) {
-      crudRuntimeEl.value = selected;
-    } else if (state.selected && runtimes.includes(state.selected.runtime)) {
-      crudRuntimeEl.value = state.selected.runtime;
+    for (const [key, el] of Object.entries(map)) {
+      if (!el) continue;
+      el.classList.toggle('active', this.aiMode === key);
     }
   }
 
-  function getConfigMethods() {
-    return cfgMethodEls
-      .filter((el) => el.checked)
-      .map((el) => String(el.value).toUpperCase());
+  aiHistoryKey() {
+    if (!this.currentFn) return '';
+    return `${this.currentFn.runtime}/${this.currentFn.name}@${this.currentFn.version || 'default'}`;
   }
 
-  function listText(value) {
-    if (!Array.isArray(value) || value.length === 0) return 'none';
-    return value.join(', ');
+  getAiHistoryEntriesForCurrentFn() {
+    const key = this.aiHistoryKey();
+    if (!key) return [];
+    const entries = this.aiHistory[key];
+    return Array.isArray(entries) ? entries : [];
   }
 
-  function activateTab(tabName, opts = {}) {
-    state.ui.activeTab = tabName;
-    savePersistedState();
-    if (!opts.skipUrlSync) {
-      syncUrl({ replace: opts.replaceUrl !== false });
+  recordAiHistory(role, text) {
+    const key = this.aiHistoryKey();
+    if (!key) return;
+    const content = String(text || '').trim();
+    if (!content) return;
+    if (!Array.isArray(this.aiHistory[key])) this.aiHistory[key] = [];
+    this.aiHistory[key].push({ role: String(role || 'assistant'), text: content, ts: Date.now() });
+    if (this.aiHistory[key].length > AI_CHAT_HISTORY_LIMIT_PER_FN) {
+      this.aiHistory[key] = this.aiHistory[key].slice(this.aiHistory[key].length - AI_CHAT_HISTORY_LIMIT_PER_FN);
     }
-    for (const btn of tabButtons) {
-      btn.classList.toggle('active', btn.dataset.tabBtn === tabName);
+    this.persistAiHistory();
+  }
+
+  renderAiHistory() {
+    const out = document.getElementById('aiOutput');
+    if (!out) return;
+    const entries = this.getAiHistoryEntriesForCurrentFn();
+    out.innerHTML = '';
+    if (entries.length === 0) {
+      const msg = document.createElement('div');
+      msg.className = 'ai-msg system';
+      msg.textContent = 'How can I help you write this function?';
+      out.appendChild(msg);
+      return;
     }
-    for (const panel of tabPanels) {
-      panel.classList.toggle('active', panel.dataset.tabPanel === tabName);
+    for (const entry of entries) {
+      if (!entry || typeof entry !== 'object') continue;
+      const role = String(entry.role || 'assistant');
+      const msg = document.createElement('div');
+      msg.className = `ai-msg ${role === 'user' ? 'user' : 'system'}`;
+      msg.textContent = String(entry.text || '');
+      out.appendChild(msg);
+    }
+    out.scrollTop = out.scrollHeight;
+  }
+
+  clearMonitorAutoRefresh() {
+    if (this.monitorRefreshTimer) {
+      clearInterval(this.monitorRefreshTimer);
+      this.monitorRefreshTimer = null;
     }
   }
 
-  function toFunctionArray(value) {
-    if (Array.isArray(value)) return value;
-    if (!value || typeof value !== 'object') return [];
-    return Object.keys(value)
-      .sort((a, b) => Number(a) - Number(b))
-      .map((k) => value[k])
-      .filter((v) => v && typeof v === 'object');
+  buildCatalogFingerprint(catalog) {
+    if (!catalog || typeof catalog !== 'object') return '';
+    const fnRows = this.flattenRowsFromCatalog(catalog).map((row) => {
+      const methods = Array.isArray(row.methods) ? row.methods.join(',') : '';
+      const routes = Array.isArray(row.routes) ? row.routes.join(',') : '';
+      return `${row.runtime}/${row.name}@${row.version || 'default'}|m=${methods}|r=${routes}`;
+    });
+    const gatewayRows = this.flattenGatewayRows(catalog).map((row) => {
+      const methods = Array.isArray(row.methods) ? row.methods.join(',') : '';
+      return `${row.route}->${row.runtime}/${row.name}@${row.version || 'default'}|m=${methods}|t=${row.target || ''}`;
+    });
+    const conflicts = Object.keys((catalog.mapped_route_conflicts && typeof catalog.mapped_route_conflicts === 'object')
+      ? catalog.mapped_route_conflicts
+      : {}).sort();
+    return `${fnRows.join('||')}###${gatewayRows.join('||')}###${conflicts.join('||')}`;
   }
 
-  function toVersionArray(value) {
-    if (Array.isArray(value)) return value;
-    if (!value || typeof value !== 'object') return [];
-    return Object.keys(value)
-      .sort()
-      .filter((k) => value[k] === true || typeof value[k] === 'string' || typeof value[k] === 'number');
+  clearCatalogAutoRefresh() {
+    if (this.catalogRefreshTimer) {
+      clearInterval(this.catalogRefreshTimer);
+      this.catalogRefreshTimer = null;
+    }
   }
 
-  function selectedMatches(runtime, name, version) {
-    const s = state.selected;
-    return s && s.runtime === runtime && s.name === name && (s.version || null) === (version || null);
+  syncCatalogAutoRefresh() {
+    this.clearCatalogAutoRefresh();
+    this.catalogRefreshTimer = setInterval(() => {
+      if (this.catalogRefreshInFlight) return;
+      if (document.visibilityState === 'hidden') return;
+      if (this.currentView !== 'functionList' && this.currentView !== 'gateway') return;
+      this.catalogRefreshInFlight = true;
+      this.loadFunctions({ refreshSelected: false, skipIfUnchanged: true })
+        .catch(() => {
+          // ignore transient refresh errors
+        })
+        .finally(() => {
+          this.catalogRefreshInFlight = false;
+        });
+    }, 2500);
   }
 
-  function filterMatch(name, version) {
-    const q = searchEl.value.trim().toLowerCase();
-    if (!q) return true;
-    return publicLabel(name, version).toLowerCase().includes(q);
+  syncMonitorAutoRefresh() {
+    this.clearMonitorAutoRefresh();
+    if (!this.currentFn || this.currentTab !== 'monitor') return;
+    const intervalSelect = document.getElementById('monitorRefreshInterval');
+    const seconds = Number(intervalSelect?.value || 0);
+    if (!Number.isFinite(seconds) || seconds <= 0) return;
+    this.monitorRefreshTimer = setInterval(() => {
+      if (this.currentTab === 'monitor' && this.currentFn) {
+        this.refreshMonitor().catch(() => {});
+      }
+    }, Math.round(seconds * 1000));
   }
 
-  function renderList() {
-    fnListEl.innerHTML = '';
-    if (!state.catalog) return;
+  eventKey() {
+    if (!this.currentFn) return '';
+    return `${this.currentFn.runtime}/${this.currentFn.name}@${this.currentFn.version || 'default'}`;
+  }
 
-    const runtimes = state.catalog.runtimes || {};
-    for (const runtime of Object.keys(runtimes).sort()) {
-      const rt = runtimes[runtime];
-      const wrap = document.createElement('div');
-      wrap.style.marginBottom = '12px';
+  cloneEnvValue(value) {
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      return value;
+    }
+  }
 
-      const up = !!(rt.health && rt.health.up);
-      const cls = up ? 'ok' : 'down';
-      wrap.innerHTML = `<div><span class="chip ${cls}">${runtime} ${up ? 'UP' : 'DOWN'}</span></div>`;
+  normalizeEnvEntry(raw) {
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      const hasValue = Object.prototype.hasOwnProperty.call(raw, 'value');
+      const hasSecret = Object.prototype.hasOwnProperty.call(raw, 'is_secret');
+      if (hasValue || hasSecret) {
+        return {
+          type: 'row',
+          value: hasValue && raw.value !== undefined && raw.value !== null ? String(raw.value) : '',
+          is_secret: raw.is_secret === true,
+        };
+      }
+      return { type: 'unsupported', value: this.cloneEnvValue(raw) };
+    }
+    if (raw === undefined || raw === null) return { type: 'row', value: '', is_secret: false };
+    if (typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean') {
+      return { type: 'row', value: String(raw), is_secret: false };
+    }
+    return { type: 'unsupported', value: this.cloneEnvValue(raw) };
+  }
 
-      for (const fn of toFunctionArray(rt.functions)) {
-        const rootGroup = (fn.policy && typeof fn.policy.group === 'string') ? fn.policy.group : '';
-        if (fn.has_default && filterMatch(fn.name, null)) {
-          const b = document.createElement('button');
-          b.innerHTML = `${esc(publicLabel(fn.name, null))}${rootGroup ? ` <small class="muted">(${esc(rootGroup)})</small>` : ''}`;
-          b.onclick = () => selectFn(runtime, fn.name, null);
-          if (selectedMatches(runtime, fn.name, null)) b.classList.add('active');
-          wrap.appendChild(b);
+  addEnvDictRow(entry = {}) {
+    const container = document.getElementById('envDictRows');
+    if (!container) return null;
+
+    const row = document.createElement('div');
+    row.className = 'env-dict-row';
+
+    const keyInput = document.createElement('input');
+    keyInput.type = 'text';
+    keyInput.className = 'env-key';
+    keyInput.placeholder = 'API_KEY';
+    keyInput.value = String(entry.key || '');
+    row.appendChild(keyInput);
+
+    const valueInput = document.createElement('input');
+    valueInput.type = 'text';
+    valueInput.className = 'env-value';
+    valueInput.placeholder = 'value';
+    valueInput.value = String(entry.value || '');
+    row.appendChild(valueInput);
+
+    const secretCell = document.createElement('div');
+    secretCell.className = 'env-secret-cell';
+    const secretToggle = document.createElement('input');
+    secretToggle.type = 'checkbox';
+    secretToggle.className = 'env-secret';
+    secretToggle.checked = entry.is_secret === true;
+    secretCell.appendChild(secretToggle);
+    row.appendChild(secretCell);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'btn btn-secondary btn-xs env-remove-btn';
+    removeBtn.textContent = 'X';
+    removeBtn.addEventListener('click', () => {
+      row.remove();
+      const hasRows = container.querySelectorAll('.env-dict-row').length > 0;
+      if (!hasRows) this.addEnvDictRow();
+      this.syncEnvJsonFromDict();
+    });
+    row.appendChild(removeBtn);
+
+    keyInput.addEventListener('input', () => this.syncEnvJsonFromDict());
+    valueInput.addEventListener('input', () => this.syncEnvJsonFromDict());
+    secretToggle.addEventListener('change', () => this.syncEnvJsonFromDict());
+
+    container.appendChild(row);
+    return row;
+  }
+
+  setEnvDictFromPayload(payload) {
+    const container = document.getElementById('envDictRows');
+    const envJson = document.getElementById('configEnvJson');
+    if (!container) {
+      if (envJson) envJson.value = stringifyPretty(payload || {});
+      return;
+    }
+
+    const source = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+    this.envUnsupportedEntries = {};
+    container.innerHTML = '';
+
+    const rows = [];
+    for (const key of Object.keys(source).sort()) {
+      const normalized = this.normalizeEnvEntry(source[key]);
+      if (normalized.type === 'row') {
+        rows.push({ key, value: normalized.value, is_secret: normalized.is_secret === true });
+      } else {
+        this.envUnsupportedEntries[key] = normalized.value;
+      }
+    }
+
+    if (rows.length === 0) rows.push({ key: '', value: '', is_secret: false });
+    for (const row of rows) this.addEnvDictRow(row);
+
+    if (envJson) envJson.value = stringifyPretty(source);
+    this.syncEnvJsonFromDict();
+  }
+
+  readEnvDictPayload(strict = false) {
+    const container = document.getElementById('envDictRows');
+    if (!container) return {};
+
+    const payload = this.cloneEnvValue(this.envUnsupportedEntries || {}) || {};
+    const seen = new Set();
+    const rows = Array.from(container.querySelectorAll('.env-dict-row'));
+    for (const row of rows) {
+      const keyInput = row.querySelector('.env-key');
+      const valueInput = row.querySelector('.env-value');
+      const secretToggle = row.querySelector('.env-secret');
+
+      const key = String(keyInput?.value || '').trim();
+      const value = String(valueInput?.value || '');
+      const isSecret = secretToggle?.checked === true;
+
+      if (!key) {
+        if (strict && value.trim() !== '') {
+          throw new Error('Environment key is required when value is set');
         }
-
-        for (const ver of toVersionArray(fn.versions)) {
-          if (!filterMatch(fn.name, ver)) continue;
-          const verPolicy = (fn.versions_policy && fn.versions_policy[ver] && typeof fn.versions_policy[ver].group === 'string')
-            ? fn.versions_policy[ver].group
-            : '';
-          const group = verPolicy || rootGroup;
-          const b = document.createElement('button');
-          b.innerHTML = `${esc(publicLabel(fn.name, ver))}${group ? ` <small class="muted">(${esc(group)})</small>` : ''}`;
-          b.onclick = () => selectFn(runtime, fn.name, ver);
-          if (selectedMatches(runtime, fn.name, ver)) b.classList.add('active');
-          wrap.appendChild(b);
-        }
+        continue;
       }
 
-      fnListEl.appendChild(wrap);
+      if (seen.has(key)) {
+        if (strict) throw new Error(`Duplicate environment key: ${key}`);
+        continue;
+      }
+      seen.add(key);
+      payload[key] = isSecret ? { value, is_secret: true } : value;
     }
-    renderHistory();
+
+    return payload;
   }
 
-  // Wizard logic is in openresty/console/wizard.js to keep this file manageable.
-
-  function routeTargetLabel(entry) {
-    if (!entry || !entry.runtime || !entry.fn_name) return 'unknown';
-    return `${entry.runtime}/${publicLabel(entry.fn_name, entry.version || null)}`;
+  syncEnvJsonFromDict() {
+    const envJson = document.getElementById('configEnvJson');
+    if (!envJson) return;
+    const payload = this.readEnvDictPayload(false);
+    envJson.value = stringifyPretty(payload);
   }
 
-  function routeFilterMatch(route, entry) {
-    const q = String((state.ui && state.ui.routeSearch) || '').trim().toLowerCase();
-    if (!q) return true;
-    const methods = Array.isArray(entry && entry.methods) ? entry.methods.join(',') : '';
-    const text = `${route} ${routeTargetLabel(entry)} ${methods}`.toLowerCase();
-    return text.includes(q);
+  applyEnvJsonToDict() {
+    const envJson = document.getElementById('configEnvJson');
+    const envStatus = document.getElementById('envStatus');
+    if (!envJson) return;
+    let payload;
+    try {
+      payload = JSON.parse(String(envJson.value || '{}'));
+    } catch {
+      throw new Error('Advanced JSON must be valid JSON');
+    }
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      throw new Error('Advanced JSON must be a JSON object');
+    }
+    this.setEnvDictFromPayload(payload);
+    if (envStatus) envStatus.textContent = 'JSON applied to dictionary editor.';
   }
 
-  function renderGateway() {
-    if (!gatewaySummaryEl || !routeTableBodyEl || !routeConflictsEl) return;
-    const mapped = (state.catalog && state.catalog.mapped_routes) || {};
-    const conflictsObj = (state.catalog && state.catalog.mapped_route_conflicts) || {};
-    const conflictRoutes = Object.keys(conflictsObj).sort();
+  getExecutionEntriesForCurrentFn() {
+    const key = this.eventKey();
+    if (!key) return [];
+    const entries = this.executionHistory[key];
+    return Array.isArray(entries) ? entries : [];
+  }
+
+  renderExecutionHistory() {
+    const summaryEl = document.getElementById('executionSummary');
+    const listEl = document.getElementById('executionList');
+    const filterEl = document.getElementById('executionFilter');
+    const searchEl = document.getElementById('executionSearch');
+    if (!summaryEl || !listEl) return;
+
+    const entries = this.getExecutionEntriesForCurrentFn();
+    const filterMode = String(filterEl?.value || 'all');
+    const searchNeedle = String(searchEl?.value || '').trim().toLowerCase();
+    if (!this.currentFn) {
+      summaryEl.textContent = 'Select a function to see execution history.';
+      listEl.innerHTML = '<div class="execution-item"><div class="execution-item-meta">No data.</div></div>';
+      return;
+    }
+
+    if (entries.length === 0) {
+      summaryEl.textContent = 'No executions yet.';
+      listEl.innerHTML = '<div class="execution-item"><div class="execution-item-meta">Run Test or Invoke to populate history.</div></div>';
+      return;
+    }
+
+    const filtered = entries.filter((entry) => {
+      if (!entry || typeof entry !== 'object') return false;
+      if (filterMode === 'ok' && entry.ok !== true) return false;
+      if (filterMode === 'fail' && entry.ok === true) return false;
+      if (filterMode === 'explorer' && entry.source !== 'explorer') return false;
+      if (filterMode === 'test' && entry.source !== 'test') return false;
+      if (!searchNeedle) return true;
+      const haystack = [
+        entry.method,
+        entry.route,
+        entry.source,
+        entry.timestamp,
+        String(entry.status ?? ''),
+        entry.preview,
+      ].join(' ').toLowerCase();
+      return haystack.includes(searchNeedle);
+    });
+
+    const okCount = filtered.filter((entry) => entry && entry.ok === true).length;
+    summaryEl.textContent = `${filtered.length}/${entries.length} execution(s). Success: ${okCount}, failed: ${filtered.length - okCount}.`;
+
+    if (filtered.length === 0) {
+      listEl.innerHTML = '<div class="execution-item"><div class="execution-item-meta">No executions match current filters.</div></div>';
+      return;
+    }
+
+    listEl.innerHTML = filtered.map((entry) => {
+      const cls = entry.ok ? 'ok' : 'fail';
+      const route = entry.route || '(auto)';
+      const preview = entry.preview ? `<div class="execution-item-meta"><code>${esc(entry.preview)}</code></div>` : '';
+      return `
+        <div class="execution-item ${cls}">
+          <div class="execution-item-head">
+            <span><strong>${esc(entry.method || 'GET')}</strong> ${esc(route)}</span>
+            <span>${esc(String(entry.status || 0))} • ${esc(String(entry.latency_ms || 0))} ms</span>
+          </div>
+          <div class="execution-item-meta">${esc(entry.timestamp || '')} • source: ${esc(entry.source || 'test')}</div>
+          ${preview}
+        </div>
+      `;
+    }).join('');
+  }
+
+  clearExecutionHistoryForCurrentFn() {
+    const key = this.eventKey();
+    if (!key) return;
+    delete this.executionHistory[key];
+    this.persistExecutionHistory();
+    this.renderExecutionHistory();
+  }
+
+  recordExecution(payload, response, elapsedMs, out) {
+    if (!this.currentFn) return;
+    const key = this.eventKey();
+    if (!key) return;
+    if (!Array.isArray(this.executionHistory[key])) this.executionHistory[key] = [];
+
+    const bodyValue = out && Object.prototype.hasOwnProperty.call(out, 'body') ? out.body : '';
+    let preview = '';
+    if (bodyValue !== undefined && bodyValue !== null) {
+      if (typeof bodyValue === 'string') {
+        preview = bodyValue;
+      } else {
+        try {
+          preview = JSON.stringify(bodyValue);
+        } catch {
+          preview = String(bodyValue);
+        }
+      }
+      if (preview.length > 180) preview = `${preview.slice(0, 180)}...`;
+    }
+
+    const explorerPanel = document.querySelector('[data-tab-panel="explorer"]');
+    const source = explorerPanel && explorerPanel.classList.contains('active') ? 'explorer' : 'test';
+    const entry = {
+      timestamp: new Date().toLocaleString(),
+      method: String(payload && payload.method ? payload.method : 'GET').toUpperCase(),
+      route: String((response && response.route) || (payload && payload.route) || '(auto)'),
+      status: Number(response && response.status ? response.status : 0),
+      latency_ms: Number((response && response.latency_ms) || elapsedMs || 0),
+      ok: Number(response && response.status ? response.status : 0) >= 200 && Number(response && response.status ? response.status : 0) < 300,
+      source,
+      preview,
+    };
+
+    this.executionHistory[key].unshift(entry);
+    if (this.executionHistory[key].length > EXEC_HISTORY_LIMIT_PER_FN) {
+      this.executionHistory[key] = this.executionHistory[key].slice(0, EXEC_HISTORY_LIMIT_PER_FN);
+    }
+
+    this.persistExecutionHistory();
+    this.renderExecutionHistory();
+  }
+
+  renderSavedEvents() {
+    const selectEl = document.getElementById('savedEventSelect');
+    if (!selectEl) return;
+    const key = this.eventKey();
+    const events = (key && this.savedEvents[key] && typeof this.savedEvents[key] === 'object') ? this.savedEvents[key] : {};
+    const names = Object.keys(events).sort();
+    selectEl.innerHTML = '';
+
+    const empty = document.createElement('option');
+    empty.value = '';
+    empty.textContent = names.length > 0 ? 'Select saved event' : 'No saved events';
+    selectEl.appendChild(empty);
+
+    for (const name of names) {
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      selectEl.appendChild(opt);
+    }
+  }
+
+  readTestEventObject() {
+    const raw = String(document.getElementById('testEventJson')?.value || '{}');
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      parsed = {};
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return {};
+    }
+    return parsed;
+  }
+
+  writeTestEventObject(obj) {
+    const event = (obj && typeof obj === 'object' && !Array.isArray(obj)) ? obj : {};
+    const testEvent = document.getElementById('testEventJson');
+    if (testEvent) testEvent.value = stringifyPretty(event);
+    this.applyCompatFromEvent(event);
+    this.syncInvokeEventEditor();
+  }
+
+  applyCompatFromEvent(event) {
+    const route = typeof event.route === 'string' && event.route.trim() !== ''
+      ? event.route.trim()
+      : (this.currentDetail?.metadata?.invoke?.route || '');
+    const params = (event.params && typeof event.params === 'object' && !Array.isArray(event.params))
+      ? event.params
+      : defaultParamsForRoute(route);
+    const query = (event.query && typeof event.query === 'object' && !Array.isArray(event.query))
+      ? event.query
+      : {};
+
+    const compatRoute = document.getElementById('invokeRoute');
+    const compatParams = document.getElementById('pathParams');
+    const compatHint = document.getElementById('invokeRouteHint');
+    const compatPreview = document.getElementById('invokeUrlPreview');
+    const compatQuery = document.getElementById('query');
+    if (compatRoute) compatRoute.value = route;
+    if (compatParams) {
+      const paramsText = stringifyPretty(params);
+      compatParams.value = paramsText;
+      compatParams.textContent = paramsText;
+    }
+    if (compatHint) {
+      const names = parseRouteParams(route).map((x) => x.name);
+      compatHint.textContent = names.length > 0 ? `Required path params: ${names.join(', ')}` : 'No path params required.';
+    }
+    if (compatPreview) compatPreview.textContent = renderRouteWithParams(route, params);
+    if (compatQuery) {
+      const hasQueryKeys = query && typeof query === 'object' && !Array.isArray(query) && Object.keys(query).length > 0;
+      compatQuery.value = hasQueryKeys ? stringifyPretty(query) : '';
+    }
+  }
+
+  syncTestEventFromCompatFields() {
+    const event = this.readTestEventObject();
+
+    const compatRoute = String(document.getElementById('invokeRoute')?.value || '').trim();
+    if (compatRoute) {
+      event.route = compatRoute;
+    }
+
+    const pathParamsRaw = String(document.getElementById('pathParams')?.value || '{}');
+    event.params = parseJsonObject(pathParamsRaw, 'path params');
+
+    const queryRaw = String(document.getElementById('query')?.value || '').trim();
+    event.query = queryRaw ? parseQueryInput(queryRaw) : {};
+
+    if (!event.method) {
+      const invokeMeta = this.currentDetail?.metadata?.invoke || {};
+      event.method = invokeMeta.default_method || 'GET';
+    }
+    if (event.body === undefined) event.body = '';
+    if (!event.context || typeof event.context !== 'object' || Array.isArray(event.context)) {
+      event.context = {};
+    }
+
+    this.writeTestEventObject(event);
+    return event;
+  }
+
+  saveCurrentEvent() {
+    const nameEl = document.getElementById('savedEventName');
+    const metaEl = document.getElementById('invokeMeta') || document.getElementById('testDetailsOutput');
+    if (!nameEl || !this.currentFn) return;
+
+    const eventName = String(nameEl.value || '').trim();
+    if (!eventName) {
+      throw new Error('saved event name is required');
+    }
+
+    this.syncTestEventFromCompatFields();
+    const currentEvent = this.readTestEventObject();
+
+    const payload = {
+      event_json: stringifyPretty(currentEvent),
+      route: String(currentEvent.route || this.currentDetail?.metadata?.invoke?.route || ''),
+      updated_at: new Date().toISOString(),
+    };
+
+    const key = this.eventKey();
+    if (!this.savedEvents[key] || typeof this.savedEvents[key] !== 'object') {
+      this.savedEvents[key] = {};
+    }
+    this.savedEvents[key][eventName] = payload;
+    this.persistSavedEvents();
+    this.renderSavedEvents();
+    if (metaEl) metaEl.textContent = `Saved test event: ${eventName}`;
+  }
+
+  loadSavedEvent() {
+    const selectEl = document.getElementById('savedEventSelect');
+    const testEventEl = document.getElementById('testEventJson');
+    if (!selectEl || !testEventEl || !this.currentFn) return;
+
+    const name = String(selectEl.value || '');
+    if (!name) return;
+
+    const key = this.eventKey();
+    const evt = this.savedEvents[key] && this.savedEvents[key][name];
+    if (!evt || typeof evt !== 'object') return;
+
+    testEventEl.value = String(evt.event_json || '{}');
+    this.applyCompatFromEvent(this.readTestEventObject());
+    this.syncInvokeEventEditor();
+  }
+
+  bindUi() {
+    const search = document.getElementById('globalSearch');
+    if (search) {
+      search.addEventListener('input', () => {
+        this.filterFunctions();
+        this.renderGatewayRoutes();
+      });
+    }
+
+    const localFilter = document.getElementById('fnListFilter');
+    if (localFilter) {
+      localFilter.addEventListener('input', () => this.filterFunctions());
+    }
+
+    const routeSearch = document.getElementById('routeSearch');
+    if (routeSearch) {
+      routeSearch.addEventListener('input', () => this.renderGatewayRoutes());
+    }
+
+    const executionFilter = document.getElementById('executionFilter');
+    const executionSearch = document.getElementById('executionSearch');
+    const clearExecutionBtn = document.getElementById('clearExecutionBtn');
+    if (executionFilter) executionFilter.addEventListener('change', () => this.renderExecutionHistory());
+    if (executionSearch) executionSearch.addEventListener('input', () => this.renderExecutionHistory());
+    if (clearExecutionBtn) {
+      clearExecutionBtn.addEventListener('click', () => this.clearExecutionHistoryForCurrentFn());
+    }
+
+    const monitorLogLines = document.getElementById('monitorLogLines');
+    const monitorLogMode = document.getElementById('monitorLogMode');
+    const monitorSearch = document.getElementById('monitorSearch');
+    const monitorRefreshInterval = document.getElementById('monitorRefreshInterval');
+    const triggerMonitorRefresh = () => {
+      if (this.currentTab === 'monitor' && this.currentFn) {
+        this.refreshMonitor().catch(() => {});
+      }
+    };
+    if (monitorLogLines) monitorLogLines.addEventListener('change', triggerMonitorRefresh);
+    if (monitorLogMode) monitorLogMode.addEventListener('change', triggerMonitorRefresh);
+    if (monitorSearch) monitorSearch.addEventListener('input', triggerMonitorRefresh);
+    if (monitorRefreshInterval) {
+      monitorRefreshInterval.addEventListener('change', () => {
+        this.syncMonitorAutoRefresh();
+        triggerMonitorRefresh();
+      });
+    }
+
+    const saveEventBtn = document.getElementById('saveEventBtn');
+    if (saveEventBtn) {
+      saveEventBtn.addEventListener('click', () => {
+        try {
+          this.saveCurrentEvent();
+        } catch (err) {
+          alert(err.message || String(err));
+        }
+      });
+    }
+
+    const loadEventBtn = document.getElementById('loadEventBtn');
+    if (loadEventBtn) {
+      loadEventBtn.addEventListener('click', () => this.loadSavedEvent());
+    }
+
+    const apiUsePrimaryBtn = document.getElementById('apiUsePrimaryBtn');
+    if (apiUsePrimaryBtn) {
+      apiUsePrimaryBtn.addEventListener('click', () => {
+        if (!this.apiPrimary) return;
+        this.applyApiRoute(this.apiPrimary.route, this.apiPrimary.method, false).catch((err) => {
+          alert(err.message || String(err));
+        });
+      });
+    }
+
+    const apiRunPrimaryBtn = document.getElementById('apiRunPrimaryBtn');
+    if (apiRunPrimaryBtn) {
+      apiRunPrimaryBtn.addEventListener('click', () => {
+        if (!this.apiPrimary) return;
+        this.applyApiRoute(this.apiPrimary.route, this.apiPrimary.method, true).catch((err) => {
+          alert(err.message || String(err));
+        });
+      });
+    }
+
+    const envAddRowBtn = document.getElementById('envAddRowBtn');
+    if (envAddRowBtn) {
+      envAddRowBtn.addEventListener('click', () => {
+        const row = this.addEnvDictRow();
+        this.syncEnvJsonFromDict();
+        const keyInput = row?.querySelector('.env-key');
+        if (keyInput) keyInput.focus();
+      });
+    }
+
+    const envApplyJsonBtn = document.getElementById('envApplyJsonBtn');
+    if (envApplyJsonBtn) {
+      envApplyJsonBtn.addEventListener('click', () => {
+        try {
+          this.applyEnvJsonToDict();
+        } catch (err) {
+          alert(err.message || String(err));
+        }
+      });
+    }
+
+    const aiModeAuto = document.getElementById('aiModeAuto');
+    if (aiModeAuto) aiModeAuto.addEventListener('click', () => this.setAiMode('auto'));
+    const aiModeChat = document.getElementById('aiModeChat');
+    if (aiModeChat) aiModeChat.addEventListener('click', () => this.setAiMode('chat'));
+    const aiModeEdit = document.getElementById('aiModeEdit');
+    if (aiModeEdit) aiModeEdit.addEventListener('click', () => this.setAiMode('edit'));
+    this.updateAiModeSwitch();
+
+    document.addEventListener('keydown', (ev) => {
+      if (ev.altKey && (ev.key === 's' || ev.key === 'S')) {
+        ev.preventDefault();
+        const input = document.getElementById('globalSearch');
+        if (input) input.focus();
+      }
+    });
+
+    const testEventEl = document.getElementById('testEventJson');
+    if (testEventEl) {
+      testEventEl.addEventListener('input', () => {
+        this.syncInvokeEventEditor();
+        this.applyCompatFromEvent(this.readTestEventObject());
+      });
+    }
+
+    const compatRoute = document.getElementById('invokeRoute');
+    if (compatRoute) {
+      compatRoute.addEventListener('input', () => {
+        const route = String(compatRoute.value || '').trim();
+        const params = defaultParamsForRoute(route);
+        const hint = document.getElementById('invokeRouteHint');
+        const preview = document.getElementById('invokeUrlPreview');
+        const pathParams = document.getElementById('pathParams');
+        if (hint) {
+          const names = parseRouteParams(route).map((x) => x.name);
+          hint.textContent = names.length > 0 ? `Required path params: ${names.join(', ')}` : 'No path params required.';
+        }
+        if (pathParams) {
+          const paramsText = stringifyPretty(params);
+          pathParams.value = paramsText;
+          pathParams.textContent = paramsText;
+        }
+        if (preview) preview.textContent = renderRouteWithParams(route, params);
+      });
+    }
+
+    const compatParams = document.getElementById('pathParams');
+    if (compatParams) {
+      compatParams.addEventListener('input', () => {
+        const route = String(document.getElementById('invokeRoute')?.value || '');
+        const preview = document.getElementById('invokeUrlPreview');
+        try {
+          const params = parseJsonObject(compatParams.value || '{}', 'path params');
+          if (preview) preview.textContent = renderRouteWithParams(route, params);
+        } catch {
+          if (preview) preview.textContent = 'Invalid path params JSON';
+        }
+      });
+    }
+  }
+
+  bindWizard() {
+    initWizard({
+      state: this.wizardState,
+      loadCatalog: async () => {
+        await this.loadFunctions({ refreshSelected: true });
+      },
+      selectFn: async (runtime, name, version) => {
+        await this.openFunction(name, runtime, version, { activateTab: 'code' });
+      },
+    });
+  }
+
+  parseInitialRoute() {
+    const path = window.location.pathname || '/console/';
+    if (path === '/console/gateway') {
+      return { view: 'gateway' };
+    }
+    if (path === '/console/wizard') {
+      return { view: 'wizard' };
+    }
+
+    const decodePart = (raw) => {
+      try {
+        return decodeURIComponent(String(raw || ''));
+      } catch {
+        return String(raw || '');
+      }
+    };
+    const splitNameVersion = (raw) => {
+      const token = String(raw || '');
+      const at = token.lastIndexOf('@');
+      if (at <= 0) return { name: decodePart(token), version: null };
+      return {
+        name: decodePart(token.slice(0, at)),
+        version: decodePart(token.slice(at + 1)) || null,
+      };
+    };
+
+    const m1 = path.match(/^\/console\/functions\/([^/]+)\/([^/]+)$/);
+    if (m1) {
+      const nv = splitNameVersion(m1[2]);
+      return {
+        view: 'function',
+        runtime: decodePart(m1[1]),
+        name: nv.name,
+        version: nv.version,
+      };
+    }
+
+    const m2 = path.match(/^\/console\/functions\/([^/]+)$/);
+    if (m2) {
+      const nv = splitNameVersion(m2[1]);
+      return {
+        view: 'function',
+        runtime: null,
+        name: nv.name,
+        version: nv.version,
+      };
+    }
+
+    return { view: 'list' };
+  }
+
+  renderConsoleIdentity() {
+    const regionEl = document.getElementById('consoleRegion');
+    const userEl = document.getElementById('consoleUser');
+    const hostLabel = String(window.location.host || '').trim() || 'localhost:8080';
+    if (regionEl) regionEl.textContent = hostLabel;
+
+    let userLabel = 'local';
+    const state = this.uiState;
+    if (state && typeof state.current_user === 'string' && state.current_user.trim() !== '') {
+      userLabel = state.current_user.trim();
+    } else if (state && state.login_enabled === true) {
+      userLabel = 'authenticated';
+    }
+    if (userEl) userEl.textContent = userLabel;
+  }
+
+  async loadUiState() {
+    try {
+      this.uiState = await getJson('/_fn/ui-state');
+    } catch {
+      this.uiState = null;
+    }
+    this.renderConsoleIdentity();
+  }
+
+  async init() {
+    this.bindUi();
+    this.bindWizard();
+
+    const route = this.parseInitialRoute();
+    await this.loadUiState();
+    await this.loadFunctions({ refreshSelected: false });
+    this.syncCatalogAutoRefresh();
+
+    if (route.view === 'gateway') {
+      this.showGateway(false);
+      return;
+    }
+
+    if (route.view === 'wizard') {
+      this.showWizard(false);
+      return;
+    }
+
+    if (route.view === 'function') {
+      await this.openFunction(route.name, route.runtime, route.version, { pushUrl: false });
+      return;
+    }
+
+    this.showFunctionList(false);
+  }
+
+  setSidebarActive(navId) {
+    ['navFunctions', 'navGateway', 'navWizard', 'navDashboard'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('active');
+    });
+    const target = document.getElementById(navId);
+    if (target) target.classList.add('active');
+  }
+
+  updateViewVisibility() {
+    const list = document.getElementById('functionListView');
+    const gateway = document.getElementById('gatewayView');
+    const wizard = document.getElementById('wizardView');
+    const detail = document.getElementById('functionDetailView');
+    const crumb = document.getElementById('breadcrumbFnName');
+
+    if (this.currentView === 'functionList') {
+      if (list) list.style.display = 'block';
+      if (gateway) gateway.style.display = 'none';
+      if (wizard) wizard.style.display = 'none';
+      if (detail) detail.style.display = 'none';
+      if (crumb) crumb.style.display = 'none';
+      this.setSidebarActive('navFunctions');
+      return;
+    }
+
+    if (this.currentView === 'gateway') {
+      if (list) list.style.display = 'none';
+      if (gateway) gateway.style.display = 'block';
+      if (wizard) wizard.style.display = 'none';
+      if (detail) detail.style.display = 'none';
+      if (crumb) {
+        crumb.style.display = 'inline';
+        crumb.textContent = 'Gateway Routes';
+      }
+      this.setSidebarActive('navGateway');
+      return;
+    }
+
+    if (this.currentView === 'wizard') {
+      if (list) list.style.display = 'none';
+      if (gateway) gateway.style.display = 'none';
+      if (wizard) wizard.style.display = 'block';
+      if (detail) detail.style.display = 'none';
+      if (crumb) {
+        crumb.style.display = 'inline';
+        crumb.textContent = 'Wizard';
+      }
+      this.setSidebarActive('navWizard');
+      return;
+    }
+
+    if (list) list.style.display = 'none';
+    if (gateway) gateway.style.display = 'none';
+    if (wizard) wizard.style.display = 'none';
+    if (detail) detail.style.display = 'block';
+    if (crumb) {
+      crumb.style.display = 'inline';
+      const label = this.currentFn ? `${this.currentFn.runtime}/${this.currentFn.name}${this.currentFn.version ? `@${this.currentFn.version}` : ''}` : 'Select a function';
+      crumb.textContent = label;
+    }
+    this.setSidebarActive('navFunctions');
+  }
+
+  showFunctionList(pushUrl = true) {
+    this.currentView = 'functionList';
+    this.updateViewVisibility();
+    if (pushUrl) history.pushState({}, '', '/console/');
+  }
+
+  showGateway(pushUrl = true) {
+    this.currentView = 'gateway';
+    this.updateViewVisibility();
+    this.renderGatewayRoutes();
+    if (pushUrl) history.pushState({}, '', '/console/gateway');
+  }
+
+  showWizard(pushUrl = true) {
+    this.currentView = 'wizard';
+    this.updateViewVisibility();
+    if (pushUrl) history.pushState({}, '', '/console/wizard');
+  }
+
+  setCompatExplorerActive(active) {
+    const panel = document.querySelector('[data-tab-panel="explorer"]');
+    if (panel) panel.classList.toggle('active', active === true);
+    const btn = document.querySelector('[data-tab-btn="explorer"]');
+    if (btn) btn.classList.toggle('active', active === true);
+  }
+
+  showCompatExplorer() {
+    this.currentView = 'functionDetail';
+    this.updateViewVisibility();
+    this.switchTab('test');
+    this.setCompatExplorerActive(true);
+  }
+
+  switchTab(tabName) {
+    const rawTab = String(tabName || '').trim().toLowerCase();
+    const normalizedTab = rawTab === 'swagger' ? 'api' : rawTab;
+    const tab = DEFAULT_TABS.has(normalizedTab) ? normalizedTab : 'code';
+    this.currentTab = tab;
+
+    document.querySelectorAll('.tab-btn').forEach((btn) => {
+      btn.classList.toggle('active', btn.getAttribute('data-tab') === tab);
+    });
+
+    document.querySelectorAll('.tab-content').forEach((panel) => {
+      panel.classList.toggle('active', panel.id === `tab-${tab}`);
+    });
+
+    if (tab === 'monitor') {
+      this.syncMonitorAutoRefresh();
+      this.refreshMonitor().catch((err) => {
+        const logs = document.getElementById('monitorLogs');
+        if (logs) logs.textContent = String(err && err.message ? err.message : err);
+      });
+    } else {
+      this.clearMonitorAutoRefresh();
+    }
+  }
+
+  flattenRowsFromCatalog(catalog) {
+    const rows = [];
+    if (!catalog || !catalog.runtimes) return rows;
+
+    const mapped = catalog.mapped_routes || {};
+
+    const mappedRoutesFor = (runtime, name, version) => {
+      const routes = [];
+      for (const route of Object.keys(mapped).sort()) {
+        let entries = mapped[route];
+        if (entries && typeof entries === 'object' && !Array.isArray(entries) && entries.runtime) {
+          entries = [entries];
+        }
+        if (!Array.isArray(entries)) continue;
+        for (const entry of entries) {
+          if (!entry || typeof entry !== 'object') continue;
+          if (entry.runtime !== runtime) continue;
+          if (entry.fn_name !== name) continue;
+          if ((entry.version || null) !== (version || null)) continue;
+          routes.push(route);
+          break;
+        }
+      }
+      return routes;
+    };
+
+    for (const runtime of Object.keys(catalog.runtimes).sort()) {
+      const rt = catalog.runtimes[runtime];
+      const fns = toFunctionArray(rt.functions);
+      for (const fn of fns) {
+        if (fn.has_default) {
+          const routes = mappedRoutesFor(runtime, fn.name, null);
+          rows.push({
+            runtime,
+            name: fn.name,
+            version: null,
+            methods: Array.isArray(fn.policy?.methods) ? fn.policy.methods : ['GET'],
+            routes,
+          });
+        }
+
+        for (const version of toVersionArray(fn.versions)) {
+          const vp = fn.versions_policy && fn.versions_policy[version];
+          const routes = mappedRoutesFor(runtime, fn.name, version);
+          rows.push({
+            runtime,
+            name: fn.name,
+            version,
+            methods: Array.isArray(vp?.methods) ? vp.methods : (Array.isArray(fn.policy?.methods) ? fn.policy.methods : ['GET']),
+            routes,
+          });
+        }
+      }
+    }
+
+    rows.sort((a, b) => {
+      const ar = `${a.runtime}/${a.name}@${a.version || 'default'}`;
+      const br = `${b.runtime}/${b.name}@${b.version || 'default'}`;
+      return ar.localeCompare(br);
+    });
+
+    return rows;
+  }
+
+  flattenGatewayRows(catalog) {
+    const rows = [];
+    const mapped = (catalog && catalog.mapped_routes) || {};
+    for (const route of Object.keys(mapped).sort()) {
+      for (const entry of normalizeMappedEntries(mapped[route])) {
+        if (!entry || typeof entry !== 'object') continue;
+        const runtime = String(entry.runtime || '').trim();
+        const name = String(entry.fn_name || '').trim();
+        if (!runtime || !name) continue;
+        rows.push({
+          route,
+          runtime,
+          name,
+          version: entry.version || null,
+          methods: Array.isArray(entry.methods) ? entry.methods : [],
+          target: typeof entry.target === 'string' ? entry.target : '',
+          proxyHint: (typeof entry.target === 'string' && /edge|proxy/i.test(entry.target)) ? 'edge/proxy' : '',
+        });
+      }
+    }
+    return rows;
+  }
+
+  renderGatewayRoutes() {
+    const summaryEl = document.getElementById('gatewaySummary');
+    const tbody = document.getElementById('routeTableBody');
+    const conflictsEl = document.getElementById('routeConflicts');
+    if (!summaryEl || !tbody || !conflictsEl) return;
+
+    const mapped = (this.catalog && this.catalog.mapped_routes) || {};
     const allRoutes = Object.keys(mapped).sort();
-    const visibleRoutes = allRoutes.filter((route) => routeFilterMatch(route, mapped[route]));
+    const q = String(document.getElementById('routeSearch')?.value || '').trim().toLowerCase();
 
-    gatewaySummaryEl.textContent = `Mapped routes: ${allRoutes.length} | visible: ${visibleRoutes.length} | conflicts: ${conflictRoutes.length}`;
-    routeTableBodyEl.innerHTML = '';
+    const rows = (this.gatewayRows || []).filter((row) => {
+      if (!q) return true;
+      const text = `${row.route} ${row.runtime} ${row.name} ${row.version || ''} ${row.target} ${(row.methods || []).join(',')} ${row.proxyHint}`.toLowerCase();
+      return text.includes(q);
+    });
 
-    if (visibleRoutes.length === 0) {
+    const conflictsObj = (this.catalog && this.catalog.mapped_route_conflicts) || {};
+    const conflictRoutes = Object.keys(conflictsObj).sort();
+
+    summaryEl.textContent = `Mapped routes: ${allRoutes.length} | visible: ${rows.length} | conflicts: ${conflictRoutes.length}`;
+    tbody.innerHTML = '';
+
+    if (rows.length === 0) {
       const tr = document.createElement('tr');
       const td = document.createElement('td');
       td.colSpan = 4;
-      td.className = 'muted';
       td.textContent = allRoutes.length === 0 ? 'No mapped routes configured.' : 'No mapped routes match the filter.';
       tr.appendChild(td);
-      routeTableBodyEl.appendChild(tr);
+      tbody.appendChild(tr);
     } else {
-      for (const route of visibleRoutes) {
-        const entry = mapped[route] || {};
+      for (const row of rows) {
         const tr = document.createElement('tr');
 
         const routeTd = document.createElement('td');
-        routeTd.innerHTML = `<code>${esc(route)}</code>`;
+        routeTd.innerHTML = `<code>${esc(row.route)}</code>`;
         tr.appendChild(routeTd);
 
         const targetTd = document.createElement('td');
-        targetTd.textContent = routeTargetLabel(entry);
+        const label = row.target || `${row.runtime}/${publicLabel(row.name, row.version || null)}`;
+        targetTd.innerHTML = `<span class="badge">${esc(row.runtime || 'unknown')}</span> <code>${esc(label)}</code>`;
         tr.appendChild(targetTd);
 
         const methodsTd = document.createElement('td');
-        methodsTd.textContent = listText(entry.methods || []);
+        const methodsText = Array.isArray(row.methods) && row.methods.length > 0 ? row.methods.join(',') : 'GET';
+        methodsTd.textContent = row.proxyHint ? `${methodsText} | ${row.proxyHint}` : methodsText;
         tr.appendChild(methodsTd);
 
-        const openTd = document.createElement('td');
-        openTd.className = 'gateway-actions';
+        const actionsTd = document.createElement('td');
         const openBtn = document.createElement('button');
-        openBtn.className = 'btn secondary';
+        openBtn.className = 'btn btn-xs btn-secondary';
         openBtn.textContent = 'Open';
-        if (entry.runtime && entry.fn_name) {
-          openBtn.onclick = () => {
-            selectFn(entry.runtime, entry.fn_name, entry.version || null).catch((err) => {
-              metaEl.textContent = `Error: ${err.message}`;
-            });
-          };
-        } else {
-          openBtn.disabled = true;
-        }
-        openTd.appendChild(openBtn);
+        openBtn.disabled = !(row.runtime && row.name);
+        openBtn.addEventListener('click', () => {
+          this.openMappedRoute(row).catch((err) => alert(err.message || String(err)));
+        });
+        actionsTd.appendChild(openBtn);
+        tr.appendChild(actionsTd);
 
-        const editBtn = document.createElement('button');
-        editBtn.className = 'btn secondary';
-        editBtn.textContent = 'Edit mapping';
-        editBtn.style.marginLeft = '6px';
-        editBtn.setAttribute('data-gateway-edit', route);
-        if (entry.runtime && entry.fn_name) {
-          editBtn.onclick = () => {
-            selectFn(entry.runtime, entry.fn_name, entry.version || null, { activateTab: 'configuration' }).catch((err) => {
-              metaEl.textContent = `Error: ${err.message}`;
-            });
-          };
-        } else {
-          editBtn.disabled = true;
-        }
-        openTd.appendChild(editBtn);
-        tr.appendChild(openTd);
-
-        routeTableBodyEl.appendChild(tr);
+        tbody.appendChild(tr);
       }
     }
 
     if (conflictRoutes.length === 0) {
-      routeConflictsEl.textContent = 'No conflicts.';
+      conflictsEl.textContent = 'No conflicts.';
     } else {
-      routeConflictsEl.innerHTML = conflictRoutes.map((r) => `<div><code>${esc(r)}</code></div>`).join('');
+      conflictsEl.innerHTML = conflictRoutes.map((route) => `<div><code>${esc(route)}</code></div>`).join('');
     }
   }
 
-  async function selectFn(runtime, name, version, opts = {}) {
-    if (!selectedMatches(runtime, name, version || null)) {
-      saveCurrentInvokeDraft();
-    }
-    state.selected = selectionRecord(runtime, name, version || null);
-    savePersistedState();
-    if (!opts.skipUrlSync) {
-      syncUrl({ replace: opts.replaceUrl === true });
-    }
-    if (opts.activateTab) {
-      activateTab(opts.activateTab, { replaceUrl: true });
-    }
-    renderList();
+  renderFunctionList(rows) {
+    const tbody = document.getElementById('fnTableBody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
 
-    const q = new URLSearchParams({ runtime, name });
-    if (version) q.set('version', version);
+    if (!rows || rows.length === 0) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td colspan="4">No functions discovered.</td>';
+      tbody.appendChild(tr);
+      return;
+    }
+
+    for (const row of rows) {
+      const tr = document.createElement('tr');
+
+      const tdName = document.createElement('td');
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-xs btn-secondary';
+      btn.style.border = 'none';
+      btn.style.background = 'transparent';
+      btn.style.padding = '0';
+      btn.style.color = '#0073bb';
+      btn.style.fontWeight = '700';
+      btn.style.cursor = 'pointer';
+      btn.textContent = `${row.name}${row.version ? `@${row.version}` : ''}`;
+      btn.addEventListener('click', () => {
+        this.openFunction(row.name, row.runtime, row.version).catch((err) => alert(err.message || String(err)));
+      });
+      tdName.appendChild(btn);
+      tr.appendChild(tdName);
+
+      const tdRt = document.createElement('td');
+      tdRt.innerHTML = `<span class="badge">${esc(row.runtime)}</span>`;
+      tr.appendChild(tdRt);
+
+      const tdMethod = document.createElement('td');
+      tdMethod.textContent = (row.methods && row.methods.length > 0) ? row.methods.join(',') : 'GET';
+      tr.appendChild(tdMethod);
+
+      const tdAction = document.createElement('td');
+      tdAction.className = 'actions-cell';
+      const openBtn = document.createElement('button');
+      openBtn.className = 'btn btn-xs btn-secondary';
+      openBtn.textContent = 'View';
+      openBtn.addEventListener('click', () => {
+        this.openFunction(row.name, row.runtime, row.version).catch((err) => alert(err.message || String(err)));
+      });
+      tdAction.appendChild(openBtn);
+      tr.appendChild(tdAction);
+
+      tbody.appendChild(tr);
+    }
+  }
+
+  filterFunctions() {
+    const local = String(document.getElementById('fnListFilter')?.value || '').trim().toLowerCase();
+    const global = String(document.getElementById('globalSearch')?.value || '').trim().toLowerCase();
+    const query = `${local} ${global}`.trim();
+
+    if (!query) {
+      this.renderFunctionList(this.functionRows);
+      return;
+    }
+
+    const filtered = this.functionRows.filter((row) => {
+      const label = `${row.runtime} ${row.name} ${row.version || ''} ${(row.methods || []).join(' ')} ${(row.routes || []).join(' ')}`.toLowerCase();
+      return label.includes(query);
+    });
+    this.renderFunctionList(filtered);
+  }
+
+  async loadFunctions(opts = {}) {
+    const nextCatalog = await getJson('/_fn/catalog');
+    const nextFingerprint = this.buildCatalogFingerprint(nextCatalog);
+    const changed = nextFingerprint !== this.lastCatalogFingerprint;
+    if (opts.skipIfUnchanged && !changed) {
+      return false;
+    }
+    this.catalog = nextCatalog;
+    this.lastCatalogFingerprint = nextFingerprint;
+    this.functionRows = this.flattenRowsFromCatalog(this.catalog);
+    this.gatewayRows = this.flattenGatewayRows(this.catalog);
+    this.filterFunctions();
+    this.renderGatewayRoutes();
+
+    if (opts.refreshSelected && this.currentFn) {
+      const exists = this.functionRows.some((row) => (
+        row.runtime === this.currentFn.runtime
+        && row.name === this.currentFn.name
+        && (row.version || null) === (this.currentFn.version || null)
+      ));
+      if (exists) {
+        await this.openFunction(this.currentFn.name, this.currentFn.runtime, this.currentFn.version, {
+          pushUrl: false,
+          activateTab: this.currentTab,
+        });
+      }
+    }
+    return changed;
+  }
+
+  resolveFunctionRef(name, runtime, version) {
+    if (runtime) {
+      return this.functionRows.find((row) => (
+        row.runtime === runtime
+        && row.name === name
+        && (row.version || null) === (version || null)
+      ));
+    }
+
+    if (version) {
+      return this.functionRows.find((row) => row.name === name && (row.version || null) === (version || null));
+    }
+
+    return this.functionRows.find((row) => row.name === name) || null;
+  }
+
+  buildFunctionUrl(runtime, name, version) {
+    return `/console/functions/${encodeURIComponent(runtime)}/${encodeURIComponent(name)}${version ? `@${encodeURIComponent(version)}` : ''}`;
+  }
+
+  async openMappedRoute(row) {
+    if (!row || !row.runtime || !row.name) return;
+    this.currentGatewayRoute = String(row.route || '');
+    await this.openFunction(row.name, row.runtime, row.version || null, { activateTab: 'test', preserveGatewayRoute: true });
+    if (this.currentGatewayRoute) {
+      const event = this.readTestEventObject();
+      event.route = this.currentGatewayRoute;
+      event.params = defaultParamsForRoute(this.currentGatewayRoute);
+      if (!event.query || typeof event.query !== 'object' || Array.isArray(event.query)) event.query = {};
+      this.writeTestEventObject(event);
+    }
+    this.showCompatExplorer();
+  }
+
+  async openFunction(name, runtime = null, version = null, opts = {}) {
+    const ref = this.resolveFunctionRef(name, runtime, version);
+    if (!ref) {
+      throw new Error(`Function not found: ${runtime ? `${runtime}/` : ''}${name}${version ? `@${version}` : ''}`);
+    }
+
+    this.currentFn = {
+      runtime: ref.runtime,
+      name: ref.name,
+      version: ref.version || null,
+    };
+    if (!opts.preserveGatewayRoute) this.currentGatewayRoute = null;
+    this.currentView = 'functionDetail';
+
+    const fnLabel = `${ref.name}${ref.version ? `@${ref.version}` : ''}`;
+    const detailName = document.getElementById('detailFnName');
+    const crumb = document.getElementById('breadcrumbFnName');
+    const status = document.getElementById('detailStatus');
+    const runtimeBadge = document.getElementById('detailRuntime');
+
+    if (detailName) detailName.textContent = fnLabel;
+    if (crumb) crumb.textContent = `${ref.runtime}/${fnLabel}`;
+    if (status) status.textContent = 'Loading...';
+    if (runtimeBadge) runtimeBadge.textContent = ref.runtime;
+
+    this.updateViewVisibility();
+    this.setCompatExplorerActive(false);
+
+    const q = new URLSearchParams({
+      runtime: ref.runtime,
+      name: ref.name,
+      include_code: '1',
+    });
+    if (ref.version) q.set('version', ref.version);
 
     const detail = await getJson(`/_fn/function?${q.toString()}`);
-    const p = detail.policy || {};
-    const meta = (detail.metadata && typeof detail.metadata === 'object') ? detail.metadata : {};
-    const responseMeta = (meta.response && typeof meta.response === 'object') ? meta.response : {};
-    const envMeta = (meta.env && typeof meta.env === 'object') ? meta.env : {};
-    const pyReq = (meta.python && meta.python.requirements && typeof meta.python.requirements === 'object')
-      ? meta.python.requirements
-      : {};
-    const endpointsMeta = (meta.endpoints && typeof meta.endpoints === 'object') ? meta.endpoints : {};
-    const nodeMeta = (meta.node && typeof meta.node === 'object') ? meta.node : {};
-    const phpMeta = (meta.php && typeof meta.php === 'object') ? meta.php : {};
-    const rustMeta = (meta.rust && typeof meta.rust === 'object') ? meta.rust : {};
-    const invoke = (meta.invoke && typeof meta.invoke === 'object') ? meta.invoke : {};
-    const scheduleMeta = (meta.schedule && typeof meta.schedule === 'object') ? meta.schedule : {};
-    const scheduleCfg = (scheduleMeta.configured && typeof scheduleMeta.configured === 'object') ? scheduleMeta.configured : {};
-    const scheduleState = (scheduleMeta.state && typeof scheduleMeta.state === 'object') ? scheduleMeta.state : {};
-    const sharedDepsMeta = (meta.shared_deps && typeof meta.shared_deps === 'object') ? meta.shared_deps : {};
+    this.currentDetail = detail;
 
-    cfgTimeoutEl.value = p.timeout_ms ?? '';
-    cfgConcEl.value = p.max_concurrency ?? '';
-    cfgBodyEl.value = p.max_body_bytes ?? '';
-    if (cfgGroupEl) cfgGroupEl.value = (typeof meta.group === 'string') ? meta.group : '';
-    cfgDebugHeadersEl.checked = !!responseMeta.effective_include_debug_headers;
-    setConfigMethods(Array.isArray(p.methods) && p.methods.length > 0 ? p.methods : ['GET']);
-    cfgRoutesEl.value = Array.isArray(invoke.mapped_routes) ? invoke.mapped_routes.join('\n') : '';
-    if (cfgSharedDepsEl) {
-      const configured = Array.isArray(sharedDepsMeta.configured) ? sharedDepsMeta.configured : [];
-      cfgSharedDepsEl.value = configured.join('\n');
-    }
-
-    const edge = (p.edge && typeof p.edge === 'object') ? p.edge : {};
-    if (edgeBaseUrlEl) edgeBaseUrlEl.value = typeof edge.base_url === 'string' ? edge.base_url : '';
-    if (edgeAllowPrivateEl) edgeAllowPrivateEl.checked = edge.allow_private === true;
-    if (edgeMaxRespEl) edgeMaxRespEl.value = edge.max_response_bytes ?? '';
-    if (edgeAllowHostsEl) edgeAllowHostsEl.value = Array.isArray(edge.allow_hosts) ? edge.allow_hosts.join('\n') : '';
-    envEditorEl.value = asJson(detail.fn_env || {});
-    envStatusEl.textContent = '';
-    if (schedStatusEl) schedStatusEl.textContent = '';
-
-    const policyMethods = (p && Array.isArray(p.methods) && p.methods.length > 0) ? p.methods : null;
-    const methods = policyMethods || (Array.isArray(invoke.methods) ? invoke.methods : ['GET']);
-    const defaultMethod = (policyMethods && policyMethods[0]) || invoke.default_method || methods[0] || 'GET';
-    const invokeDefaults = {
-      methods,
-      defaultMethod,
-      queryRaw: asJson(invoke.query_example || {}),
-      bodyRaw: typeof invoke.body_example === 'string' ? invoke.body_example : '',
+    this.handlerFile = String(detail.metadata?.handler_file || detail.file_path?.split('/').pop() || 'handler.js');
+    this.fileContents = {
+      [this.handlerFile]: String(detail.code || ''),
+      'fn.config.json': stringifyPretty({
+        policy: detail.policy || {},
+        metadata: detail.metadata || {},
+      }),
+      'fn.env.json': stringifyPretty(detail.fn_env || {}),
     };
-    if (!applyInvokeDraft(runtime, name, version || null, invokeDefaults)) {
-      ensureMethodOptions(methods, defaultMethod);
-      queryEl.value = invokeDefaults.queryRaw;
-      contextEl.value = '';
-      bodyEl.value = invokeDefaults.bodyRaw;
+
+    this.currentFile = this.handlerFile;
+    this.renderFileTree();
+    this.renderEditor();
+    this.fillConfigForm(detail);
+    this.fillDefaultTestEvent(detail);
+    this.updateApiGuide(detail);
+    this.renderSavedEvents();
+    this.renderExecutionHistory();
+    this.renderAiHistory();
+
+    if (runtimeBadge) runtimeBadge.textContent = `${detail.runtime}${detail.version ? `@${detail.version}` : ''}`;
+    if (status) status.textContent = 'Active';
+
+    const desiredTab = DEFAULT_TABS.has(opts.activateTab) ? opts.activateTab : (this.currentTab || 'code');
+    this.switchTab(desiredTab);
+
+    if (opts.pushUrl !== false) {
+      history.pushState({}, '', this.buildFunctionUrl(ref.runtime, ref.name, ref.version));
     }
-
-    const fallbackRoute = `/fn/${name}${version ? `@${version}` : ''}`;
-    const publicRoutes = (Array.isArray(endpointsMeta.public_routes) && endpointsMeta.public_routes.length > 0)
-      ? endpointsMeta.public_routes
-      : [endpointsMeta.public_route || fallbackRoute];
-    const publicUrls = (Array.isArray(endpointsMeta.public_urls) && endpointsMeta.public_urls.length > 0)
-      ? endpointsMeta.public_urls
-      : publicRoutes.map((r) => `${window.location.origin}${r}`);
-    const preferredUrl = endpointsMeta.preferred_public_url || publicUrls[0] || `${window.location.origin}${fallbackRoute}`;
-    const publicUrlsHtml = publicUrls.map((u) => `<div>${esc(u)}</div>`).join('');
-
-    const showDebug = !!responseMeta.effective_include_debug_headers;
-    const advancedHtml = showDebug ? `
-      <div class="grid" style="margin-top:10px;">
-        <div><label>Debug Headers (effective)</label><div>${esc(yesNo(responseMeta.effective_include_debug_headers))}</div></div>
-        <div><label>Function Env Keys</label><div>${esc(listText(envMeta.keys))}</div></div>
-      </div>
-      <div class="grid" style="margin-top:10px;">
-        <div><label>Python Inline Requirements</label><div>${esc(listText(pyReq.inline))}</div></div>
-        <div><label>requirements.txt</label><div>${esc(yesNo(pyReq.file_exists))} (${esc(listText(pyReq.file_entries))})</div></div>
-        <div><label>Node package.json</label><div>${esc(yesNo(nodeMeta.package_json_exists))} ${nodeMeta.package_name ? `(${esc(nodeMeta.package_name)})` : ''}</div></div>
-      </div>
-      <div class="grid" style="margin-top:10px;">
-        <div><label>Node lock</label><div>${esc(nodeMeta.lock_file || 'none')}</div></div>
-        <div><label>Node dependencies</label><div>${esc(listText(nodeMeta.dependencies))}</div></div>
-        <div><label>Node devDependencies</label><div>${esc(listText(nodeMeta.dev_dependencies))}</div></div>
-      </div>
-      <div class="grid" style="margin-top:10px;">
-        <div><label>PHP composer.json</label><div>${esc(yesNo(phpMeta.composer_json_exists))}</div></div>
-        <div><label>PHP composer.lock</label><div>${esc(yesNo(phpMeta.composer_lock_exists))}</div></div>
-        <div><label>PHP dependencies</label><div>${esc(listText(phpMeta.dependencies))}</div></div>
-      </div>
-      <div class="grid" style="margin-top:10px;">
-        <div><label>Rust Cargo.toml</label><div>${esc(yesNo(rustMeta.cargo_toml_exists))}</div></div>
-        <div><label>Rust Cargo.lock</label><div>${esc(yesNo(rustMeta.cargo_lock_exists))}</div></div>
-        <div><label>Rust dependencies</label><div>${esc(listText(rustMeta.dependencies))}</div></div>
-      </div>
-    ` : `
-      <div class="muted" style="margin-top:8px;">Advanced details hidden (enable include_debug_headers).</div>
-      <div class="muted" style="margin-top:4px;">Function Env Keys: ${esc(listText(envMeta.keys))}</div>
-    `;
-
-    detailsEl.innerHTML = `
-      <div class="grid">
-        <div><label>Function Route</label><div>${esc(fallbackRoute)}</div></div>
-        <div><label>Preferred URL</label><div>${esc(preferredUrl)}</div></div>
-        <div><label>Runtime</label><div>${esc(detail.runtime)}</div></div>
-        <div><label>Version</label><div>${esc(detail.version || 'default')}</div></div>
-        <div><label>Timeout (ms)</label><div>${esc(p.timeout_ms)}</div></div>
-        <div><label>Max Concurrency</label><div>${esc(p.max_concurrency)}</div></div>
-        <div><label>Max Body (bytes)</label><div>${esc(p.max_body_bytes)}</div></div>
-      </div>
-      <div style="margin-top:8px;">
-        <label>Public URLs</label>
-        ${publicUrlsHtml}
-      </div>
-      <div class="muted" style="margin-top:8px;">${esc(detail.file_path)}</div>
-      <div class="muted" style="margin-top:8px;">Secret env values are masked as &lt;hidden&gt;.</div>
-      ${advancedHtml}
-    `;
-
-    codeOutEl.value = detail.code || '';
-    codeStatusEl.textContent = '';
-    cfgStatusEl.textContent = '';
-    if (schedEnabledEl) schedEnabledEl.checked = !!scheduleCfg.enabled;
-    if (schedEveryEl) schedEveryEl.value = scheduleCfg.every_seconds ?? '';
-    if (schedMethodEl) schedMethodEl.value = scheduleCfg.method || 'GET';
-    if (schedQueryEl) schedQueryEl.value = asJsonOneLine(scheduleCfg.query || {});
-    if (schedHeadersEl) schedHeadersEl.value = asJson(scheduleCfg.headers || {});
-    if (schedBodyEl) schedBodyEl.value = typeof scheduleCfg.body === 'string' ? scheduleCfg.body : '';
-    if (schedContextEl) schedContextEl.value = asJson(scheduleCfg.context || {});
-    if (schedStateEl) schedStateEl.textContent = JSON.stringify(scheduleState || {}, null, 2);
-    if (crudRuntimeEl) crudRuntimeEl.value = runtime;
-    if (crudNameEl) crudNameEl.value = name;
-    if (crudVersionEl) crudVersionEl.value = version || '';
-    if (crudRouteEl) crudRouteEl.value = (Array.isArray(invoke.mapped_routes) && invoke.mapped_routes[0]) ? invoke.mapped_routes[0] : '';
-    addHistory(runtime, name, version || null);
-    renderPacksForRuntime(runtime);
   }
 
-  async function createFunction() {
-    const runtime = (crudRuntimeEl.value || '').trim();
-    const name = (crudNameEl.value || '').trim();
-    const version = (crudVersionEl.value || '').trim();
-    const route = (crudRouteEl && crudRouteEl.value ? crudRouteEl.value.trim() : '');
-    if (!runtime || !name) throw new Error('runtime and name are required');
+  renderFileTree() {
+    const tree = document.getElementById('fileList');
+    if (!tree) return;
 
-    const payload = {
-      methods: getConfigMethods(),
-      summary: `Function ${name}`,
-      query_example: {},
-      body_example: '',
+    tree.innerHTML = '';
+    const files = Object.keys(this.fileContents);
+    for (const file of files) {
+      const div = document.createElement('div');
+      div.className = `file-item ${file === this.currentFile ? 'active' : ''}`;
+      div.innerHTML = `<ion-icon name="document-text-outline"></ion-icon> ${esc(file)}`;
+      div.addEventListener('click', () => this.switchFile(file));
+      tree.appendChild(div);
+    }
+  }
+
+  renderEditor() {
+    const label = document.getElementById('currentFileLabel');
+    const editor = document.getElementById('codeEditor');
+    const saveBtn = document.getElementById('saveCodeBtn');
+    if (label) label.textContent = this.currentFile;
+    if (editor) editor.value = this.fileContents[this.currentFile] || '';
+
+    const editable = this.currentFile === this.handlerFile;
+    if (editor) {
+      editor.readOnly = !editable;
+      editor.style.background = editable ? '#fdfdfd' : '#f5f5f5';
+    }
+    if (saveBtn) {
+      saveBtn.disabled = !editable;
+      saveBtn.textContent = editable ? 'Deploy' : 'Read only';
+    }
+  }
+
+  switchFile(file) {
+    if (!this.fileContents[file]) return;
+    this.currentFile = file;
+    this.renderFileTree();
+    this.renderEditor();
+  }
+
+  fillConfigForm(detail) {
+    const policy = detail.policy || {};
+    const invoke = detail.metadata?.invoke || {};
+    const envView = detail.fn_env || {};
+    const scheduleCfg = detail.metadata?.schedule?.configured;
+
+    const timeout = document.getElementById('configTimeout');
+    const conc = document.getElementById('configConcurrency');
+    const maxBody = document.getElementById('configMaxBody');
+    const methodsInput = document.getElementById('configMethods');
+    const routes = document.getElementById('configRoutes');
+    const deps = document.getElementById('configSharedDeps');
+    const handler = document.getElementById('configHandler');
+    const scheduleEnabled = document.getElementById('configScheduleEnabled');
+    const scheduleEverySeconds = document.getElementById('configScheduleEverySeconds');
+    const scheduleMethod = document.getElementById('configScheduleMethod');
+    const scheduleQuery = document.getElementById('configScheduleQuery');
+    const scheduleHeaders = document.getElementById('configScheduleHeaders');
+    const scheduleBody = document.getElementById('configScheduleBody');
+    const scheduleContext = document.getElementById('configScheduleContext');
+    const env = document.getElementById('configEnvJson');
+    const configStatus = document.getElementById('configStatus');
+    const envStatus = document.getElementById('envStatus');
+
+    const methods = Array.isArray(invoke.methods) && invoke.methods.length > 0
+      ? invoke.methods
+      : (Array.isArray(policy.methods) && policy.methods.length > 0 ? policy.methods : ['GET']);
+    const mappedRoutes = Array.isArray(invoke.mapped_routes) && invoke.mapped_routes.length > 0
+      ? invoke.mapped_routes
+      : (Array.isArray(invoke.routes) && invoke.routes.length > 0 ? invoke.routes : (invoke.route ? [invoke.route] : []));
+
+    if (timeout) timeout.value = policy.timeout_ms ?? '';
+    if (conc) conc.value = policy.max_concurrency ?? '';
+    if (maxBody) maxBody.value = policy.max_body_bytes ?? '';
+    if (hasConfigMethodToggles()) {
+      writeMethodsToToggles(methods);
+    } else if (methodsInput) {
+      methodsInput.value = methods.join(',');
+    }
+    if (routes) routes.value = mappedRoutes.join('\n');
+
+    const configuredDeps = detail.metadata?.shared_deps?.configured;
+    if (deps) deps.value = Array.isArray(configuredDeps) ? configuredDeps.join('\n') : '';
+    if (handler) handler.value = typeof invoke.handler === 'string' ? invoke.handler : '';
+    const hasSchedule = scheduleCfg && typeof scheduleCfg === 'object' && !Array.isArray(scheduleCfg);
+    if (scheduleEnabled) scheduleEnabled.checked = hasSchedule && scheduleCfg.enabled === true;
+    if (scheduleEverySeconds) {
+      scheduleEverySeconds.value = hasSchedule && scheduleCfg.every_seconds != null
+        ? String(scheduleCfg.every_seconds)
+        : '';
+    }
+    if (scheduleMethod) {
+      const method = hasSchedule && scheduleCfg.method ? String(scheduleCfg.method).toUpperCase() : 'GET';
+      scheduleMethod.value = ALLOWED_HTTP_METHODS.includes(method) ? method : 'GET';
+    }
+    if (scheduleQuery) {
+      scheduleQuery.value = hasSchedule && scheduleCfg.query && typeof scheduleCfg.query === 'object'
+        ? stringifyPretty(scheduleCfg.query)
+        : '';
+    }
+    if (scheduleHeaders) {
+      scheduleHeaders.value = hasSchedule && scheduleCfg.headers && typeof scheduleCfg.headers === 'object'
+        ? stringifyPretty(scheduleCfg.headers)
+        : '';
+    }
+    if (scheduleBody) {
+      scheduleBody.value = hasSchedule && scheduleCfg.body != null ? String(scheduleCfg.body) : '';
+    }
+    if (scheduleContext) {
+      scheduleContext.value = hasSchedule && scheduleCfg.context && typeof scheduleCfg.context === 'object'
+        ? stringifyPretty(scheduleCfg.context)
+        : '';
+    }
+    this.renderScheduleState(detail);
+
+    if (env) env.value = stringifyPretty(envView);
+    this.setEnvDictFromPayload(envView);
+    if (configStatus) configStatus.textContent = '';
+    if (envStatus) envStatus.textContent = '';
+  }
+
+  renderScheduleState(detail) {
+    const stateEl = document.getElementById('configScheduleState');
+    if (!stateEl) return;
+    const state = detail?.metadata?.schedule?.state || {};
+    const nextRaw = state.next;
+    const lastRaw = state.last;
+    const lastStatus = state.last_status;
+    const lastError = state.last_error;
+
+    const parts = [];
+    if (nextRaw != null && nextRaw !== '') {
+      const iso = formatUnixSeconds(nextRaw);
+      parts.push(`next=${nextRaw}${iso ? ` (${iso})` : ''}`);
+    }
+    if (lastRaw != null && lastRaw !== '') {
+      const iso = formatUnixSeconds(lastRaw);
+      parts.push(`last=${lastRaw}${iso ? ` (${iso})` : ''}`);
+    }
+    if (lastStatus != null && lastStatus !== '') {
+      parts.push(`last_status=${lastStatus}`);
+    }
+    if (lastError != null && String(lastError).trim() !== '') {
+      parts.push(`last_error=${String(lastError)}`);
+    }
+
+    stateEl.textContent = parts.length > 0
+      ? `Scheduler state: ${parts.join(' | ')}`
+      : 'Scheduler state: no runs yet.';
+  }
+
+  collectApiRoutes(detail) {
+    const invoke = detail?.metadata?.invoke || {};
+    const endpoints = detail?.metadata?.endpoints || {};
+    const routes = [];
+    const seen = new Set();
+
+    const pushRoute = (route) => {
+      const value = String(route || '').trim();
+      if (!value || !value.startsWith('/')) return;
+      if (seen.has(value)) return;
+      seen.add(value);
+      routes.push(value);
     };
-    if (route) payload.route = route;
 
-    const q = new URLSearchParams({ runtime, name });
-    if (version) q.set('version', version);
-    await getJson(`/_fn/function?${q.toString()}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    crudStatusEl.textContent = `Created: ${publicLabel(name, version || null)} (${runtime})`;
-    await loadCatalog({ refreshSelected: false });
-    await selectFn(runtime, name, version || null);
-  }
-
-  async function loadUiState() {
-    const stateResp = await getJson('/_fn/ui-state');
-    uiStateUiEnabledEl.checked = !!stateResp.ui_enabled;
-    uiStateApiEnabledEl.checked = !!stateResp.api_enabled;
-    uiStateWriteEnabledEl.checked = !!stateResp.write_enabled;
-    uiStateLocalOnlyEl.checked = !!stateResp.local_only;
-    if (uiStateLoginEnabledEl) uiStateLoginEnabledEl.checked = !!stateResp.login_enabled;
-    if (uiStateLoginApiEnabledEl) uiStateLoginApiEnabledEl.checked = !!stateResp.login_api_enabled;
-    uiStateStatusEl.textContent = 'State loaded';
-  }
-
-  async function saveUiState() {
-    const payload = {
-      ui_enabled: !!uiStateUiEnabledEl.checked,
-      api_enabled: !!uiStateApiEnabledEl.checked,
-      write_enabled: !!uiStateWriteEnabledEl.checked,
-      local_only: !!uiStateLocalOnlyEl.checked,
-    };
-    if (uiStateLoginEnabledEl) payload.login_enabled = !!uiStateLoginEnabledEl.checked;
-    if (uiStateLoginApiEnabledEl) payload.login_api_enabled = !!uiStateLoginApiEnabledEl.checked;
-    const updated = await getJson('/_fn/ui-state', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    uiStateUiEnabledEl.checked = !!updated.ui_enabled;
-    uiStateApiEnabledEl.checked = !!updated.api_enabled;
-    uiStateWriteEnabledEl.checked = !!updated.write_enabled;
-    uiStateLocalOnlyEl.checked = !!updated.local_only;
-    if (uiStateLoginEnabledEl) uiStateLoginEnabledEl.checked = !!updated.login_enabled;
-    if (uiStateLoginApiEnabledEl) uiStateLoginApiEnabledEl.checked = !!updated.login_api_enabled;
-    uiStateStatusEl.textContent = 'State saved';
-  }
-
-  async function deleteSelected() {
-    if (!state.selected) throw new Error('Select a function first');
-    const runtime = state.selected.runtime;
-    const name = state.selected.name;
-    const version = state.selected.version;
-    const q = new URLSearchParams({ runtime, name });
-    if (version) q.set('version', version);
-
-    await getJson(`/_fn/function?${q.toString()}`, { method: 'DELETE' });
-    crudStatusEl.textContent = `Deleted: ${publicLabel(name, version || null)} (${runtime})`;
-    await loadCatalog({ refreshSelected: true });
-  }
-
-  async function saveConfig() {
-    if (!state.selected) return;
-    const payload = {};
-
-    if (cfgTimeoutEl.value !== '') payload.timeout_ms = Number(cfgTimeoutEl.value);
-    if (cfgConcEl.value !== '') payload.max_concurrency = Number(cfgConcEl.value);
-    if (cfgBodyEl.value !== '') payload.max_body_bytes = Number(cfgBodyEl.value);
-    if (cfgGroupEl) payload.group = (cfgGroupEl.value || '').trim() || null;
-    payload.include_debug_headers = !!cfgDebugHeadersEl.checked;
-    if (cfgSharedDepsEl) {
-      const raw = String(cfgSharedDepsEl.value || '');
-      const packs = raw
-        .split('\n')
-        .map((x) => x.trim())
-        .filter((x) => x.length > 0);
-      payload.shared_deps = packs.length > 0 ? packs : null;
+    pushRoute(invoke.route);
+    if (Array.isArray(invoke.routes)) {
+      for (const route of invoke.routes) pushRoute(route);
     }
-    const methods = getConfigMethods();
-    if (methods.length === 0) {
-      throw new Error('Select at least one allowed method');
+    if (Array.isArray(invoke.mapped_routes)) {
+      for (const route of invoke.mapped_routes) pushRoute(route);
     }
-    payload.invoke = { methods };
-    payload.invoke.routes = parseRoutesText(cfgRoutesEl.value || '');
-
-    if (edgeBaseUrlEl || edgeAllowHostsEl || edgeAllowPrivateEl || edgeMaxRespEl) {
-      const edge = {};
-      const baseUrl = edgeBaseUrlEl ? String(edgeBaseUrlEl.value || '').trim() : '';
-      const allowHostsRaw = edgeAllowHostsEl ? String(edgeAllowHostsEl.value || '') : '';
-      const allowPrivate = !!(edgeAllowPrivateEl && edgeAllowPrivateEl.checked);
-      const maxResp = edgeMaxRespEl ? String(edgeMaxRespEl.value || '').trim() : '';
-
-      if (baseUrl) edge.base_url = baseUrl;
-      const hosts = parseAllowHostsText(allowHostsRaw);
-      if (hosts.length > 0) edge.allow_hosts = hosts;
-      if (allowPrivate) edge.allow_private = true;
-      if (maxResp !== '') edge.max_response_bytes = Number(maxResp);
-
-      if (Object.keys(edge).length > 0) {
-        payload.edge = edge;
-      } else {
-        payload.edge = null;
-      }
+    pushRoute(endpoints.preferred_public_route);
+    if (Array.isArray(endpoints.public_routes)) {
+      for (const route of endpoints.public_routes) pushRoute(route);
     }
-
-    const q = new URLSearchParams({
-      runtime: state.selected.runtime,
-      name: state.selected.name,
-    });
-    if (state.selected.version) q.set('version', state.selected.version);
-
-    const updated = await getJson(`/_fn/function-config?${q.toString()}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    cfgStatusEl.textContent = `Saved: methods=${(updated.policy.methods || []).join(',')} timeout=${updated.policy.timeout_ms} conc=${updated.policy.max_concurrency} body=${updated.policy.max_body_bytes}`;
-    await loadCatalog({ refreshSelected: true });
+    if (routes.length === 0) {
+      pushRoute(`/${detail?.name || ''}${detail?.version ? `@${detail.version}` : ''}`);
+    }
+    return routes;
   }
 
-  async function saveSchedule() {
-    if (!state.selected) return;
-    const enabled = !!(schedEnabledEl && schedEnabledEl.checked);
-    const sched = { enabled };
-    if (enabled) {
-      const every = Number(schedEveryEl.value || 0);
-      if (!every || every <= 0) throw new Error('every_seconds must be > 0');
-      sched.every_seconds = every;
-      sched.method = String((schedMethodEl && schedMethodEl.value) || 'GET').toUpperCase();
-      sched.query = parseJsonObject(schedQueryEl.value, 'query JSON');
-      sched.headers = parseJsonObject(schedHeadersEl.value, 'headers JSON');
-      sched.body = String(schedBodyEl.value || '');
-      sched.context = parseJsonObject(schedContextEl.value, 'context JSON');
-    }
-
-    const q = new URLSearchParams({
-      runtime: state.selected.runtime,
-      name: state.selected.name,
-    });
-    if (state.selected.version) q.set('version', state.selected.version);
-
-    await getJson(`/_fn/function-config?${q.toString()}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ schedule: sched }),
-    });
-
-    if (schedStatusEl) schedStatusEl.textContent = enabled ? 'Saved schedule (enabled)' : 'Saved schedule (disabled)';
-    await loadCatalog({ refreshSelected: true });
-  }
-
-  async function saveEnv() {
-    if (!state.selected) return;
-
-    let payload;
+  decodeForMonitorMatch(value) {
+    const raw = String(value || '');
+    if (!raw || raw.indexOf('%') < 0) return raw;
     try {
-      payload = JSON.parse(envEditorEl.value || '{}');
-    } catch (_) {
-      throw new Error('fn.env.json must be valid JSON');
-    }
-    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-      throw new Error('fn.env.json must be a JSON object');
-    }
-
-    const q = new URLSearchParams({
-      runtime: state.selected.runtime,
-      name: state.selected.name,
-    });
-    if (state.selected.version) q.set('version', state.selected.version);
-
-    await getJson(`/_fn/function-env?${q.toString()}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    envStatusEl.textContent = 'Saved fn.env.json';
-    await loadCatalog({ refreshSelected: true });
-  }
-
-  async function invoke() {
-    if (!state.selected) return;
-
-    let queryObj = {};
-    const queryRaw = queryEl.value.trim();
-    if (queryRaw) {
-      try { queryObj = JSON.parse(queryRaw); } catch { throw new Error('Query must be valid JSON object'); }
-    }
-
-    const method = methodEl.value;
-    const body = bodyEl.value;
-    let context;
-    const contextRaw = (contextEl.value || '').trim();
-    if (contextRaw) {
-      try { context = JSON.parse(contextRaw); } catch { throw new Error('Context must be valid JSON object'); }
-      if (!context || typeof context !== 'object' || Array.isArray(context)) {
-        throw new Error('Context must be a JSON object');
+      return decodeURIComponent(raw);
+    } catch {
+      try {
+        return decodeURIComponent(raw.replace(/%(?![0-9A-Fa-f]{2})/g, '%25'));
+      } catch {
+        return raw;
       }
     }
+  }
+
+  extractAccessPathFromLogLine(line) {
+    const raw = String(line || '');
+    const match = raw.match(/"[A-Z]+\s+([^"\s]+)\s+HTTP\/[0-9.]+"/);
+    if (!match || !match[1]) return '';
+    return String(match[1]);
+  }
+
+  buildMonitorRelationHints() {
+    if (!this.currentFn) return { tokens: [], routePrefixes: [] };
+
+    const runtime = String(this.currentFn.runtime || '').trim();
+    const name = String(this.currentFn.name || '').trim();
+    const version = String(this.currentFn.version || '').trim();
+    const versionLabel = version || 'default';
+    const detail = this.currentDetail || {
+      runtime,
+      name,
+      version: version || undefined,
+      metadata: { invoke: {} },
+    };
+
+    const tokens = new Set();
+    const routePrefixes = new Set();
+
+    const addToken = (value) => {
+      const text = String(value || '').trim().toLowerCase();
+      if (text.length >= 3) tokens.add(text);
+    };
+
+    const addRoutePrefix = (value) => {
+      const text = String(value || '').trim().toLowerCase();
+      if (text.length >= 3 && text !== '/') routePrefixes.add(text);
+    };
+
+    const addRoute = (route) => {
+      const value = String(route || '').trim();
+      if (!value) return;
+
+      addToken(value);
+      addToken(this.decodeForMonitorMatch(value));
+
+      const qless = value.split('?')[0];
+      addToken(qless);
+
+      const normalizedDynamic = qless
+        .replace(/\{[^}]+\}/g, '')
+        .replace(/\[[^\]]+\]/g, '')
+        .replace(/:[A-Za-z0-9_]+[*+?]?/g, '')
+        .replace(/\/+/g, '/');
+      addRoutePrefix(normalizedDynamic);
+
+      if (qless.includes('{')) addRoutePrefix(qless.split('{')[0]);
+      if (qless.includes('[')) addRoutePrefix(qless.split('[')[0]);
+      if (qless.includes('/:')) addRoutePrefix(qless.split('/:')[0]);
+    };
+
+    addToken(`${runtime}/${name}`);
+    addToken(`${runtime}/${name}@${versionLabel}`);
+    addToken(`fn=${runtime}/${name}`);
+    addToken(`route=${runtime}/${name}`);
+    addToken(`fn=${runtime}/${name}@${versionLabel}`);
+    addToken(`route=${runtime}/${name}@${versionLabel}`);
+    addToken(`name=${name}`);
+    addToken(`name=${encodeURIComponent(name)}`);
+    addToken(`runtime=${runtime}&name=${name}`);
+    addToken(`runtime=${runtime}&name=${encodeURIComponent(name)}`);
+    addToken(`/console/functions/${encodeURIComponent(runtime)}/${encodeURIComponent(name)}`);
+
+    const routes = this.collectApiRoutes(detail);
+    for (const route of routes) addRoute(route);
+
+    return {
+      tokens: Array.from(tokens),
+      routePrefixes: Array.from(routePrefixes),
+    };
+  }
+
+  lineMatchesMonitorRelation(line, hints) {
+    const raw = String(line || '');
+    if (!raw) return false;
+
+    const candidates = new Set();
+    const addCandidate = (value) => {
+      const text = String(value || '').trim().toLowerCase();
+      if (text) candidates.add(text);
+    };
+
+    addCandidate(raw);
+    addCandidate(this.decodeForMonitorMatch(raw));
+
+    const reqPath = this.extractAccessPathFromLogLine(raw);
+    if (reqPath) {
+      addCandidate(reqPath);
+      addCandidate(this.decodeForMonitorMatch(reqPath));
+      const noQuery = reqPath.split('?')[0];
+      addCandidate(noQuery);
+      addCandidate(this.decodeForMonitorMatch(noQuery));
+    }
+
+    const tokens = Array.isArray(hints?.tokens) ? hints.tokens : [];
+    const routePrefixes = Array.isArray(hints?.routePrefixes) ? hints.routePrefixes : [];
+    for (const candidate of candidates) {
+      for (const token of tokens) {
+        if (token && candidate.includes(token)) return true;
+      }
+      for (const prefix of routePrefixes) {
+        if (prefix && candidate.includes(prefix)) return true;
+      }
+    }
+    return false;
+  }
+
+  async applyApiRoute(route, method, runNow = false) {
+    if (!this.currentDetail) throw new Error('No function selected');
+    const invoke = this.currentDetail.metadata?.invoke || {};
+    const event = this.readTestEventObject();
+    event.route = String(route || '').trim();
+    event.method = String(method || invoke.default_method || event.method || 'GET').toUpperCase();
+    event.params = defaultParamsForRoute(event.route);
+    event.query = (invoke.query_example && typeof invoke.query_example === 'object' && !Array.isArray(invoke.query_example))
+      ? invoke.query_example
+      : {};
+    if (invoke.body_example !== undefined) event.body = invoke.body_example;
+    if (!event.context || typeof event.context !== 'object' || Array.isArray(event.context)) event.context = {};
+
+    this.writeTestEventObject(event);
+    this.switchTab('test');
+    this.setCompatExplorerActive(true);
+    if (runNow) await this.invokeFunction();
+  }
+
+  updateApiGuide(detail) {
+    const quick = document.getElementById('apiQuick');
+    const summary = document.getElementById('apiSummary');
+    const routesEl = document.getElementById('apiRoutes');
+    const useBtn = document.getElementById('apiUsePrimaryBtn');
+    const runBtn = document.getElementById('apiRunPrimaryBtn');
+    if (!quick || !summary || !routesEl || !detail) return;
+
+    const invoke = detail.metadata?.invoke || {};
+    const methods = Array.isArray(invoke.methods) && invoke.methods.length > 0
+      ? invoke.methods
+      : (Array.isArray(detail.policy?.methods) && detail.policy.methods.length > 0 ? detail.policy.methods : ['GET']);
+    const routes = this.collectApiRoutes(detail);
+    const route = routes[0];
+    const params = defaultParamsForRoute(route);
+    const queryExample = (invoke.query_example && typeof invoke.query_example === 'object' && !Array.isArray(invoke.query_example))
+      ? invoke.query_example
+      : {};
+    const queryPairs = [];
+    for (const [k, v] of Object.entries(queryExample)) {
+      if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
+        queryPairs.push([k, String(v)]);
+      }
+    }
+    const queryString = new URLSearchParams(queryPairs).toString();
+    const routeWithQuery = queryString ? `${route}?${queryString}` : route;
+    const primaryMethod = String(invoke.default_method || methods[0] || 'GET').toUpperCase();
+
+    this.apiPrimary = { route, method: primaryMethod };
+    if (useBtn) useBtn.disabled = !route;
+    if (runBtn) runBtn.disabled = !route;
+
+    const invokePayload = {
+      runtime: detail.runtime,
+      name: detail.name,
+      method: primaryMethod,
+      route,
+      params,
+      query: queryExample,
+      body: invoke.body_example ?? '',
+      context: {},
+    };
+    if (detail.version) invokePayload.version = detail.version;
+
+    const summaryLines = [
+      `Function: ${detail.runtime}/${detail.name}${detail.version ? `@${detail.version}` : ''}`,
+      `Handler: ${typeof invoke.handler === 'string' && invoke.handler ? invoke.handler : 'handler (default)'}`,
+      `Methods: ${methods.join(', ')}`,
+      `Primary route: ${route}`,
+      `Discovered routes: ${routes.length}`,
+      `Path params: ${Object.keys(params).length > 0 ? Object.keys(params).join(', ') : '(none)'}`,
+    ];
+    summary.textContent = summaryLines.join('\n');
+
+    const lines = [
+      `Direct route test (${primaryMethod}):`,
+      `curl -sS -X ${primaryMethod} 'http://127.0.0.1:8080${routeWithQuery}'`,
+      '',
+      'Internal invoke API test:',
+      'POST /_fn/invoke',
+      stringifyPretty(invokePayload),
+      '',
+      'Tip: Use "Use Primary Route in Test" to auto-fill the Test event.',
+    ];
+    quick.textContent = lines.join('\n');
+
+    routesEl.innerHTML = '';
+    if (routes.length === 0) {
+      routesEl.innerHTML = '<div class="api-route-item"><div class="api-route-main"><div class="api-route-methods">No routes</div><code>Configure invoke.route or mapped routes</code></div></div>';
+      return;
+    }
+
+    for (const routeItem of routes) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'api-route-item';
+
+      const main = document.createElement('div');
+      main.className = 'api-route-main';
+      main.innerHTML = `<div class="api-route-methods">${esc(methods.join(', '))}</div><code>${esc(routeItem)}</code>`;
+      wrapper.appendChild(main);
+
+      const actions = document.createElement('div');
+      actions.className = 'api-route-actions';
+
+      const useRouteBtn = document.createElement('button');
+      useRouteBtn.className = 'btn btn-xs btn-secondary';
+      useRouteBtn.textContent = 'Use in Test';
+      useRouteBtn.type = 'button';
+      useRouteBtn.addEventListener('click', () => {
+        this.applyApiRoute(routeItem, primaryMethod, false).catch((err) => alert(err.message || String(err)));
+      });
+      actions.appendChild(useRouteBtn);
+
+      const runRouteBtn = document.createElement('button');
+      runRouteBtn.className = 'btn btn-xs btn-secondary';
+      runRouteBtn.textContent = 'Use + Run';
+      runRouteBtn.type = 'button';
+      runRouteBtn.addEventListener('click', () => {
+        this.applyApiRoute(routeItem, primaryMethod, true).catch((err) => alert(err.message || String(err)));
+      });
+      actions.appendChild(runRouteBtn);
+
+      wrapper.appendChild(actions);
+      routesEl.appendChild(wrapper);
+    }
+  }
+
+  updateSwaggerQuick(detail) {
+    this.updateApiGuide(detail);
+  }
+
+  fillDefaultTestEvent(detail) {
+    const invoke = detail.metadata?.invoke || {};
+    const route = invoke.route || detail.metadata?.endpoints?.preferred_public_route || `/${detail.name}${detail.version ? `@${detail.version}` : ''}`;
+    const params = defaultParamsForRoute(route);
+    const methods = Array.isArray(invoke.methods) && invoke.methods.length > 0 ? invoke.methods : (Array.isArray(detail.policy?.methods) && detail.policy.methods.length > 0 ? detail.policy.methods : ['GET']);
+    const bodyExample = invoke.body_example ?? '';
 
     const payload = {
-      runtime: state.selected.runtime,
-      name: state.selected.name,
-      version: state.selected.version,
-      method,
-      query: queryObj,
-      body,
+      method: invoke.default_method || methods[0] || 'GET',
+      route,
+      params,
+      query: invoke.query_example || {},
+      body: bodyExample,
+      context: {},
     };
-    if (context) payload.context = context;
+    this.writeTestEventObject(payload);
+  }
 
-    const t0 = performance.now();
-    const res = await getJson('/_fn/invoke', {
+  syncInvokeEventEditor() {
+    const source = document.getElementById('testEventJson');
+    const target = document.getElementById('invokeEvent');
+    if (!source || !target) return;
+    target.value = source.value;
+  }
+
+  applyInvokeEventJson(runAfter = false) {
+    const source = document.getElementById('invokeEvent');
+    if (!source) return;
+
+    let obj;
+    try {
+      obj = JSON.parse(source.value || '{}');
+    } catch {
+      throw new Error('Event JSON must be valid JSON');
+    }
+
+    this.writeTestEventObject(obj);
+    if (runAfter) {
+      this.invokeFunction().catch((err) => alert(err.message || String(err)));
+    }
+  }
+
+  loadTemplate() {
+    const selector = document.getElementById('testEventSelector');
+    if (!selector || !this.currentFn) return;
+
+    const type = selector.value;
+    const invokeMeta = this.currentDetail?.metadata?.invoke || {};
+    const fallbackMethod = String(
+      invokeMeta.default_method
+      || (Array.isArray(invokeMeta.methods) && invokeMeta.methods[0])
+      || 'GET'
+    ).toUpperCase();
+    const fallbackRoute = String(
+      invokeMeta.route
+      || this.currentDetail?.metadata?.endpoints?.preferred_public_route
+      || ''
+    ).trim();
+    const rawAllowedMethods = (
+      Array.isArray(invokeMeta.methods) && invokeMeta.methods.length > 0
+        ? invokeMeta.methods
+        : (Array.isArray(this.currentDetail?.policy?.methods) && this.currentDetail.policy.methods.length > 0
+          ? this.currentDetail.policy.methods
+          : [fallbackMethod])
+    );
+    const allowedMethods = Array.from(new Set(rawAllowedMethods.map((m) => String(m || '').toUpperCase()).filter(Boolean)));
+    const supportsPost = allowedMethods.includes('POST');
+
+    const payload = {
+      method: fallbackMethod,
+      query: {},
+      body: invokeMeta.body_example ?? '',
+      context: {},
+    };
+
+    if (fallbackRoute) {
+      payload.route = fallbackRoute;
+      payload.params = defaultParamsForRoute(fallbackRoute);
+    }
+
+    const hasParams = payload.params && typeof payload.params === 'object' && !Array.isArray(payload.params);
+
+    if (type === 'hello') {
+      payload.query = { name: 'World' };
+    } else if (type === 'path-query') {
+      payload.query = { name: 'Juan', lang: 'en' };
+      if (hasParams) {
+        const nextParams = {};
+        for (const [key, value] of Object.entries(payload.params)) {
+          const lower = String(key || '').toLowerCase();
+          if (lower === 'id') nextParams[key] = '42';
+          else if (lower.includes('slug')) nextParams[key] = 'demo/path';
+          else if (lower.includes('name')) nextParams[key] = 'juan';
+          else nextParams[key] = String(value || 'sample');
+        }
+        payload.params = nextParams;
+      }
+    } else if (type === 'post-json') {
+      payload.method = supportsPost ? 'POST' : fallbackMethod;
+      payload.query = { dry_run: '1' };
+      payload.body = {
+        id: `demo-${Date.now()}`,
+        name: 'Template Test',
+        source: 'console-template',
+      };
+    } else if (type === 'context-debug') {
+      payload.query = { debug: '1' };
+      payload.context = {
+        request_id: `console-${Date.now()}`,
+        user: 'local-tester',
+      };
+      if (payload.body === '' || payload.body === null || payload.body === undefined) {
+        payload.body = { note: 'context template payload' };
+      }
+    }
+    this.writeTestEventObject(payload);
+  }
+
+  extractInvokePayload() {
+    const raw = String(document.getElementById('testEventJson')?.value || '{}');
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw new Error('Event JSON is invalid');
+    }
+
+    const structured = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      && ('method' in parsed || 'query' in parsed || 'body' in parsed || 'context' in parsed || 'route' in parsed || 'params' in parsed);
+
+    const invokeMeta = this.currentDetail?.metadata?.invoke || {};
+    const fallbackMethod = invokeMeta.default_method || (Array.isArray(invokeMeta.methods) && invokeMeta.methods[0]) || 'GET';
+
+    const payload = {
+      runtime: this.currentFn.runtime,
+      name: this.currentFn.name,
+      version: this.currentFn.version || undefined,
+      method: structured ? String(parsed.method || fallbackMethod).toUpperCase() : fallbackMethod,
+    };
+
+    const parsedRoute = (structured && typeof parsed.route === 'string') ? parsed.route.trim() : '';
+    const route = parsedRoute || String(invokeMeta.route || '').trim();
+    if (route !== '') {
+      payload.route = route;
+      payload.params = (structured && parsed.params && typeof parsed.params === 'object' && !Array.isArray(parsed.params))
+        ? parsed.params
+        : defaultParamsForRoute(route);
+    }
+
+    if (structured) {
+      payload.query = (parsed.query && typeof parsed.query === 'object' && !Array.isArray(parsed.query)) ? parsed.query : {};
+      payload.body = ('body' in parsed) ? parsed.body : '';
+      if (parsed.context && typeof parsed.context === 'object' && !Array.isArray(parsed.context)) {
+        payload.context = parsed.context;
+      }
+    } else {
+      payload.query = {};
+      payload.body = parsed;
+    }
+
+    return payload;
+  }
+
+  async invokeFromCompat() {
+    try {
+      this.syncTestEventFromCompatFields();
+    } catch (err) {
+      const invokeMeta = document.getElementById('invokeMeta');
+      if (invokeMeta) invokeMeta.textContent = String(err && err.message ? err.message : err);
+      throw err;
+    }
+    await this.invokeFunction();
+  }
+
+  async invokeFunction() {
+    if (!this.currentFn) return;
+
+    const resultPanel = document.getElementById('testResultPanel');
+    const title = document.getElementById('testResultTitle');
+    const responseOut = document.getElementById('testResponseOutput');
+    const detailsOut = document.getElementById('testDetailsOutput');
+
+    if (resultPanel) resultPanel.style.display = 'none';
+
+    let payload = this.extractInvokePayload();
+
+    const callInvoke = async (body) => getJson('/_fn/invoke', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(body),
     });
-    const elapsed = Math.round(performance.now() - t0);
 
-    invokeMetaEl.textContent = `${method} => status ${res.status} | ${res.latency_ms}ms (api ${elapsed}ms)`;
+    const start = performance.now();
+    let response;
+    try {
+      response = await callInvoke(payload);
+    } catch (err) {
+      const msg = String(err && err.message ? err.message : err);
+      const shouldRetryWithoutRoute = payload.route
+        && (msg.includes('HTTP 404') || msg.includes('invalid route') || msg.includes('no mapped public route'));
+      if (!shouldRetryWithoutRoute) {
+        throw err;
+      }
+      const fallbackPayload = { ...payload };
+      delete fallbackPayload.route;
+      delete fallbackPayload.params;
+      payload = fallbackPayload;
+      response = await callInvoke(payload);
+    }
+    const elapsed = Math.round(performance.now() - start);
 
-    if (res.is_base64) {
-      invokeOutEl.textContent = JSON.stringify({
-        status: res.status,
-        headers: res.headers,
-        is_base64: true,
-        body_base64_len: (res.body_base64 || '').length,
-      }, null, 2);
-      return;
+    if (resultPanel) resultPanel.style.display = 'block';
+    if (title) {
+      const ok = response.status >= 200 && response.status < 300;
+      title.textContent = ok ? 'Execution Result: Succeeded' : 'Execution Result: Failed';
+      title.style.color = ok ? '#1e7e34' : '#d13212';
     }
 
     const out = {
-      status: res.status,
-      headers: res.headers,
-      body: res.body || '',
+      status: response.status,
+      headers: response.headers || {},
+      body: response.body,
     };
     try {
-      out.body = JSON.parse(out.body);
-    } catch (_) {}
-    invokeOutEl.textContent = JSON.stringify(out, null, 2);
+      if (typeof out.body === 'string') out.body = JSON.parse(out.body);
+    } catch {
+      // keep raw body
+    }
+
+    if (response.is_base64) {
+      out.is_base64 = true;
+      out.body_base64 = response.body_base64 || '';
+    }
+
+    if (responseOut) responseOut.textContent = stringifyPretty(out);
+    if (detailsOut) {
+      detailsOut.innerHTML = `
+        <div>Status: ${response.status}</div>
+        <div>Duration: ${response.latency_ms || elapsed} ms</div>
+        <div>Method: ${payload.method}</div>
+        <div>Route: ${esc(response.route || payload.route || '(auto)')}</div>
+      `;
+    }
+
+    const invokeMeta = document.getElementById('invokeMeta');
+    const invokeOut = document.getElementById('invokeOut');
+    if (invokeMeta) {
+      invokeMeta.textContent = `${payload.method} => status ${response.status} | ${response.latency_ms || elapsed} ms`;
+    }
+    if (invokeOut) {
+      invokeOut.textContent = stringifyPretty(out);
+    }
+
+    this.recordExecution(payload, response, elapsed, out);
+
+    this.refreshMonitor().catch(() => {
+      // ignore monitor errors in invoke flow
+    });
   }
 
-  async function enqueueJob() {
-    if (!state.selected) return;
-
-    let queryObj = {};
-    const queryRaw = queryEl.value.trim();
-    if (queryRaw) {
-      try { queryObj = JSON.parse(queryRaw); } catch { throw new Error('Query must be valid JSON object'); }
+  async saveCode() {
+    if (!this.currentFn) return;
+    if (this.currentFile !== this.handlerFile) {
+      alert('Only handler file is editable here.');
+      return;
     }
 
-    const method = methodEl.value;
-    const body = bodyEl.value;
-    let context;
-    const contextRaw = (contextEl.value || '').trim();
-    if (contextRaw) {
-      try { context = JSON.parse(contextRaw); } catch { throw new Error('Context must be valid JSON object'); }
-      if (!context || typeof context !== 'object' || Array.isArray(context)) {
-        throw new Error('Context must be a JSON object');
-      }
+    const editor = document.getElementById('codeEditor');
+    const saveBtn = document.getElementById('saveCodeBtn');
+    if (!editor || !saveBtn) return;
+
+    const q = new URLSearchParams({ runtime: this.currentFn.runtime, name: this.currentFn.name });
+    if (this.currentFn.version) q.set('version', this.currentFn.version);
+
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+
+    try {
+      const updated = await getJson(`/_fn/function-code?${q.toString()}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: editor.value || '' }),
+      });
+      this.fileContents[this.handlerFile] = String(updated.code || '');
+      saveBtn.textContent = 'Saved';
+      setTimeout(() => {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Deploy';
+      }, 900);
+    } catch (err) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Deploy';
+      throw err;
+    }
+  }
+
+  appendAiMessage(kind, text, persist = false) {
+    const out = document.getElementById('aiOutput');
+    if (!out) return;
+    const msg = document.createElement('div');
+    msg.className = `ai-msg ${kind}`;
+    msg.textContent = String(text || '');
+    out.appendChild(msg);
+    out.scrollTop = out.scrollHeight;
+    if (persist) {
+      this.recordAiHistory(kind === 'user' ? 'user' : 'assistant', text);
+    }
+  }
+
+  detectAssistantMode(prompt) {
+    const text = String(prompt || '').trim().toLowerCase();
+    if (!text) return 'generate';
+    const editWords = [
+      'change', 'modify', 'update', 'rewrite', 'refactor', 'fix', 'patch', 'replace', 'improve',
+      'cambia', 'modifica', 'actualiza', 'reescribe', 'refactoriza', 'corrige', 'ajusta', 'mejora',
+      'agrega', 'agregar', 'anade', 'añade', 'quita', 'elimina',
+    ];
+    if (editWords.some((w) => text.includes(w))) return 'generate';
+    if (/[?]$/.test(text)) return 'chat';
+    if (text.includes('what does this function do')) return 'chat';
+    if (text.includes('que hace esta funcion')) return 'chat';
+    if (text.startsWith('what ') || text.startsWith('how ') || text.startsWith('why ')) return 'chat';
+    if (text.startsWith('que ') || text.startsWith('como ') || text.startsWith('por que ')) return 'chat';
+    if (text.startsWith('explain') || text.startsWith('explica')) return 'chat';
+    return 'generate';
+  }
+
+  resolveAssistantMode(prompt) {
+    const selected = String(this.aiMode || 'auto').toLowerCase();
+    if (selected === 'chat') return 'chat';
+    if (selected === 'edit') return 'generate';
+    return this.detectAssistantMode(prompt);
+  }
+
+  extractCodeFromAssistantMessage(message, runtime) {
+    const text = String(message || '').trim();
+    if (!text) return '';
+
+    const fenced = text.match(/```[a-zA-Z0-9_-]*\s*([\s\S]*?)```/);
+    if (fenced && fenced[1] && fenced[1].trim()) {
+      return fenced[1].trim();
     }
 
-    const payload = {
-      runtime: state.selected.runtime,
-      name: state.selected.name,
-      version: state.selected.version,
-      method,
-      query: queryObj,
-      body,
-      context,
-      max_attempts: 1,
-      retry_delay_ms: 1000,
+    const rt = String(runtime || '').toLowerCase();
+    const markersByRuntime = {
+      node: ['exports.handler', 'module.exports', 'async (event) =>'],
+      python: ['def handler(', 'import json'],
+      php: ['<?php', 'function handler('],
+      lua: ['function handler(', 'local cjson = require'],
+      rust: ['fn handler(', 'use serde_json', 'serde_json::json!'],
     };
+    const markers = markersByRuntime[rt] || [];
+    let best = -1;
+    for (const marker of markers) {
+      const idx = text.indexOf(marker);
+      if (idx >= 0 && (best < 0 || idx < best)) best = idx;
+    }
+    if (best >= 0) {
+      return text.slice(best).trim();
+    }
+    return '';
+  }
 
-    const job = await getJson('/_fn/jobs', {
+  shouldRunAiSmoke(prompt) {
+    const text = String(prompt || '').trim().toLowerCase();
+    if (!text) return false;
+    return text.includes('test')
+      || text.includes('smoke')
+      || text.includes('probar')
+      || text.includes('prueba');
+  }
+
+  async runAiSmokeProbe() {
+    if (!this.currentFn) return null;
+    const payload = this.extractInvokePayload();
+    const started = performance.now();
+    const response = await getJson('/_fn/invoke', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-
-    invokeMetaEl.textContent = `Enqueued job ${job.id} (${method} ${publicLabel(job.name, job.version || null)})`;
-    await loadJobs();
-    await selectJob(job.id);
+    return {
+      status: Number(response && response.status ? response.status : 0),
+      latency_ms: Number((response && response.latency_ms) || Math.round(performance.now() - started)),
+      route: String((response && response.route) || payload.route || '(auto)'),
+      ok: Number(response && response.status ? response.status : 0) >= 200 && Number(response && response.status ? response.status : 0) < 300,
+    };
   }
 
-  async function saveCode() {
-    if (!state.selected) return;
-    const code = codeOutEl.value || '';
-    const q = new URLSearchParams({
-      runtime: state.selected.runtime,
-      name: state.selected.name,
-    });
-    if (state.selected.version) q.set('version', state.selected.version);
+  async fetchAssistantStatus(force = false) {
+    const now = Date.now();
+    if (!force && this.assistantStatus && (now - this.assistantStatusAt) < 30000) {
+      return this.assistantStatus;
+    }
+    const status = await getJson('/_fn/assistant/status');
+    this.assistantStatus = status;
+    this.assistantStatusAt = now;
+    return status;
+  }
 
-    const updated = await getJson(`/_fn/function-code?${q.toString()}`, {
+  async generateCode() {
+    if (!this.currentFn) return;
+
+    const promptEl = document.getElementById('aiPrompt');
+    const prompt = String(promptEl?.value || '').trim();
+    if (!prompt) return;
+    const priorHistory = this.getAiHistoryEntriesForCurrentFn().slice(-12).map((entry) => ({
+      role: String(entry.role || 'assistant'),
+      text: String(entry.text || ''),
+    }));
+    const mode = this.resolveAssistantMode(prompt);
+
+    this.appendAiMessage('user', prompt, true);
+    if (promptEl) promptEl.value = '';
+
+    const loading = document.createElement('div');
+    loading.className = 'ai-msg system';
+    loading.textContent = 'Thinking...';
+    const out = document.getElementById('aiOutput');
+    if (out) out.appendChild(loading);
+
+    try {
+      const status = await this.fetchAssistantStatus();
+      if (status && status.enabled === false) {
+        if (out && loading.parentNode === out) out.removeChild(loading);
+        this.appendAiMessage('system', 'Error: assistant disabled. Enable FN_ASSISTANT_ENABLED.', true);
+        return;
+      }
+
+      let smokeProbe = null;
+      if (mode === 'chat' && this.shouldRunAiSmoke(prompt)) {
+        try {
+          smokeProbe = await this.runAiSmokeProbe();
+          this.appendAiMessage('system', `Smoke probe: status ${smokeProbe.status} (${smokeProbe.latency_ms} ms) route=${smokeProbe.route}`, true);
+        } catch (probeErr) {
+          const probeMsg = String(probeErr && probeErr.message ? probeErr.message : probeErr);
+          smokeProbe = { error: probeMsg };
+          this.appendAiMessage('system', `Smoke probe error: ${probeMsg}`, true);
+        }
+      }
+
+      const result = await getJson('/_fn/assistant/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          runtime: this.currentFn.runtime,
+          name: this.currentFn.name,
+          template: 'hello_json',
+          prompt,
+          mode,
+          current_code: String(this.fileContents[this.handlerFile] || ''),
+          chat_history: priorHistory,
+          test_result: smokeProbe,
+        }),
+      });
+
+      if (out) out.removeChild(loading);
+      const resolvedMode = String(result.mode || mode);
+      const selectedMode = String(this.aiMode || 'auto').toLowerCase();
+      const effectiveMode = selectedMode === 'chat'
+        ? 'chat'
+        : (selectedMode === 'edit' ? 'generate' : resolvedMode);
+      const reply = String(result.message || '').trim();
+      let code = String(result.code || '');
+      if (!code && effectiveMode === 'generate' && reply) {
+        code = this.extractCodeFromAssistantMessage(reply, this.currentFn.runtime);
+      }
+
+      if (effectiveMode === 'chat') {
+        if (reply) {
+          this.appendAiMessage('system', reply, true);
+        } else {
+          this.appendAiMessage('system', 'Assistant returned an empty response.', true);
+        }
+        return;
+      }
+
+      if (!code) {
+        if (reply) {
+          this.appendAiMessage('system', reply, true);
+        } else {
+          this.appendAiMessage('system', 'Assistant returned empty code.', true);
+        }
+        return;
+      }
+
+      this.appendAiMessage('system', 'Generated suggestion applied to editor. Review and click Deploy to publish.', true);
+      this.fileContents[this.handlerFile] = code;
+      this.currentFile = this.handlerFile;
+      this.renderFileTree();
+      this.renderEditor();
+    } catch (err) {
+      if (out && loading.parentNode === out) out.removeChild(loading);
+      const msg = String(err && err.message ? err.message : err);
+      if (msg.includes('assistant disabled')) {
+        this.appendAiMessage('system', 'Error: assistant disabled. Enable FN_ASSISTANT_ENABLED to use AI generation.', true);
+        return;
+      }
+      if (msg.includes('console write disabled')) {
+        this.appendAiMessage('system', 'Error: console write disabled. Chat works, but code generation needs FN_CONSOLE_WRITE_ENABLED=1 (or admin token).', true);
+        return;
+      }
+      this.appendAiMessage('system', `Error: ${msg}`, true);
+    }
+  }
+
+  async saveConfig() {
+    if (!this.currentFn) return;
+
+    const configStatus = document.getElementById('configStatus');
+    const timeout = String(document.getElementById('configTimeout')?.value || '').trim();
+    const conc = String(document.getElementById('configConcurrency')?.value || '').trim();
+    const maxBody = String(document.getElementById('configMaxBody')?.value || '').trim();
+    const methodsCsv = String(document.getElementById('configMethods')?.value || '');
+    const routesCsv = String(document.getElementById('configRoutes')?.value || '');
+    const depsCsv = String(document.getElementById('configSharedDeps')?.value || '');
+    const handlerOverride = String(document.getElementById('configHandler')?.value || '').trim();
+    const scheduleEnabled = document.getElementById('configScheduleEnabled')?.checked === true;
+    const scheduleEveryRaw = String(document.getElementById('configScheduleEverySeconds')?.value || '').trim();
+    const scheduleMethodRaw = String(document.getElementById('configScheduleMethod')?.value || '').trim().toUpperCase();
+    const scheduleQueryRaw = String(document.getElementById('configScheduleQuery')?.value || '');
+    const scheduleHeadersRaw = String(document.getElementById('configScheduleHeaders')?.value || '');
+    const scheduleBodyRaw = String(document.getElementById('configScheduleBody')?.value || '');
+    const scheduleContextRaw = String(document.getElementById('configScheduleContext')?.value || '');
+
+    if (configStatus) configStatus.textContent = 'Saving...';
+    try {
+      const payload = {};
+
+      if (timeout !== '') {
+        const value = Number(timeout);
+        if (!Number.isFinite(value) || value <= 0) throw new Error('Timeout must be > 0');
+        payload.timeout_ms = Math.floor(value);
+      }
+      if (conc !== '') {
+        const value = Number(conc);
+        if (!Number.isFinite(value) || value < 0) throw new Error('Max Concurrency must be >= 0');
+        payload.max_concurrency = Math.floor(value);
+      }
+      if (maxBody !== '') {
+        const value = Number(maxBody);
+        if (!Number.isFinite(value) || value <= 0) throw new Error('Max Body Bytes must be > 0');
+        payload.max_body_bytes = Math.floor(value);
+      }
+
+      let methods = [];
+      if (hasConfigMethodToggles()) {
+        methods = readMethodsFromToggles();
+      } else {
+        methods = normalizeMethodsFromCsv(methodsCsv);
+      }
+      if (methods.length === 0) methods = ['GET'];
+
+      const routes = normalizeRoutesFromCsv(routesCsv);
+      payload.invoke = { methods };
+      if (routes.length > 0) payload.invoke.routes = routes;
+      if (handlerOverride !== '') {
+        payload.invoke.handler = handlerOverride;
+      } else {
+        payload.invoke.handler = null;
+      }
+
+      const deps = parseCsvList(depsCsv);
+      payload.shared_deps = deps.length > 0 ? deps : null;
+
+      const hadScheduleConfigured = !!(
+        this.currentDetail?.metadata?.schedule?.configured
+        && typeof this.currentDetail.metadata.schedule.configured === 'object'
+        && !Array.isArray(this.currentDetail.metadata.schedule.configured)
+      );
+      const hasScheduleInput = scheduleEveryRaw !== ''
+        || String(scheduleQueryRaw).trim() !== ''
+        || String(scheduleHeadersRaw).trim() !== ''
+        || String(scheduleBodyRaw).trim() !== ''
+        || String(scheduleContextRaw).trim() !== ''
+        || (scheduleMethodRaw !== '' && scheduleMethodRaw !== 'GET');
+      if (scheduleEnabled || hasScheduleInput || hadScheduleConfigured) {
+        const schedulePayload = { enabled: scheduleEnabled };
+
+        if (scheduleEnabled && scheduleEveryRaw === '') {
+          throw new Error('schedule.every_seconds is required when schedule.enabled=true');
+        }
+        if (scheduleEveryRaw !== '') {
+          const every = Number(scheduleEveryRaw);
+          if (!Number.isFinite(every) || every <= 0) {
+            throw new Error('schedule.every_seconds must be > 0');
+          }
+          schedulePayload.every_seconds = Math.floor(every);
+        }
+
+        if (scheduleMethodRaw !== '') {
+          if (!ALLOWED_HTTP_METHODS.includes(scheduleMethodRaw)) {
+            throw new Error('schedule.method must be a valid HTTP method');
+          }
+          schedulePayload.method = scheduleMethodRaw;
+        }
+
+        const scheduleQuery = parseOptionalJsonObject(scheduleQueryRaw, 'schedule.query');
+        if (scheduleQuery !== undefined) schedulePayload.query = scheduleQuery;
+
+        const scheduleHeaders = parseOptionalJsonObject(scheduleHeadersRaw, 'schedule.headers');
+        if (scheduleHeaders !== undefined) schedulePayload.headers = scheduleHeaders;
+
+        const scheduleContext = parseOptionalJsonObject(scheduleContextRaw, 'schedule.context');
+        if (scheduleContext !== undefined) schedulePayload.context = scheduleContext;
+
+        if (String(scheduleBodyRaw).trim() !== '') {
+          schedulePayload.body = String(scheduleBodyRaw);
+        }
+
+        payload.schedule = schedulePayload;
+      }
+
+      const q = new URLSearchParams({ runtime: this.currentFn.runtime, name: this.currentFn.name });
+      if (this.currentFn.version) q.set('version', this.currentFn.version);
+
+      await getJson(`/_fn/function-config?${q.toString()}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      await this.openFunction(this.currentFn.name, this.currentFn.runtime, this.currentFn.version, {
+        pushUrl: false,
+        activateTab: 'configuration',
+      });
+      if (configStatus) configStatus.textContent = 'Saved.';
+    } catch (err) {
+      if (configStatus) configStatus.textContent = `Error: ${String(err && err.message ? err.message : err)}`;
+      throw err;
+    }
+  }
+
+  async saveEnv() {
+    if (!this.currentFn) return;
+
+    const envStatus = document.getElementById('envStatus');
+    if (envStatus) envStatus.textContent = 'Saving...';
+
+    let payload;
+    const hasDictEditor = !!document.getElementById('envDictRows');
+    try {
+      if (hasDictEditor) {
+        payload = this.readEnvDictPayload(true);
+      } else {
+        const envRaw = String(document.getElementById('configEnvJson')?.value || '{}');
+        payload = JSON.parse(envRaw);
+      }
+    } catch (err) {
+      const msg = String(err && err.message ? err.message : err);
+      if (envStatus) envStatus.textContent = `Error: ${msg}`;
+      throw new Error(msg.includes('JSON') || msg.includes('Environment') ? msg : 'fn.env.json payload must be valid JSON');
+    }
+
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      const msg = 'fn.env.json payload must be a JSON object';
+      if (envStatus) envStatus.textContent = `Error: ${msg}`;
+      throw new Error(msg);
+    }
+
+    const q = new URLSearchParams({ runtime: this.currentFn.runtime, name: this.currentFn.name });
+    if (this.currentFn.version) q.set('version', this.currentFn.version);
+
+    const updated = await getJson(`/_fn/function-env?${q.toString()}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code }),
+      body: JSON.stringify(payload),
     });
 
-    codeStatusEl.textContent = `Saved: ${updated.file_path || ''}`;
-    await loadCatalog({ refreshSelected: true });
+    const nextEnv = updated.fn_env || {};
+    this.setEnvDictFromPayload(nextEnv);
+    this.fileContents['fn.env.json'] = stringifyPretty(nextEnv);
+    if (this.currentFile === 'fn.env.json') {
+      this.renderEditor();
+    }
+    if (envStatus) envStatus.textContent = 'Saved.';
   }
 
-  async function reloadCatalog() {
-    await getJson('/_fn/reload', { method: 'POST' });
-    await loadCatalog({ refreshSelected: true });
-  }
+  async refreshMonitor() {
+    if (!this.currentFn) return;
 
-  async function loadCatalog(opts = {}) {
-    const refreshSelected = opts.refreshSelected !== false;
-    const data = await getJson('/_fn/catalog');
-    state.catalog = data;
-    populateCrudRuntimeOptions();
-    const runtimes = Object.keys(data.runtimes || {}).length;
-    const mapped = Object.keys(data.mapped_routes || {}).length;
-    const conflicts = Object.keys(data.mapped_route_conflicts || {}).length;
-    metaEl.textContent = `Runtimes: ${runtimes} | mapped: ${mapped} | conflicts: ${conflicts} | root: ${data.functions_root}`;
-    renderList();
-    renderGateway();
+    const req = document.getElementById('monitorRequests');
+    const err = document.getElementById('monitorErrors');
+    const logs = document.getElementById('monitorLogs');
+    const statusEl = document.getElementById('monitorStatus');
+    const linesInput = document.getElementById('monitorLogLines');
+    const modeSelect = document.getElementById('monitorLogMode');
+    const searchInput = document.getElementById('monitorSearch');
 
-    if (!refreshSelected) return;
+    let lines = Number(linesInput?.value || 160);
+    if (!Number.isFinite(lines)) lines = 160;
+    lines = Math.max(20, Math.min(1000, Math.floor(lines)));
+    if (linesInput) linesInput.value = String(lines);
 
-    if (state.selected && selectionExistsInCatalog(state.selected)) {
-      await selectFn(state.selected.runtime, state.selected.name, state.selected.version, { replaceUrl: true });
-      return;
+    const modeRaw = String(modeSelect?.value || 'function');
+    const mode = ['function', 'all', 'errors', 'access'].includes(modeRaw) ? modeRaw : 'function';
+    const needle = String(searchInput?.value || '').trim().toLowerCase();
+    if (statusEl) statusEl.textContent = 'Loading logs...';
+
+    const [dash, errorLog, accessLog] = await Promise.all([
+      getJson('/_fn/dashboard'),
+      getJson(`/_fn/logs?file=error&format=json&lines=${lines}`),
+      getJson(`/_fn/logs?file=access&format=json&lines=${lines}`),
+    ]);
+
+    const relationHints = this.buildMonitorRelationHints();
+    const accessLines = Array.isArray(accessLog.data) ? accessLog.data.filter((line) => typeof line === 'string') : [];
+    const errorLines = Array.isArray(errorLog.data) ? errorLog.data.filter((line) => typeof line === 'string') : [];
+    const fnAccess = accessLines.filter((line) => this.lineMatchesMonitorRelation(line, relationHints));
+    const fnErrors = errorLines.filter((line) => this.lineMatchesMonitorRelation(line, relationHints));
+
+    let viewAccess = accessLines;
+    let viewErrors = errorLines;
+    if (mode === 'function') {
+      viewAccess = fnAccess;
+      viewErrors = fnErrors;
+    } else if (mode === 'errors') {
+      viewAccess = [];
+      viewErrors = fnErrors;
+    } else if (mode === 'access') {
+      viewAccess = fnAccess;
+      viewErrors = [];
     }
 
-    const fromHistory = historyFallbackSelection();
-    if (fromHistory) {
-      await selectFn(fromHistory.runtime, fromHistory.name, fromHistory.version, { replaceUrl: true });
-      return;
+    if (needle) {
+      viewAccess = viewAccess.filter((line) => line.toLowerCase().includes(needle));
+      viewErrors = viewErrors.filter((line) => line.toLowerCase().includes(needle));
     }
 
-    const first = firstAvailableSelection();
-    if (first) {
-      await selectFn(first.runtime, first.name, first.version, { replaceUrl: true });
+    const tailLimit = Math.min(lines, 60);
+    const accessTail = viewAccess.slice(-tailLimit);
+    const errorTail = viewErrors.slice(-tailLimit);
+    const hasRelatedInFilteredModes = fnAccess.length > 0 || fnErrors.length > 0;
+
+    if (req) {
+      const points = Array.isArray(dash.invocations_chart?.data) ? dash.invocations_chart.data.length : 0;
+      req.textContent = [
+        `Requests 24h: ${dash.requests_24h ?? 0}`,
+        `Avg latency: ${dash.avg_latency_ms ?? 0} ms`,
+        `Invocation points: ${points}`,
+      ].join('\n');
+    }
+
+    if (err) {
+      err.textContent = [
+        `Errors 24h: ${dash.errors_24h ?? 0}`,
+        `Related error lines: ${fnErrors.length}`,
+        `Visible error lines: ${errorTail.length}`,
+        '',
+        ...(errorTail.length > 0
+          ? errorTail
+          : [mode === 'all' ? '(no error lines)' : '(no related error lines)']),
+      ].join('\n');
+    }
+
+    if (logs) {
+      const parts = [];
+      parts.push(`[ACCESS ${accessTail.length}]`);
+      if (accessTail.length > 0) parts.push(...accessTail);
+      else parts.push(mode === 'all' ? '(no access lines)' : '(no related access lines)');
+      parts.push('');
+      parts.push(`[ERROR ${errorTail.length}]`);
+      if (errorTail.length > 0) parts.push(...errorTail);
+      else parts.push(mode === 'all' ? '(no error lines)' : '(no related error lines)');
+      logs.textContent = parts.join('\n');
+    }
+
+    if (statusEl) {
+      const filterSuffix = needle ? ` | filter="${needle}"` : '';
+      const relatedSuffix = mode === 'all'
+        ? ''
+        : ` | related_access=${fnAccess.length}/${accessLines.length} | related_errors=${fnErrors.length}/${errorLines.length}${hasRelatedInFilteredModes ? '' : ' | no related lines found'}`;
+      statusEl.textContent = `Updated ${new Date().toLocaleTimeString()} | mode=${mode} | lines=${lines}${relatedSuffix}${filterSuffix}`;
     }
   }
 
-  document.getElementById('saveCfgBtn').addEventListener('click', () => {
-    saveConfig().catch((err) => { cfgStatusEl.textContent = err.message; });
-  });
-
-  document.getElementById('reloadBtn').addEventListener('click', () => {
-    reloadCatalog().catch((err) => { cfgStatusEl.textContent = err.message; });
-  });
-
-  if (refreshPacksBtn) {
-    refreshPacksBtn.addEventListener('click', () => {
-      loadPacks().catch((err) => { packsListEl.textContent = err.message; });
-    });
+  reloadCurrentFunction() {
+    if (!this.currentFn) return;
+    this.openFunction(this.currentFn.name, this.currentFn.runtime, this.currentFn.version, {
+      pushUrl: false,
+      activateTab: this.currentTab,
+    }).catch((err) => alert(err.message || String(err)));
   }
+}
 
-  if (refreshJobsBtn) {
-    refreshJobsBtn.addEventListener('click', () => {
-      loadJobs().catch((err) => { if (jobsStatusEl) jobsStatusEl.textContent = err.message; });
-    });
-  }
+window.app = new ConsoleApp();
+window.app.init().catch((err) => {
+  // eslint-disable-next-line no-console
+  console.error(err);
+  alert(err.message || String(err));
+});
 
-  const saveSchedBtn = document.getElementById('saveSchedBtn');
-  if (saveSchedBtn) {
-    saveSchedBtn.addEventListener('click', () => {
-      saveSchedule().catch((err) => { if (schedStatusEl) schedStatusEl.textContent = err.message; });
-    });
-  }
+window.addEventListener('unhandledrejection', (event) => {
+  const reason = event && event.reason ? event.reason : new Error('unknown error');
+  const message = reason && reason.message ? reason.message : String(reason);
+  alert(message);
+  event.preventDefault();
+});
 
-  document.getElementById('saveEnvBtn').addEventListener('click', () => {
-    saveEnv().catch((err) => { envStatusEl.textContent = err.message; });
-  });
-
-  document.getElementById('invokeBtn').addEventListener('click', () => {
-    invoke().catch((err) => { invokeMetaEl.textContent = err.message; });
-  });
-
-  if (enqueueBtn) {
-    enqueueBtn.addEventListener('click', () => {
-      enqueueJob().catch((err) => { invokeMetaEl.textContent = err.message; });
-    });
-  }
-
-  document.getElementById('saveCodeBtn').addEventListener('click', () => {
-    saveCode().catch((err) => { codeStatusEl.textContent = err.message; });
-  });
-
-  document.getElementById('createFnBtn').addEventListener('click', () => {
-    createFunction().catch((err) => { crudStatusEl.textContent = err.message; });
-  });
-
-  document.getElementById('deleteFnBtn').addEventListener('click', () => {
-    deleteSelected().catch((err) => { crudStatusEl.textContent = err.message; });
-  });
-
-  document.getElementById('reloadUiStateBtn').addEventListener('click', () => {
-    loadUiState().catch((err) => { uiStateStatusEl.textContent = err.message; });
-  });
-
-  document.getElementById('saveUiStateBtn').addEventListener('click', () => {
-    saveUiState().catch((err) => { uiStateStatusEl.textContent = err.message; });
-  });
-
-  searchEl.addEventListener('input', () => {
-    state.ui.search = searchEl.value;
-    savePersistedState();
-    syncUrl({ replace: true });
-    renderList();
-  });
-
-  if (routeSearchEl) {
-    routeSearchEl.addEventListener('input', () => {
-      state.ui.routeSearch = routeSearchEl.value;
-      savePersistedState();
-      syncUrl({ replace: true });
-      renderGateway();
-    });
-  }
-
-  [methodEl, queryEl, contextEl, bodyEl].forEach((el) => {
-    el.addEventListener('input', saveCurrentInvokeDraft);
-    el.addEventListener('change', saveCurrentInvokeDraft);
-  });
-
-  tabButtons.forEach((btn) => {
-    btn.addEventListener('click', () => activateTab(btn.dataset.tabBtn));
-  });
-
-  initWizard({ state, loadCatalog, selectFn });
-
-  loadPersistedState();
-  const initialUrlState = parseUrlState();
-  if (initialUrlState.ui) {
-    if (typeof initialUrlState.ui.search === 'string') state.ui.search = initialUrlState.ui.search;
-    if (typeof initialUrlState.ui.routeSearch === 'string') state.ui.routeSearch = initialUrlState.ui.routeSearch;
-    if (typeof initialUrlState.ui.activeTab === 'string') state.ui.activeTab = initialUrlState.ui.activeTab;
-  }
-  if (initialUrlState.selection) {
-    state.selected = initialUrlState.selection;
-  }
-  if (typeof state.ui.search === 'string') {
-    searchEl.value = state.ui.search;
-  }
-  if (routeSearchEl && typeof state.ui.routeSearch === 'string') {
-    routeSearchEl.value = state.ui.routeSearch;
-  }
-  activateTab(state.ui.activeTab || 'explorer', { replaceUrl: true });
-  loadUiState().catch((err) => {
-    uiStateStatusEl.textContent = err.message;
-  });
-
-  loadPacks().catch((err) => {
-    if (packsListEl) packsListEl.textContent = err.message;
-  });
-
-  loadJobs().catch((err) => {
-    if (jobsStatusEl) jobsStatusEl.textContent = err.message;
-  });
-
-  loadCatalog({ refreshSelected: true }).catch((err) => {
-    metaEl.textContent = `Error: ${err.message}`;
-  });
-
-  window.addEventListener('popstate', () => {
-    const s = parseUrlState();
-    if (s.ui) {
-      state.ui.search = typeof s.ui.search === 'string' ? s.ui.search : '';
-      state.ui.routeSearch = typeof s.ui.routeSearch === 'string' ? s.ui.routeSearch : '';
-      state.ui.activeTab = typeof s.ui.activeTab === 'string' ? s.ui.activeTab : 'explorer';
+const runEventBtn = document.getElementById('runEventBtn');
+if (runEventBtn) {
+  runEventBtn.addEventListener('click', () => {
+    try {
+      window.app.applyInvokeEventJson(true);
+    } catch (err) {
+      alert(err.message || String(err));
     }
-    state.selected = s.selection || null;
-    if (typeof state.ui.search === 'string') {
-      searchEl.value = state.ui.search;
-    }
-    if (routeSearchEl && typeof state.ui.routeSearch === 'string') {
-      routeSearchEl.value = state.ui.routeSearch;
-    }
-    activateTab(state.ui.activeTab || 'explorer', { skipUrlSync: true });
-    loadCatalog({ refreshSelected: true }).catch((err) => {
-      metaEl.textContent = `Error: ${err.message}`;
-    });
   });
-})();
+}

@@ -1,43 +1,81 @@
 package cmd
 
 import (
+	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 
+	"github.com/misaelzapata/fastfn/cli/internal/process"
 	"github.com/spf13/cobra"
 )
 
+var runNativeMode bool
+
+func resolveRunTargetDir(args []string) string {
+	if len(args) > 0 {
+		return args[0]
+	}
+	if path := configuredFunctionsDir(); path != "" {
+		return path
+	}
+	return "."
+}
+
 var runCmd = &cobra.Command{
 	Use:   "run [dir]",
-	Short: "Start in production mode (no hot-reload)",
-	Args:  cobra.MaximumNArgs(1),
+	Short: "Run with production defaults (no hot reload)",
+	Long: `Start FastFn with production-oriented defaults:
+- hot reload disabled
+- file watcher disabled
+- TLS verification enabled
+
+At the moment, production mode is supported through --native.`,
+	Example: `  fastfn run --native .
+  fastfn run --native examples/functions/next-style
+  FN_HOST_PORT=8081 fastfn run --native .`,
+	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		// Just run docker compose up without modification
-		// We assume the user has built images or we are just running the stack
-		// For now, let's keep it simple: just up the stack
-		
-		composePath := "docker-compose.yml"
-		if _, err := os.Stat(composePath); os.IsNotExist(err) {
-			composePath = "../docker-compose.yml"
-			if _, err := os.Stat(composePath); os.IsNotExist(err) {
-				log.Fatal("Could not find docker-compose.yml")
+		applyConfiguredOpenAPIIncludeInternal(func(includeInternal bool) {
+			fmt.Printf("Using OpenAPI internal visibility from config: %t\n", includeInternal)
+		})
+
+		targetDir := resolveRunTargetDir(args)
+
+		absPath, err := filepath.Abs(targetDir)
+		if err != nil {
+			log.Fatalf("Failed to resolve path: %v", err)
+		}
+		if os.Getenv("FN_PUBLIC_BASE_URL") == "" {
+			if baseURL := configuredPublicBaseURL(); baseURL != "" {
+				_ = os.Setenv("FN_PUBLIC_BASE_URL", baseURL)
+				fmt.Printf("Using public base URL from config: %s\n", baseURL)
 			}
 		}
+		if _, err := os.Stat(absPath); os.IsNotExist(err) {
+			log.Fatalf("Directory not found: %s", absPath)
+		}
 
-		dockerCmd := exec.Command("docker", "compose", "-f", composePath, "up")
-		dockerCmd.Stdout = os.Stdout
-		dockerCmd.Stderr = os.Stderr
-		dockerCmd.Dir = filepath.Dir(composePath)
-		
-		log.Println("Starting FastFn in production mode...")
-		if err := dockerCmd.Run(); err != nil {
-			log.Fatalf("Production run failed: %v", err)
+		if runNativeMode {
+			fmt.Println("Starting FastFn in PRODUCTION (Native) mode...")
+			fmt.Printf("Functions root: %s\n", absPath)
+
+			err := process.RunNative(process.RunConfig{
+				FnDir:     absPath,
+				HotReload: false,
+				VerifyTLS: true,
+				Watch:     false,
+			})
+			if err != nil {
+				log.Fatalf("Native run failed: %v", err)
+			}
+		} else {
+			log.Fatal("Docker production mode currently requires building an image. Use --native to run bare metal production.")
 		}
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(runCmd)
+	runCmd.Flags().BoolVar(&runNativeMode, "native", false, "Run on host (required; Docker production mode is not wired yet)")
 }
