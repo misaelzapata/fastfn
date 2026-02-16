@@ -14,7 +14,7 @@ Este documento define exactamente que envia OpenResty al handler y que debe devo
 ### Request publico (cliente -> gateway)
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/risk_score?email=user@example.com' \
+curl -sS 'http://127.0.0.1:8080/fn/risk-score?email=user@example.com' \
   -H 'x-user-email: user@example.com' \
   -H 'x-api-key: my-key' \
   -H 'Cookie: session_id=abc123; theme=dark' \
@@ -157,7 +157,7 @@ exports.handler = async (event) => {
     status: 200,
     headers: { "Content-Type": "application/json" },
     proxy: {
-      path: "/_fn/health",
+      path: "/hello?name=edge",
       method: event.method || "GET",
       headers: { "x-fastfn-edge": "1" },
       body: event.body || "",
@@ -217,6 +217,7 @@ Seguridad:
 
 - el proxy está **deshabilitado por defecto** por funcion
 - se habilita con `edge` en `fn.config.json`
+- proxyear a paths del control-plane (`/_fn/*`, `/console/*`) está bloqueado
 
 ```json
 {

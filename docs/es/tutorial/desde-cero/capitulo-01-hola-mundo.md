@@ -6,7 +6,7 @@ Objetivo: publicar una funcion y responder JSON.
 
 Ruta sugerida:
 
-`/srv/fn/functions/node/hello_world/app.js`
+`/srv/fn/functions/node/hello-world/app.js`
 
 ```js
 exports.handler = async (event) => ({
@@ -23,7 +23,7 @@ exports.handler = async (event) => ({
 ## Paso 2: prueba
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/hello_world' | jq .
+curl -sS 'http://127.0.0.1:8080/fn/hello-world' | jq .
 ```
 
 ## Resultado esperado

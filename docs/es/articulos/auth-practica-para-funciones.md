@@ -113,13 +113,13 @@ Significado:
 Sin auth:
 
 ```bash
-curl -i -sS -X POST http://127.0.0.1:8080/fn/secure_webhook
+curl -i -sS -X POST http://127.0.0.1:8080/fn/secure-webhook
 ```
 
 Método inválido:
 
 ```bash
-curl -i -sS http://127.0.0.1:8080/fn/secure_webhook
+curl -i -sS http://127.0.0.1:8080/fn/secure-webhook
 ```
 
 Esperado: códigos `401` y `405` respectivamente.

@@ -10,7 +10,7 @@ This tutorial assumes **zero prior knowledge** of fastfn.
 
 Example endpoint:
 
-- `http://127.0.0.1:8080/fn/hello_world`
+- `http://127.0.0.1:8080/fn/hello-world`
 
 ## What you need before Chapter 1
 
@@ -36,7 +36,7 @@ You should see JSON output. If you get `connection refused`, wait a few seconds 
 
 All chapters use this folder:
 
-- `srv/fn/functions/node/hello_world`
+- `srv/fn/functions/node/hello-world`
 
 ## Learning path
 

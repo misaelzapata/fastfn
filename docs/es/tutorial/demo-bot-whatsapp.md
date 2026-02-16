@@ -85,7 +85,7 @@ Agrega env opcional en `srv/fn/functions/node/whatsapp/fn.env.json`:
 {
   "WHATSAPP_TOOLS_ENABLED": {"value":"true","is_secret":false},
   "WHATSAPP_AUTO_TOOLS": {"value":"true","is_secret":false},
-  "WHATSAPP_TOOL_ALLOW_FN": {"value":"request_inspector,telegram_ai_digest","is_secret":false},
+  "WHATSAPP_TOOL_ALLOW_FN": {"value":"request-inspector,telegram-ai-digest","is_secret":false},
   "WHATSAPP_TOOL_ALLOW_HTTP_HOSTS": {"value":"api.ipify.org,wttr.in,ipapi.co","is_secret":false},
   "WHATSAPP_TOOL_TIMEOUT_MS": {"value":"5000","is_secret":false}
 }
@@ -96,7 +96,7 @@ Directivas manuales:
 ```bash
 curl -sS -X POST 'http://127.0.0.1:8080/fn/whatsapp?action=chat' \
   -H 'Content-Type: application/json' \
-  --data '{"text":"Usa [[http:https://api.ipify.org?format=json]] y [[fn:request_inspector?key=wa|GET]]"}' | jq .
+  --data '{"text":"Usa [[http:https://api.ipify.org?format=json]] y [[fn:request-inspector?key=wa|GET]]"}' | jq .
 ```
 
 Auto-tools desde texto natural:

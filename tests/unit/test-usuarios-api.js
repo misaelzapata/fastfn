@@ -2,7 +2,7 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..", "..");
-const handlerPath = path.join(root, "tests", "fixtures", "local-dev-samples-legacy", "usuarios-api", "handler.js");
+const handlerPath = path.join(root, "tests", "fixtures", "local-dev-samples-migrated", "usuarios-api", "handler.js");
 const handler = require(handlerPath).handler;
 
 async function testUsuariosApi() {

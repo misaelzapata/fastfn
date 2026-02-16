@@ -1,6 +1,6 @@
 # Telegram Loop Mode (Auto-contenido)
 
-Este articulo explica como `telegram_ai_reply` puede ejecutar un loop E2E completo **dentro de un solo endpoint**. La misma URL puede:
+Este articulo explica como `telegram-ai-reply` puede ejecutar un loop E2E completo **dentro de un solo endpoint**. La misma URL puede:
 
 - enviarte un prompt,
 - esperar tu respuesta via `getUpdates`,
@@ -11,13 +11,13 @@ Este articulo explica como `telegram_ai_reply` puede ejecutar un loop E2E comple
 
 Queremos mostrar que fastfn puede manejar un flujo multi-paso sin workers externos ni scripts. Todo pasa dentro de:
 
-`/fn/telegram_ai_reply`
+`/fn/telegram-ai-reply`
 
 ## Un solo comando (modo loop)
 
 ```bash
 curl -sS -X POST \
-"http://127.0.0.1:8080/fn/telegram_ai_reply?mode=loop&dry_run=false&chat_id=TU_CHAT_ID&prompt=fastfn%20loop%20demo&wait_secs=120&max_replies=5&force_clear_webhook=true"
+"http://127.0.0.1:8080/fn/telegram-ai-reply?mode=loop&dry_run=false&chat_id=TU_CHAT_ID&prompt=fastfn%20loop%20demo&wait_secs=120&max_replies=5&force_clear_webhook=true"
 ```
 
 Que hace:
@@ -36,7 +36,7 @@ Para forzar un reply unico:
 
 ```bash
 curl -sS -X POST \
-"http://127.0.0.1:8080/fn/telegram_ai_reply?mode=reply&dry_run=false&chat_id=TU_CHAT_ID&text=Hola"
+"http://127.0.0.1:8080/fn/telegram-ai-reply?mode=reply&dry_run=false&chat_id=TU_CHAT_ID&text=Hola"
 ```
 
 ## Parametros
@@ -69,7 +69,7 @@ El endpoint usa:
 - `TELEGRAM_BOT_TOKEN`
 - `OPENAI_API_KEY`
 
-Se pueden cargar via `fn.env.json` de `telegram_ai_reply` o por variables de entorno del contenedor.
+Se pueden cargar via `fn.env.json` de `telegram-ai-reply` o por variables de entorno del contenedor.
 
-La memoria se guarda localmente en `srv/fn/functions/node/telegram_ai_reply/.memory.json`.
-El estado de offset del loop se guarda en `srv/fn/functions/node/telegram_ai_reply/.loop_state.json`.
+La memoria se guarda localmente en `srv/fn/functions/node/telegram-ai-reply/.memory.json`.
+El estado de offset del loop se guarda en `srv/fn/functions/node/telegram-ai-reply/.loop_state.json`.

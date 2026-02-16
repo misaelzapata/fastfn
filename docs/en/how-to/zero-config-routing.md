@@ -47,18 +47,19 @@ Conventions:
 
 ## 3. Precedence (Important)
 
-Discovery order is:
+FastFN merges routes from multiple sources:
 
-1. `fn.config.json` (explicit config, highest priority)
+1. File-based routing (Next.js style)
 2. `fn.routes.json` (explicit route map)
-3. File-based routing (Next.js style)
+3. `fn.config.json` (per-function policy)
 
-Notes:
+Important behavior:
 
-- Empty or invalid `fn.config.json` is ignored (it does not disable auto-discovery).
-- `fn.routes.json` overrides only matching route+method pairs it declares.
-- File-based discovery continues for non-overlapping routes in the same folder.
-- `fn.routes.json` is supported at root and per-folder.
+- `fn.routes.json` can override file-based routes.
+- `fn.config.json` routes **do not silently override** an already-mapped URL by default.
+  - Use `invoke.force-url: true` for a single function migration.
+  - Or set `FN_FORCE_URL=1` (or `fastfn dev --force-url`) to force all policy routes globally.
+- If two routes collide at the same priority, FastFN treats it as a real conflict and returns `409`.
 
 ## 4. Discovery Logs
 

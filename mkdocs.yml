@@ -113,6 +113,7 @@ nav:
       - Architecture: en/explanation/architecture.md
       - Security Model: en/explanation/security-model.md
       - Technical Comparison: en/explanation/comparison.md
+      - Scheduler vs Cron: en/explanation/scheduler-vs-cron.md
       - Next.js Style Routing: en/explanation/nextjs-style-routing-benefits.md
       - Invocation Lifecycle: en/explanation/invocation-flow.md
       - Performance: en/explanation/performance-benchmarks.md
@@ -162,6 +163,7 @@ nav:
       - Arquitectura: es/explicacion/arquitectura.md
       - Ciclo de Invocación: es/explicacion/flujo-invocacion.md
       - Modelo de Seguridad: es/explicacion/modelo-seguridad.md
+      - Scheduler vs Cron: es/explicacion/scheduler-vs-cron.md
       - Benchmarks: es/explicacion/benchmarks-rendimiento.md
       - Estado Documentación: es/explicacion/estado-documentacion.md
       - Flujos Visuales: es/explicacion/flujos-visuales.md

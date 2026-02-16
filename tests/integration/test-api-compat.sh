@@ -86,7 +86,7 @@ echo "== reset mutable example files =="
 "${DC[@]}" exec -T openresty sh -lc "python3 -c 'import json; p=\"/app/srv/fn/functions/python/hello/fn.env.json\"; open(p,\"w\",encoding=\"utf-8\").write(json.dumps({},separators=(\",\",\":\"))+\"\\n\")'"
 "${DC[@]}" exec -T openresty sh -lc "python3 -c 'import json; p=\"/app/srv/fn/functions/python/hello/fn.config.json\"; obj={\"invoke\":{\"query\":{\"name\":\"World\"},\"body\":\"\",\"summary\":\"Simple greeting function\",\"methods\":[\"GET\"]},\"timeout_ms\":1300,\"max_concurrency\":11,\"max_body_bytes\":262144,\"include_debug_headers\":False,\"response\":{\"include_debug_headers\":False}}; open(p,\"w\",encoding=\"utf-8\").write(json.dumps(obj,separators=(\",\",\":\"))+\"\\n\")'"
 "${DC[@]}" exec -T openresty sh -lc "curl -sS -X PUT 'http://127.0.0.1:8080/_fn/function-code?runtime=node&name=hello&version=v2' -H 'Content-Type: application/json' --data '{\"code\":\"exports.handler = async (event) => { const q = event.query || {}; const env = event.env || {}; const ctx = event.context || {}; const name = q.name || \\\"world\\\"; const debugEnabled = !!(ctx.debug && ctx.debug.enabled === true); const payload = { hello: (env.NODE_GREETING || \\\"v2\\\") + \\\"-\\\" + name }; if (debugEnabled) { payload.debug = { request_id: event.id, runtime: \\\"node\\\", function: \\\"hello\\\", trace_id: (ctx.user || {}).trace_id }; } return { status: 200, headers: { \\\"Content-Type\\\": \\\"application/json\\\" }, body: JSON.stringify(payload) }; };\\n\"}' >/tmp/reset-node-code.out"
-"${DC[@]}" exec -T openresty sh -lc "rm -f /app/srv/fn/functions/python/cron_tick/count.txt || true"
+"${DC[@]}" exec -T openresty sh -lc "rm -f /app/srv/fn/functions/python/cron-tick/count.txt || true"
 
 echo "== wait for health =="
 ready=0
@@ -144,18 +144,18 @@ node_names = {x.get("name") for x in node_list if isinstance(x, dict)}
 php_names = {x.get("name") for x in php_list if isinstance(x, dict)}
 rust_names = {x.get("name") for x in rust_list if isinstance(x, dict)}
 assert "hello" in py_names, obj
-assert "cron_tick" in py_names, obj
-assert "stripe_webhook_verify" in py_names, obj
-assert "sendgrid_send" in py_names, obj
-assert "sheets_webapp_append" in py_names, obj
+assert "cron-tick" in py_names, obj
+assert "stripe-webhook-verify" in py_names, obj
+assert "sendgrid-send" in py_names, obj
+assert "sheets-webapp-append" in py_names, obj
 assert "custom-handler-demo" in py_names, obj
-assert ("hello" in node_names) or ("node_echo" in node_names), obj
+assert ("hello" in node_names) or ("node-echo" in node_names), obj
 assert "custom-handler-demo" in node_names, obj
-assert "slack_webhook" in node_names, obj
-assert "discord_webhook" in node_names, obj
-assert "notion_create_page" in node_names, obj
-assert "php_profile" in php_names, obj
-assert "rust_profile" in rust_names, obj
+assert "slack-webhook" in node_names, obj
+assert "discord-webhook" in node_names, obj
+assert "notion-create-page" in node_names, obj
+assert "php-profile" in php_names, obj
+assert "rust-profile" in rust_names, obj
 PY
 
 echo "== test: invoke.handler custom name (node/python) =="
@@ -264,10 +264,16 @@ assert obj.get("write_enabled") is True, obj
 PY
 
 assert_status "/console" "200"
-assert_status "/console/node/node_echo" "200"
+assert_status "/console/node/node-echo" "200"
 console_gateway_tab_ok="$("${DC[@]}" exec -T openresty sh -lc "curl -sS 'http://127.0.0.1:8080/console/gateway' | grep -q 'Gateway Routes' && echo yes || echo no")"
 if [[ "$console_gateway_tab_ok" != "yes" ]]; then
   echo "FAIL console gateway tab content missing"
+  exit 1
+fi
+
+console_scheduler_tab_ok="$("${DC[@]}" exec -T openresty sh -lc "curl -sS 'http://127.0.0.1:8080/console/scheduler' | grep -q 'Scheduler' && echo yes || echo no")"
+if [[ "$console_scheduler_tab_ok" != "yes" ]]; then
+  echo "FAIL console scheduler tab content missing"
   exit 1
 fi
 
@@ -283,22 +289,22 @@ obj = json.loads(sys.argv[1])
 paths = obj.get("paths", {})
 assert "/fn/hello" in paths
 assert "/fn/hello@v2" in paths
-assert "/fn/risk_score" in paths
+assert "/fn/risk-score" in paths
 assert "/fn/echo" in paths
-assert "/fn/node_echo" in paths
+assert "/fn/node-echo" in paths
 assert "/fn/qr" in paths
 assert "/fn/qr@v2" in paths
-assert "/fn/php_profile" in paths
-assert "/fn/cron_tick" in paths
-assert "/fn/stripe_webhook_verify" in paths
-assert "/fn/slack_webhook" in paths
-assert "/fn/discord_webhook" in paths
-assert "/fn/sendgrid_send" in paths
-assert "/fn/sheets_webapp_append" in paths
-assert "/fn/notion_create_page" in paths
-assert "/fn/rust_profile" in paths
-assert "/fn/gmail_send" in paths
-assert "/fn/telegram_send" in paths
+assert "/fn/php-profile" in paths
+assert "/fn/cron-tick" in paths
+assert "/fn/stripe-webhook-verify" in paths
+assert "/fn/slack-webhook" in paths
+assert "/fn/discord-webhook" in paths
+assert "/fn/sendgrid-send" in paths
+assert "/fn/sheets-webapp-append" in paths
+assert "/fn/notion-create-page" in paths
+assert "/fn/rust-profile" in paths
+assert "/fn/gmail-send" in paths
+assert "/fn/telegram-send" in paths
 
 hello_ops = paths["/fn/hello"]
 assert "get" in hello_ops
@@ -308,7 +314,7 @@ hello_v2_ops = paths["/fn/hello@v2"]
 assert "get" in hello_v2_ops
 assert "post" not in hello_v2_ops
 
-risk_ops = paths["/fn/risk_score"]
+risk_ops = paths["/fn/risk-score"]
 assert "get" in risk_ops
 assert "post" in risk_ops
 
@@ -316,9 +322,9 @@ echo_ops = paths["/fn/echo"]
 assert "get" in echo_ops
 assert "post" not in echo_ops
 
-node_echo_ops = paths["/fn/node_echo"]
-assert "get" in node_echo_ops
-assert "post" in node_echo_ops
+node-echo_ops = paths["/fn/node-echo"]
+assert "get" in node-echo_ops
+assert "post" in node-echo_ops
 
 qr_py_ops = paths["/fn/qr"]
 assert "get" in qr_py_ops
@@ -328,19 +334,19 @@ qr_node_ops = paths["/fn/qr@v2"]
 assert "get" in qr_node_ops
 assert "post" not in qr_node_ops
 
-php_ops = paths["/fn/php_profile"]
+php_ops = paths["/fn/php-profile"]
 assert "get" in php_ops
 assert "post" not in php_ops
 
-rust_ops = paths["/fn/rust_profile"]
+rust_ops = paths["/fn/rust-profile"]
 assert "get" in rust_ops
 assert "post" not in rust_ops
 
-gmail_ops = paths["/fn/gmail_send"]
+gmail_ops = paths["/fn/gmail-send"]
 assert "get" in gmail_ops
 assert "post" in gmail_ops
 
-telegram_ops = paths["/fn/telegram_send"]
+telegram_ops = paths["/fn/telegram-send"]
 assert "get" in telegram_ops
 assert "post" in telegram_ops
 PY
@@ -356,19 +362,19 @@ echo_node="$(dc_request "/fn/echo?key=test")"
 assert_json_field "$echo_node" "key" "test"
 assert_json_field "$echo_node" "query.key" "test"
 
-hello_php="$(dc_request "/fn/php_profile?name=PhpWay")"
+hello_php="$(dc_request "/fn/php-profile?name=PhpWay")"
 assert_json_field "$hello_php" "runtime" "php"
 assert_json_field "$hello_php" "hello" "php-PhpWay"
 
-hello_rust="$(dc_request "/fn/rust_profile?name=RustWay")"
+hello_rust="$(dc_request "/fn/rust-profile?name=RustWay")"
 assert_json_field "$hello_rust" "runtime" "rust"
 assert_json_field "$hello_rust" "hello" "rust-RustWay"
 
-gmail_dry_run="$(dc_request "/fn/gmail_send?to=demo@example.com&subject=Hi&text=Hello&dry_run=true")"
+gmail_dry_run="$(dc_request "/fn/gmail-send?to=demo@example.com&subject=Hi&text=Hello&dry_run=true")"
 assert_json_field "$gmail_dry_run" "channel" "gmail"
 assert_json_field "$gmail_dry_run" "dry_run" "true"
 
-telegram_dry_run="$(dc_request "/fn/telegram_send?chat_id=123456&text=Hola&dry_run=true")"
+telegram_dry_run="$(dc_request "/fn/telegram-send?chat_id=123456&text=Hola&dry_run=true")"
 assert_json_field "$telegram_dry_run" "channel" "telegram"
 assert_json_field "$telegram_dry_run" "dry_run" "true"
 
@@ -411,22 +417,22 @@ if [[ "$status_hello_post" != "405" ]]; then
   exit 1
 fi
 
-status_risk_post="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' -X POST 'http://127.0.0.1:8080/fn/risk_score' -H 'Content-Type: application/json' --data '{\"email\":\"user@example.com\"}'")"
+status_risk_post="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' -X POST 'http://127.0.0.1:8080/fn/risk-score' -H 'Content-Type: application/json' --data '{\"email\":\"user@example.com\"}'")"
 if [[ "$status_risk_post" != "200" ]]; then
-  echo "FAIL expected POST /fn/risk_score => 200 got $status_risk_post"
+  echo "FAIL expected POST /fn/risk-score => 200 got $status_risk_post"
   "${DC[@]}" exec -T openresty sh -lc "cat /tmp/resp.out || true"
   exit 1
 fi
 
-status_php_post="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' -X POST 'http://127.0.0.1:8080/fn/php_profile' -H 'Content-Type: application/json' --data '{}'")"
+status_php_post="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' -X POST 'http://127.0.0.1:8080/fn/php-profile' -H 'Content-Type: application/json' --data '{}'")"
 if [[ "$status_php_post" != "405" ]]; then
-  echo "FAIL expected POST /fn/php_profile => 405 got $status_php_post"
+  echo "FAIL expected POST /fn/php-profile => 405 got $status_php_post"
   "${DC[@]}" exec -T openresty sh -lc "cat /tmp/resp.out || true"
   exit 1
 fi
 
 echo "== test: function-config methods update reflected in gateway/openapi =="
-update_node_methods_resp="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -X PUT 'http://127.0.0.1:8080/_fn/function-config?runtime=node&name=node_echo' -H 'Content-Type: application/json' --data '{\"invoke\":{\"methods\":[\"GET\"]}}'")"
+update_node_methods_resp="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -X PUT 'http://127.0.0.1:8080/_fn/function-config?runtime=node&name=node-echo' -H 'Content-Type: application/json' --data '{\"invoke\":{\"methods\":[\"GET\"]}}'")"
 python3 - "$update_node_methods_resp" <<'PY'
 import json
 import sys
@@ -435,9 +441,9 @@ methods = obj.get("policy", {}).get("methods") or []
 assert methods == ["GET"], methods
 PY
 
-node_echo_post_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' -X POST 'http://127.0.0.1:8080/fn/node_echo' -H 'Content-Type: application/json' --data '{\"name\":\"Nope\"}'")"
-if [[ "$node_echo_post_code" != "405" ]]; then
-  echo "FAIL expected POST /fn/node_echo => 405 got $node_echo_post_code"
+node-echo_post_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' -X POST 'http://127.0.0.1:8080/fn/node-echo' -H 'Content-Type: application/json' --data '{\"name\":\"Nope\"}'")"
+if [[ "$node-echo_post_code" != "405" ]]; then
+  echo "FAIL expected POST /fn/node-echo => 405 got $node-echo_post_code"
   "${DC[@]}" exec -T openresty sh -lc "cat /tmp/resp.out || true"
   exit 1
 fi
@@ -447,19 +453,19 @@ python3 - "$openapi_after_methods" <<'PY'
 import json
 import sys
 paths = json.loads(sys.argv[1]).get("paths", {})
-ops = paths["/fn/node_echo"]
+ops = paths["/fn/node-echo"]
 assert "get" in ops
 assert "post" not in ops
 PY
 
-invoke_node_echo_post_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' -X POST 'http://127.0.0.1:8080/_fn/invoke' -H 'Content-Type: application/json' --data '{\"name\":\"node_echo\",\"method\":\"POST\",\"query\":{\"name\":\"Node\"},\"body\":\"\"}'")"
-if [[ "$invoke_node_echo_post_code" != "405" ]]; then
-  echo "FAIL expected /_fn/invoke node_echo POST => 405 got $invoke_node_echo_post_code"
+invoke_node-echo_post_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' -X POST 'http://127.0.0.1:8080/_fn/invoke' -H 'Content-Type: application/json' --data '{\"name\":\"node-echo\",\"method\":\"POST\",\"query\":{\"name\":\"Node\"},\"body\":\"\"}'")"
+if [[ "$invoke_node-echo_post_code" != "405" ]]; then
+  echo "FAIL expected /_fn/invoke node-echo POST => 405 got $invoke_node-echo_post_code"
   "${DC[@]}" exec -T openresty sh -lc "cat /tmp/resp.out || true"
   exit 1
 fi
 
-update_node_put_delete_resp="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -X PUT 'http://127.0.0.1:8080/_fn/function-config?runtime=node&name=node_echo' -H 'Content-Type: application/json' --data '{\"invoke\":{\"methods\":[\"PUT\",\"DELETE\"]}}'")"
+update_node_put_delete_resp="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -X PUT 'http://127.0.0.1:8080/_fn/function-config?runtime=node&name=node-echo' -H 'Content-Type: application/json' --data '{\"invoke\":{\"methods\":[\"PUT\",\"DELETE\"]}}'")"
 python3 - "$update_node_put_delete_resp" <<'PY'
 import json
 import sys
@@ -473,49 +479,49 @@ python3 - "$openapi_put_delete" <<'PY'
 import json
 import sys
 paths = json.loads(sys.argv[1]).get("paths", {})
-ops = paths["/fn/node_echo"]
+ops = paths["/fn/node-echo"]
 assert "put" in ops
 assert "delete" in ops
 assert "get" not in ops
 assert "post" not in ops
 PY
 
-node_echo_get_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' 'http://127.0.0.1:8080/fn/node_echo?name=Nope'")"
-if [[ "$node_echo_get_code" != "405" ]]; then
-  echo "FAIL expected GET /fn/node_echo => 405 got $node_echo_get_code"
+node-echo_get_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' 'http://127.0.0.1:8080/fn/node-echo?name=Nope'")"
+if [[ "$node-echo_get_code" != "405" ]]; then
+  echo "FAIL expected GET /fn/node-echo => 405 got $node-echo_get_code"
   "${DC[@]}" exec -T openresty sh -lc "cat /tmp/resp.out || true"
   exit 1
 fi
 
-node_echo_put_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' -X PUT 'http://127.0.0.1:8080/fn/node_echo?name=PutWay' -H 'Content-Type: application/json' --data '{}'")"
-if [[ "$node_echo_put_code" != "200" ]]; then
-  echo "FAIL expected PUT /fn/node_echo => 200 got $node_echo_put_code"
+node-echo_put_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' -X PUT 'http://127.0.0.1:8080/fn/node-echo?name=PutWay' -H 'Content-Type: application/json' --data '{}'")"
+if [[ "$node-echo_put_code" != "200" ]]; then
+  echo "FAIL expected PUT /fn/node-echo => 200 got $node-echo_put_code"
   "${DC[@]}" exec -T openresty sh -lc "cat /tmp/resp.out || true"
   exit 1
 fi
 
-node_echo_delete_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' -X DELETE 'http://127.0.0.1:8080/fn/node_echo?name=DeleteWay'")"
-if [[ "$node_echo_delete_code" != "200" ]]; then
-  echo "FAIL expected DELETE /fn/node_echo => 200 got $node_echo_delete_code"
+node-echo_delete_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' -X DELETE 'http://127.0.0.1:8080/fn/node-echo?name=DeleteWay'")"
+if [[ "$node-echo_delete_code" != "200" ]]; then
+  echo "FAIL expected DELETE /fn/node-echo => 200 got $node-echo_delete_code"
   "${DC[@]}" exec -T openresty sh -lc "cat /tmp/resp.out || true"
   exit 1
 fi
 
-invoke_node_echo_put_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' -X POST 'http://127.0.0.1:8080/_fn/invoke' -H 'Content-Type: application/json' --data '{\"name\":\"node_echo\",\"method\":\"PUT\",\"query\":{\"name\":\"ViaInvokePut\"},\"body\":\"{}\"}'")"
-if [[ "$invoke_node_echo_put_code" != "200" ]]; then
-  echo "FAIL expected /_fn/invoke node_echo PUT => 200 got $invoke_node_echo_put_code"
+invoke_node-echo_put_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' -X POST 'http://127.0.0.1:8080/_fn/invoke' -H 'Content-Type: application/json' --data '{\"name\":\"node-echo\",\"method\":\"PUT\",\"query\":{\"name\":\"ViaInvokePut\"},\"body\":\"{}\"}'")"
+if [[ "$invoke_node-echo_put_code" != "200" ]]; then
+  echo "FAIL expected /_fn/invoke node-echo PUT => 200 got $invoke_node-echo_put_code"
   "${DC[@]}" exec -T openresty sh -lc "cat /tmp/resp.out || true"
   exit 1
 fi
 
-invoke_node_echo_delete_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' -X POST 'http://127.0.0.1:8080/_fn/invoke' -H 'Content-Type: application/json' --data '{\"name\":\"node_echo\",\"method\":\"DELETE\",\"query\":{\"name\":\"ViaInvokeDelete\"},\"body\":\"\"}'")"
-if [[ "$invoke_node_echo_delete_code" != "200" ]]; then
-  echo "FAIL expected /_fn/invoke node_echo DELETE => 200 got $invoke_node_echo_delete_code"
+invoke_node-echo_delete_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' -X POST 'http://127.0.0.1:8080/_fn/invoke' -H 'Content-Type: application/json' --data '{\"name\":\"node-echo\",\"method\":\"DELETE\",\"query\":{\"name\":\"ViaInvokeDelete\"},\"body\":\"\"}'")"
+if [[ "$invoke_node-echo_delete_code" != "200" ]]; then
+  echo "FAIL expected /_fn/invoke node-echo DELETE => 200 got $invoke_node-echo_delete_code"
   "${DC[@]}" exec -T openresty sh -lc "cat /tmp/resp.out || true"
   exit 1
 fi
 
-restore_node_methods_resp="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -X PUT 'http://127.0.0.1:8080/_fn/function-config?runtime=node&name=node_echo' -H 'Content-Type: application/json' --data '{\"invoke\":{\"methods\":[\"GET\",\"POST\"]}}'")"
+restore_node_methods_resp="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -X PUT 'http://127.0.0.1:8080/_fn/function-config?runtime=node&name=node-echo' -H 'Content-Type: application/json' --data '{\"invoke\":{\"methods\":[\"GET\",\"POST\"]}}'")"
 python3 - "$restore_node_methods_resp" <<'PY'
 import json
 import sys
@@ -524,15 +530,15 @@ methods = obj.get("policy", {}).get("methods") or []
 assert methods == ["GET", "POST"], methods
 PY
 
-node_echo_post_ok_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' -X POST 'http://127.0.0.1:8080/fn/node_echo?name=Back' -H 'Content-Type: application/json' --data '{}'")"
-if [[ "$node_echo_post_ok_code" != "200" ]]; then
-  echo "FAIL expected POST /fn/node_echo => 200 after restore got $node_echo_post_ok_code"
+node-echo_post_ok_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' -X POST 'http://127.0.0.1:8080/fn/node-echo?name=Back' -H 'Content-Type: application/json' --data '{}'")"
+if [[ "$node-echo_post_ok_code" != "200" ]]; then
+  echo "FAIL expected POST /fn/node-echo => 200 after restore got $node-echo_post_ok_code"
   "${DC[@]}" exec -T openresty sh -lc "cat /tmp/resp.out || true"
   exit 1
 fi
 
 echo "== test: mapped endpoint route config and matching =="
-map_route_resp="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -X PUT 'http://127.0.0.1:8080/_fn/function-config?runtime=node&name=node_echo' -H 'Content-Type: application/json' --data '{\"invoke\":{\"methods\":[\"GET\"],\"routes\":[\"/api/node-echo\"]}}'")"
+map_route_resp="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -X PUT 'http://127.0.0.1:8080/_fn/function-config?runtime=node&name=node-echo' -H 'Content-Type: application/json' --data '{\"invoke\":{\"methods\":[\"GET\"],\"routes\":[\"/api/node-echo\"]}}'")"
 python3 - "$map_route_resp" <<'PY'
 import json
 import sys
@@ -556,7 +562,7 @@ import json
 import sys
 obj = json.loads(sys.argv[1])
 assert obj.get("runtime") == "node", obj
-assert obj.get("function") == "node_echo", obj
+assert obj.get("function") == "node-echo", obj
 assert obj.get("hello") == "Mapped", obj
 PY
 
@@ -578,7 +584,7 @@ if [[ "$unmapped_code" != "404" ]]; then
   exit 1
 fi
 
-restore_map_route_resp="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -X PUT 'http://127.0.0.1:8080/_fn/function-config?runtime=node&name=node_echo' -H 'Content-Type: application/json' --data '{\"invoke\":{\"methods\":[\"GET\",\"POST\"],\"routes\":[]}}'")"
+restore_map_route_resp="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -X PUT 'http://127.0.0.1:8080/_fn/function-config?runtime=node&name=node-echo' -H 'Content-Type: application/json' --data '{\"invoke\":{\"methods\":[\"GET\",\"POST\"],\"routes\":[]}}'")"
 python3 - "$restore_map_route_resp" <<'PY'
 import json
 import sys
@@ -597,19 +603,19 @@ if [[ "$invoke_hello_post_code" != "405" ]]; then
   exit 1
 fi
 
-invoke_node_echo_get_resp="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -X POST 'http://127.0.0.1:8080/_fn/invoke' -H 'Content-Type: application/json' --data '{\"runtime\":\"node\",\"name\":\"node_echo\",\"version\":null,\"method\":\"GET\",\"query\":{\"name\":\"Node\"},\"body\":\"\"}'")"
-python3 - "$invoke_node_echo_get_resp" <<'PY'
+invoke_node-echo_get_resp="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -X POST 'http://127.0.0.1:8080/_fn/invoke' -H 'Content-Type: application/json' --data '{\"runtime\":\"node\",\"name\":\"node-echo\",\"version\":null,\"method\":\"GET\",\"query\":{\"name\":\"Node\"},\"body\":\"\"}'")"
+python3 - "$invoke_node-echo_get_resp" <<'PY'
 import json
 import sys
 obj = json.loads(sys.argv[1])
 assert obj.get("status") == 200, obj
 body = json.loads(obj.get("body", "{}"))
 assert body.get("runtime") == "node", body
-assert body.get("function") == "node_echo", body
+assert body.get("function") == "node-echo", body
 assert body.get("hello") == "Node", body
 PY
 
-invoke_php_get_resp="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -X POST 'http://127.0.0.1:8080/_fn/invoke' -H 'Content-Type: application/json' --data '{\"runtime\":\"php\",\"name\":\"php_profile\",\"method\":\"GET\",\"query\":{\"name\":\"InvokePHP\"}}'")"
+invoke_php_get_resp="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -X POST 'http://127.0.0.1:8080/_fn/invoke' -H 'Content-Type: application/json' --data '{\"runtime\":\"php\",\"name\":\"php-profile\",\"method\":\"GET\",\"query\":{\"name\":\"InvokePHP\"}}'")"
 python3 - "$invoke_php_get_resp" <<'PY'
 import json
 import sys
@@ -620,7 +626,7 @@ assert body.get("runtime") == "php", body
 assert body.get("hello") == "php-InvokePHP", body
 PY
 
-invoke_rust_get_resp="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -X POST 'http://127.0.0.1:8080/_fn/invoke' -H 'Content-Type: application/json' --data '{\"runtime\":\"rust\",\"name\":\"rust_profile\",\"method\":\"GET\",\"query\":{\"name\":\"InvokeRust\"}}'")"
+invoke_rust_get_resp="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -X POST 'http://127.0.0.1:8080/_fn/invoke' -H 'Content-Type: application/json' --data '{\"runtime\":\"rust\",\"name\":\"rust-profile\",\"method\":\"GET\",\"query\":{\"name\":\"InvokeRust\"}}'")"
 python3 - "$invoke_rust_get_resp" <<'PY'
 import json
 import sys
@@ -695,38 +701,38 @@ assert_json_field "$hello_node_edited" "hello" "edited-NodeWay"
 # restore baseline code after edit check
 "${DC[@]}" exec -T openresty sh -lc "curl -sS -X PUT 'http://127.0.0.1:8080/_fn/function-code?runtime=node&name=hello&version=v2' -H 'Content-Type: application/json' --data '{\"code\":\"exports.handler = async (event) => { const q = event.query || {}; const env = event.env || {}; const ctx = event.context || {}; const name = q.name || \\\"world\\\"; const debugEnabled = !!(ctx.debug && ctx.debug.enabled === true); const payload = { hello: (env.NODE_GREETING || \\\"v2\\\") + \\\"-\\\" + name }; if (debugEnabled) { payload.debug = { request_id: event.id, runtime: \\\"node\\\", function: \\\"hello\\\", trace_id: (ctx.user || {}).trace_id }; } return { status: 200, headers: { \\\"Content-Type\\\": \\\"application/json\\\" }, body: JSON.stringify(payload) }; };\\n\"}' >/tmp/restore-node-code.out"
 
-invoke_risk_post_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' -X POST 'http://127.0.0.1:8080/_fn/invoke' -H 'Content-Type: application/json' --data '{\"name\":\"risk_score\",\"method\":\"POST\",\"body\":\"{}\"}'")"
+invoke_risk_post_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' -X POST 'http://127.0.0.1:8080/_fn/invoke' -H 'Content-Type: application/json' --data '{\"name\":\"risk-score\",\"method\":\"POST\",\"body\":\"{}\"}'")"
 if [[ "$invoke_risk_post_code" != "200" ]]; then
-  echo "FAIL expected /_fn/invoke risk_score POST => 200 got $invoke_risk_post_code"
+  echo "FAIL expected /_fn/invoke risk-score POST => 200 got $invoke_risk_post_code"
   "${DC[@]}" exec -T openresty sh -lc "cat /tmp/resp.out || true"
   exit 1
 fi
 
 echo "== test: html/csv/png demos =="
-assert_status "/fn/html_demo" "200"
-assert_status "/fn/csv_demo" "200"
-assert_status "/fn/png_demo" "200"
+assert_status "/fn/html-demo" "200"
+assert_status "/fn/csv-demo" "200"
+assert_status "/fn/png-demo" "200"
 
-content_type_html="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -D - -o /tmp/body.out 'http://127.0.0.1:8080/fn/html_demo' | awk 'BEGIN{IGNORECASE=1}/^Content-Type:/{print \$2}' | tr -d '\\r'")"
+content_type_html="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -D - -o /tmp/body.out 'http://127.0.0.1:8080/fn/html-demo' | awk 'BEGIN{IGNORECASE=1}/^Content-Type:/{print \$2}' | tr -d '\\r'")"
 if [[ "$content_type_html" != text/html* ]]; then
-  echo "FAIL expected text/html content-type for html_demo got=$content_type_html"
+  echo "FAIL expected text/html content-type for html-demo got=$content_type_html"
   exit 1
 fi
 
-content_type_csv="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -D - -o /tmp/body.out 'http://127.0.0.1:8080/fn/csv_demo' | awk 'BEGIN{IGNORECASE=1}/^Content-Type:/{print \$2}' | tr -d '\\r'")"
+content_type_csv="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -D - -o /tmp/body.out 'http://127.0.0.1:8080/fn/csv-demo' | awk 'BEGIN{IGNORECASE=1}/^Content-Type:/{print \$2}' | tr -d '\\r'")"
 if [[ "$content_type_csv" != text/csv* ]]; then
-  echo "FAIL expected text/csv content-type for csv_demo got=$content_type_csv"
+  echo "FAIL expected text/csv content-type for csv-demo got=$content_type_csv"
   exit 1
 fi
 
-png_sig="$("${DC[@]}" exec -T openresty sh -lc "curl -sS 'http://127.0.0.1:8080/fn/png_demo' | od -An -tx1 -N 8 | tr -d '[:space:]'")"
+png_sig="$("${DC[@]}" exec -T openresty sh -lc "curl -sS 'http://127.0.0.1:8080/fn/png-demo' | od -An -tx1 -N 8 | tr -d '[:space:]'")"
 if [[ "$png_sig" != "89504e470d0a1a0a" ]]; then
   echo "FAIL invalid PNG signature: $png_sig"
   exit 1
 fi
 
 echo "== test: edge proxy (passthrough) =="
-edge_out="$(dc_request "/fn/edge_proxy?key=test")"
+edge_out="$(dc_request "/fn/edge-proxy?key=test")"
 python3 - "$edge_out" <<'PY'
 import json
 import sys
@@ -739,14 +745,14 @@ echo "== test: shared_deps packs (python/node) =="
 "${DC[@]}" exec -T openresty sh -lc "python3 -c 'import os; p=\"/app/srv/fn/functions/.fastfn/packs/python/qrcode_pack/requirements.txt\"; os.makedirs(os.path.dirname(p), exist_ok=True); open(p, \"w\", encoding=\"utf-8\").write(\"qrcode>=7.4\\n\")'"
 
 # Python function uses pack (no local requirements.txt)
-"${DC[@]}" exec -T openresty sh -lc "curl -sS -X POST 'http://127.0.0.1:8080/_fn/function?runtime=python&name=pack_qr' -H 'Content-Type: application/json' --data '{\"methods\":[\"GET\"],\"summary\":\"Pack QR\"}' >/tmp/pack_qr_create.out"
-"${DC[@]}" exec -T openresty sh -lc "curl -sS -X PUT 'http://127.0.0.1:8080/_fn/function-config?runtime=python&name=pack_qr' -H 'Content-Type: application/json' --data '{\"shared_deps\":[\"qrcode_pack\"],\"invoke\":{\"methods\":[\"GET\"],\"summary\":\"Pack QR (python)\"}}' >/tmp/pack_qr_cfg.out"
-"${DC[@]}" exec -T openresty sh -lc "curl -sS -X PUT 'http://127.0.0.1:8080/_fn/function-code?runtime=python&name=pack_qr' -H 'Content-Type: application/json' --data '{\"code\":\"import io\\nimport qrcode\\nimport qrcode.image.svg\\n\\n\\ndef handler(event):\\n    q = event.get(\\\"query\\\") or {}\\n    text = q.get(\\\"text\\\") or \\\"pack-qr\\\"\\n    img = qrcode.make(text, image_factory=qrcode.image.svg.SvgImage)\\n    buf = io.BytesIO()\\n    img.save(buf)\\n    svg = buf.getvalue().decode(\\\"utf-8\\\")\\n    return {\\n        \\\"status\\\": 200,\\n        \\\"headers\\\": {\\\"Content-Type\\\": \\\"image/svg+xml; charset=utf-8\\\"},\\n        \\\"body\\\": svg,\\n    }\\n\"}' >/tmp/pack_qr_code.out"
-assert_status "/fn/pack_qr?text=hello" "200"
+"${DC[@]}" exec -T openresty sh -lc "curl -sS -X POST 'http://127.0.0.1:8080/_fn/function?runtime=python&name=pack-qr' -H 'Content-Type: application/json' --data '{\"methods\":[\"GET\"],\"summary\":\"Pack QR\"}' >/tmp/pack-qr_create.out"
+"${DC[@]}" exec -T openresty sh -lc "curl -sS -X PUT 'http://127.0.0.1:8080/_fn/function-config?runtime=python&name=pack-qr' -H 'Content-Type: application/json' --data '{\"shared_deps\":[\"qrcode_pack\"],\"invoke\":{\"methods\":[\"GET\"],\"summary\":\"Pack QR (python)\"}}' >/tmp/pack-qr_cfg.out"
+"${DC[@]}" exec -T openresty sh -lc "curl -sS -X PUT 'http://127.0.0.1:8080/_fn/function-code?runtime=python&name=pack-qr' -H 'Content-Type: application/json' --data '{\"code\":\"import io\\nimport qrcode\\nimport qrcode.image.svg\\n\\n\\ndef handler(event):\\n    q = event.get(\\\"query\\\") or {}\\n    text = q.get(\\\"text\\\") or \\\"pack-qr\\\"\\n    img = qrcode.make(text, image_factory=qrcode.image.svg.SvgImage)\\n    buf = io.BytesIO()\\n    img.save(buf)\\n    svg = buf.getvalue().decode(\\\"utf-8\\\")\\n    return {\\n        \\\"status\\\": 200,\\n        \\\"headers\\\": {\\\"Content-Type\\\": \\\"image/svg+xml; charset=utf-8\\\"},\\n        \\\"body\\\": svg,\\n    }\\n\"}' >/tmp/pack-qr_code.out"
+assert_status "/fn/pack-qr?text=hello" "200"
 
-ct_pack_py="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -D - -o /tmp/body.out 'http://127.0.0.1:8080/fn/pack_qr?text=hi' | awk 'BEGIN{IGNORECASE=1}/^Content-Type:/{print \$2}' | tr -d '\\r'")"
+ct_pack_py="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -D - -o /tmp/body.out 'http://127.0.0.1:8080/fn/pack-qr?text=hi' | awk 'BEGIN{IGNORECASE=1}/^Content-Type:/{print \$2}' | tr -d '\\r'")"
 if [[ "$ct_pack_py" != image/svg+xml* ]]; then
-  echo "FAIL expected image/svg+xml content-type for pack_qr got=$ct_pack_py"
+  echo "FAIL expected image/svg+xml content-type for pack-qr got=$ct_pack_py"
   exit 1
 fi
 
@@ -754,19 +760,19 @@ fi
 "${DC[@]}" exec -T openresty sh -lc "python3 -c 'import json,os; p=\"/app/srv/fn/functions/.fastfn/packs/node/qrcode_pack/package.json\"; os.makedirs(os.path.dirname(p), exist_ok=True); obj={\"name\":\"fastfn-pack-qrcode\",\"version\":\"1.0.0\",\"private\":True,\"dependencies\":{\"qrcode\":\"^1.5.4\"}}; open(p,\"w\",encoding=\"utf-8\").write(json.dumps(obj, indent=2)+\"\\n\")'"
 
 # Node function uses pack (no local package.json)
-"${DC[@]}" exec -T openresty sh -lc "curl -sS -X POST 'http://127.0.0.1:8080/_fn/function?runtime=node&name=pack_qr_node' -H 'Content-Type: application/json' --data '{\"methods\":[\"GET\"],\"summary\":\"Pack QR Node\"}' >/tmp/pack_qr_node_create.out"
-"${DC[@]}" exec -T openresty sh -lc "curl -sS -X PUT 'http://127.0.0.1:8080/_fn/function-config?runtime=node&name=pack_qr_node' -H 'Content-Type: application/json' --data '{\"shared_deps\":[\"qrcode_pack\"],\"invoke\":{\"methods\":[\"GET\"],\"summary\":\"Pack QR (node)\"}}' >/tmp/pack_qr_node_cfg.out"
-"${DC[@]}" exec -T openresty sh -lc "curl -sS -X PUT 'http://127.0.0.1:8080/_fn/function-code?runtime=node&name=pack_qr_node' -H 'Content-Type: application/json' --data '{\"code\":\"const QRCode = require(\\\"qrcode\\\");\\n\\nexports.handler = async (event) => {\\n  const q = event.query || {};\\n  const text = q.text || \\\"pack-qr-node\\\";\\n  const png = await QRCode.toBuffer(text, { type: \\\"png\\\", width: 220, margin: 2 });\\n  return {\\n    status: 200,\\n    headers: { \\\"Content-Type\\\": \\\"image/png\\\" },\\n    is_base64: true,\\n    body_base64: png.toString(\\\"base64\\\"),\\n  };\\n};\\n\"}' >/tmp/pack_qr_node_code.out"
-assert_status "/fn/pack_qr_node?text=hello" "200"
+"${DC[@]}" exec -T openresty sh -lc "curl -sS -X POST 'http://127.0.0.1:8080/_fn/function?runtime=node&name=pack-qr-node' -H 'Content-Type: application/json' --data '{\"methods\":[\"GET\"],\"summary\":\"Pack QR Node\"}' >/tmp/pack-qr-node_create.out"
+"${DC[@]}" exec -T openresty sh -lc "curl -sS -X PUT 'http://127.0.0.1:8080/_fn/function-config?runtime=node&name=pack-qr-node' -H 'Content-Type: application/json' --data '{\"shared_deps\":[\"qrcode_pack\"],\"invoke\":{\"methods\":[\"GET\"],\"summary\":\"Pack QR (node)\"}}' >/tmp/pack-qr-node_cfg.out"
+"${DC[@]}" exec -T openresty sh -lc "curl -sS -X PUT 'http://127.0.0.1:8080/_fn/function-code?runtime=node&name=pack-qr-node' -H 'Content-Type: application/json' --data '{\"code\":\"const QRCode = require(\\\"qrcode\\\");\\n\\nexports.handler = async (event) => {\\n  const q = event.query || {};\\n  const text = q.text || \\\"pack-qr-node\\\";\\n  const png = await QRCode.toBuffer(text, { type: \\\"png\\\", width: 220, margin: 2 });\\n  return {\\n    status: 200,\\n    headers: { \\\"Content-Type\\\": \\\"image/png\\\" },\\n    is_base64: true,\\n    body_base64: png.toString(\\\"base64\\\"),\\n  };\\n};\\n\"}' >/tmp/pack-qr-node_code.out"
+assert_status "/fn/pack-qr-node?text=hello" "200"
 
-png_sig_pack="$("${DC[@]}" exec -T openresty sh -lc "curl -sS 'http://127.0.0.1:8080/fn/pack_qr_node?text=hi' | od -An -tx1 -N 8 | tr -d '[:space:]'")"
+png_sig_pack="$("${DC[@]}" exec -T openresty sh -lc "curl -sS 'http://127.0.0.1:8080/fn/pack-qr-node?text=hi' | od -An -tx1 -N 8 | tr -d '[:space:]'")"
 if [[ "$png_sig_pack" != "89504e470d0a1a0a" ]]; then
-  echo "FAIL invalid PNG signature from pack_qr_node: $png_sig_pack"
+  echo "FAIL invalid PNG signature from pack-qr-node: $png_sig_pack"
   exit 1
 fi
 
 echo "== test: console metadata + env/config updates =="
-fn_py_meta="$(dc_request "/_fn/function?runtime=python&name=requirements_demo&include_code=0")"
+fn_py_meta="$(dc_request "/_fn/function?runtime=python&name=requirements-demo&include_code=0")"
 python3 - "$fn_py_meta" <<'PY'
 import json
 import sys
@@ -777,56 +783,56 @@ assert "requests" in (meta.get("python", {}).get("requirements", {}).get("file_e
 PY
 
 echo "== test: popular integrations (dry_run by default) =="
-slack_dry="$(dc_request "/fn/slack_webhook?text=Hello")"
+slack_dry="$(dc_request "/fn/slack-webhook?text=Hello")"
 python3 - "$slack_dry" <<'PY'
 import json, sys
 obj = json.loads(sys.argv[1])
-assert obj.get("function") == "slack_webhook", obj
+assert obj.get("function") == "slack-webhook", obj
 assert obj.get("dry_run") is True, obj
 PY
 
-discord_dry="$(dc_request "/fn/discord_webhook?content=Hello")"
+discord_dry="$(dc_request "/fn/discord-webhook?content=Hello")"
 python3 - "$discord_dry" <<'PY'
 import json, sys
 obj = json.loads(sys.argv[1])
-assert obj.get("function") == "discord_webhook", obj
+assert obj.get("function") == "discord-webhook", obj
 assert obj.get("dry_run") is True, obj
 PY
 
-sendgrid_dry="$(dc_request "/fn/sendgrid_send?to=demo@example.com&subject=Hi&text=Hello&dry_run=true")"
+sendgrid_dry="$(dc_request "/fn/sendgrid-send?to=demo@example.com&subject=Hi&text=Hello&dry_run=true")"
 python3 - "$sendgrid_dry" <<'PY'
 import json, sys
 obj = json.loads(sys.argv[1])
-assert obj.get("function") == "sendgrid_send", obj
+assert obj.get("function") == "sendgrid-send", obj
 assert obj.get("dry_run") is True, obj
 PY
 
-sheets_dry="$(dc_request "/fn/sheets_webapp_append?sheet=Sheet1&values=a,b,c&dry_run=true")"
+sheets_dry="$(dc_request "/fn/sheets-webapp-append?sheet=Sheet1&values=a,b,c&dry_run=true")"
 python3 - "$sheets_dry" <<'PY'
 import json, sys
 obj = json.loads(sys.argv[1])
-assert obj.get("function") == "sheets_webapp_append", obj
+assert obj.get("function") == "sheets-webapp-append", obj
 assert obj.get("dry_run") is True, obj
 PY
 
-notion_dry="$(dc_request "/fn/notion_create_page?title=Hello&content=World&dry_run=true")"
+notion_dry="$(dc_request "/fn/notion-create-page?title=Hello&content=World&dry_run=true")"
 python3 - "$notion_dry" <<'PY'
 import json, sys
 obj = json.loads(sys.argv[1])
-assert obj.get("function") == "notion_create_page", obj
+assert obj.get("function") == "notion-create-page", obj
 assert obj.get("dry_run") is True, obj
 PY
 
 echo "== test: stripe webhook signature verify (enforced) =="
 stripe_secret="whsec_test_secret"
-"${DC[@]}" exec -T openresty sh -lc "curl -sS -X PUT 'http://127.0.0.1:8080/_fn/function-env?runtime=python&name=stripe_webhook_verify' -H 'Content-Type: application/json' --data '{\"STRIPE_WEBHOOK_SECRET\":{\"value\":\"$stripe_secret\",\"is_secret\":true}}' >/tmp/stripe-env-set.out"
+"${DC[@]}" exec -T openresty sh -lc "curl -sS -X PUT 'http://127.0.0.1:8080/_fn/function-env?runtime=python&name=stripe-webhook-verify' -H 'Content-Type: application/json' --data '{\"STRIPE_WEBHOOK_SECRET\":{\"value\":\"$stripe_secret\",\"is_secret\":true}}' >/tmp/stripe-env-set.out"
 
 stripe_body='{"id":"evt_test","type":"payment_intent.succeeded"}'
 stripe_ts="$(python3 -c 'import time; print(int(time.time()))')"
 stripe_sig="$(python3 -c 'import hmac,hashlib,sys; secret=sys.argv[1]; ts=sys.argv[2]; body=sys.argv[3]; base=(ts+"."+body).encode("utf-8"); print(hmac.new(secret.encode("utf-8"), base, hashlib.sha256).hexdigest())' "$stripe_secret" "$stripe_ts" "$stripe_body")"
 
 "${DC[@]}" exec -T openresty sh -lc "printf '%s' '$stripe_body' > /tmp/stripe-webhook.json"
-stripe_resp="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -X POST 'http://127.0.0.1:8080/fn/stripe_webhook_verify?dry_run=false&tolerance_s=300' -H 'Content-Type: application/json' -H 'Stripe-Signature: t=$stripe_ts,v1=$stripe_sig' --data-binary @/tmp/stripe-webhook.json")"
+stripe_resp="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -X POST 'http://127.0.0.1:8080/fn/stripe-webhook-verify?dry_run=false&tolerance_s=300' -H 'Content-Type: application/json' -H 'Stripe-Signature: t=$stripe_ts,v1=$stripe_sig' --data-binary @/tmp/stripe-webhook.json")"
 python3 - "$stripe_resp" <<'PY'
 import json, sys
 obj = json.loads(sys.argv[1])
@@ -884,11 +890,11 @@ PY
 echo "== test: schedules (every_seconds) =="
 assert_status "/_fn/schedules" "200"
 
-enable_sched_resp="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -X PUT 'http://127.0.0.1:8080/_fn/function-config?runtime=python&name=cron_tick' -H 'Content-Type: application/json' --data '{\"schedule\":{\"enabled\":true,\"every_seconds\":1,\"method\":\"GET\",\"query\":{\"action\":\"inc\"},\"headers\":{},\"body\":\"\",\"context\":{}}}'")"
+enable_sched_resp="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -X PUT 'http://127.0.0.1:8080/_fn/function-config?runtime=python&name=cron-tick' -H 'Content-Type: application/json' --data '{\"schedule\":{\"enabled\":true,\"every_seconds\":1,\"method\":\"GET\",\"query\":{\"action\":\"inc\"},\"headers\":{},\"body\":\"\",\"context\":{}}}'")"
 python3 - "$enable_sched_resp" <<'PY'
 import json, sys
 obj = json.loads(sys.argv[1])
-assert obj.get("name") == "cron_tick", obj
+assert obj.get("name") == "cron-tick", obj
 PY
 
 status_reload2="$(dc_status_post "/_fn/reload")"
@@ -900,7 +906,7 @@ fi
 
 seen=0
 for _ in $(seq 1 8); do
-  cron_body="$(dc_request "/fn/cron_tick?action=read")"
+  cron_body="$(dc_request "/fn/cron-tick?action=read")"
   if python3 - "$cron_body" 2>/dev/null <<'PY'
 import json, sys
 obj = json.loads(sys.argv[1])
@@ -913,7 +919,7 @@ PY
   sleep 1
 done
 if [[ "$seen" != "1" ]]; then
-  echo "FAIL schedule did not tick cron_tick (count>=1) within timeout"
+  echo "FAIL schedule did not tick cron-tick (count>=1) within timeout"
   echo "$cron_body"
   exit 1
 fi
@@ -951,7 +957,7 @@ echo "== test: 404 unknown function =="
 assert_status "/fn/nope" "404"
 
 echo "== test: 413 payload too large =="
-status_413="$("${DC[@]}" exec -T openresty sh -lc "dd if=/dev/zero bs=1 count=1200000 2>/dev/null | tr '\\\\000' 'a' > /tmp/large_payload.txt && curl -sS -o /tmp/resp.out -w '%{http_code}' -X POST 'http://127.0.0.1:8080/fn/risk_score' --data-binary @/tmp/large_payload.txt")"
+status_413="$("${DC[@]}" exec -T openresty sh -lc "dd if=/dev/zero bs=1 count=1200000 2>/dev/null | tr '\\\\000' 'a' > /tmp/large_payload.txt && curl -sS -o /tmp/resp.out -w '%{http_code}' -X POST 'http://127.0.0.1:8080/fn/risk-score' --data-binary @/tmp/large_payload.txt")"
 if [[ "$status_413" != "413" ]]; then
   echo "FAIL expected 413 got $status_413"
   "${DC[@]}" exec -T openresty sh -lc "cat /tmp/resp.out || true"

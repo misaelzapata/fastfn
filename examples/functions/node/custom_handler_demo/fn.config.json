@@ -1,7 +1,0 @@
-{
-  "invoke": {
-    "summary": "Node demo with custom invoke.handler",
-    "methods": ["GET"],
-    "handler": "main"
-  }
-}

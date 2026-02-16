@@ -1187,6 +1187,7 @@ import urllib.request
 
 BASE_URL = "http://127.0.0.1:8080"
 THRESHOLD_MS = int(os.environ.get("PARALLEL_THRESHOLD_MS", "3500"))
+WARM_TIMEOUT_SEC = float(os.environ.get("PARALLEL_WARM_TIMEOUT_SEC", "45"))
 
 def sample_path(route):
     path = re.sub(r":([A-Za-z0-9_]+)\*", "a/b", route)
@@ -1280,7 +1281,7 @@ if not uniq:
 
 # Warm-up: avoid counting cold starts as blocking regressions.
 for spec in uniq:
-    warm = request_one(spec, timeout=10)
+    warm = request_one(spec, timeout=WARM_TIMEOUT_SEC)
     if not warm["ok"]:
         raise SystemExit("warm-up failed: " + json.dumps(warm, ensure_ascii=False))
 
@@ -1391,6 +1392,7 @@ echo "== Phase 4: Console UI/API matrix =="
 start_stack "examples/functions/next-style" "FN_UI_ENABLED=1" "FN_CONSOLE_WRITE_ENABLED=1"
 assert_status GET "/console" "200"
 assert_status GET "/console/gateway" "200"
+assert_status GET "/console/scheduler" "200"
 assert_status GET "/_fn/ui-state" "200"
 assert_enqueue_with_route_params
 stop_stack

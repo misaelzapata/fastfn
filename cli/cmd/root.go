@@ -140,3 +140,24 @@ func applyConfiguredOpenAPIIncludeInternal(onApplied func(value bool)) {
 		}
 	}
 }
+
+func configuredForceURL() (bool, bool) {
+	return configuredBool(
+		"force-url",
+		"force_url",
+		"forceUrl",
+		"force.url",
+	)
+}
+
+func applyConfiguredForceURL(onApplied func(value bool)) {
+	if strings.TrimSpace(os.Getenv("FN_FORCE_URL")) != "" {
+		return
+	}
+	if forceURL, ok := configuredForceURL(); ok {
+		_ = os.Setenv("FN_FORCE_URL", boolEnvValue(forceURL))
+		if onApplied != nil {
+			onApplied(forceURL)
+		}
+	}
+}

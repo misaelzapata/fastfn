@@ -3,22 +3,87 @@ set -eu
 
 mkdir -p /tmp/fastfn
 
-python3 /app/srv/fn/runtimes/python_daemon.py &
-PY_PID=$!
+RUNTIMES="${FN_RUNTIMES:-python,node,php,lua}"
 
-node /app/srv/fn/runtimes/node_daemon.js &
-NODE_PID=$!
+has_runtime() {
+  echo ",${RUNTIMES}," | grep -qi ",$1,"
+}
 
-python3 /app/srv/fn/runtimes/php_daemon.py &
-PHP_PID=$!
+pids=""
 
-python3 /app/srv/fn/runtimes/rust_daemon.py &
-RUST_PID=$!
+start_py() {
+  local daemon="/app/srv/fn/runtimes/python-daemon.py"
+  if [ ! -f "$daemon" ]; then
+    echo "missing runtime daemon: $daemon" >&2
+    exit 1
+  fi
+  python3 "$daemon" &
+  pids="$pids $!"
+}
+
+start_node() {
+  local daemon="/app/srv/fn/runtimes/node-daemon.js"
+  if [ ! -f "$daemon" ]; then
+    echo "missing runtime daemon: $daemon" >&2
+    exit 1
+  fi
+  node "$daemon" &
+  pids="$pids $!"
+}
+
+start_php() {
+  local daemon="/app/srv/fn/runtimes/php-daemon.py"
+  if [ ! -f "$daemon" ]; then
+    echo "missing runtime daemon: $daemon" >&2
+    exit 1
+  fi
+  python3 "$daemon" &
+  pids="$pids $!"
+}
+
+start_rust() {
+  local daemon="/app/srv/fn/runtimes/rust-daemon.py"
+  if [ ! -f "$daemon" ]; then
+    echo "missing runtime daemon: $daemon" >&2
+    exit 1
+  fi
+  python3 "$daemon" &
+  pids="$pids $!"
+}
+
+start_go() {
+  local daemon="/app/srv/fn/runtimes/go-daemon.py"
+  if [ ! -f "$daemon" ]; then
+    echo "missing runtime daemon: $daemon" >&2
+    exit 1
+  fi
+  python3 "$daemon" &
+  pids="$pids $!"
+}
+
+if has_runtime python; then
+  start_py
+fi
+if has_runtime node; then
+  start_node
+fi
+if has_runtime php; then
+  start_php
+fi
+if has_runtime rust; then
+  start_rust
+fi
+if has_runtime go; then
+  start_go
+fi
 
 cleanup() {
-  kill "$PY_PID" "$NODE_PID" "$PHP_PID" "$RUST_PID" 2>/dev/null || true
+  for pid in $pids; do
+    kill "$pid" 2>/dev/null || true
+  done
 }
 
 trap cleanup INT TERM EXIT
 
 exec openresty -g "daemon off;" -p /app/openresty -c nginx.conf
+

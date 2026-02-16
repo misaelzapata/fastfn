@@ -27,7 +27,7 @@ No global `routes.json` is required.
 The gateway discovers functions automatically and applies policy from `fn.config.json`.
 
 ## Step 1: Create a tiny function
-Create `srv/fn/functions/python/my_profile/app.py`:
+Create `srv/fn/functions/python/my-profile/app.py`:
 
 ```python
 import json
@@ -42,7 +42,7 @@ def handler(event):
     }
 ```
 
-Create `srv/fn/functions/python/my_profile/fn.config.json`:
+Create `srv/fn/functions/python/my-profile/fn.config.json`:
 
 ```json
 {
@@ -67,7 +67,7 @@ You now avoid restart loops while iterating.
 ## Step 3: Invoke the function
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/my_profile?name=Misael'
+curl -sS 'http://127.0.0.1:8080/fn/my-profile?name=Misael'
 ```
 
 ## Step 4: Verify OpenAPI is live
@@ -77,7 +77,7 @@ curl -sS http://127.0.0.1:8080/openapi.json
 ```
 
 Confirm:
-- `/fn/my_profile` exists,
+- `/fn/my-profile` exists,
 - method list matches `invoke.methods`.
 
 If you change methods to `POST` and reload, OpenAPI updates.
@@ -104,14 +104,14 @@ curl -sS 'http://127.0.0.1:8080/public/whoami?name=Misael'
 
 ## Step 6: Add versioning with zero confusion
 Create a second version:
-- `srv/fn/functions/python/my_profile/v2/app.py`
-- `srv/fn/functions/python/my_profile/v2/fn.config.json`
+- `srv/fn/functions/python/my-profile/v2/app.py`
+- `srv/fn/functions/python/my-profile/v2/fn.config.json`
 
 Invoke both:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/my_profile'
-curl -sS 'http://127.0.0.1:8080/fn/my_profile@v2'
+curl -sS 'http://127.0.0.1:8080/fn/my-profile'
+curl -sS 'http://127.0.0.1:8080/fn/my-profile@v2'
 ```
 
 ## Step 7: Use custom handler names (Lambda-style)

@@ -18,6 +18,7 @@ Before runtime execution, the gateway enforces:
 - max body size (`max_body_bytes`)
 - timeout and concurrency policy
 - normalized error mapping (`404/405/413/429/502/503/504`)
+- edge proxy denylist for control-plane paths (`/_fn/*`, `/console/*`)
 
 ## 2) Strict filesystem sandbox (runtime, default)
 

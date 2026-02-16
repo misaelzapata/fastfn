@@ -40,7 +40,7 @@ module.exports.handler = async (event) => {
 ## Step 2: test query input
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/hello_world?name=Misael&lang=en'
+curl -sS 'http://127.0.0.1:8080/fn/hello-world?name=Misael&lang=en'
 ```
 
 Look for:
@@ -51,7 +51,7 @@ Look for:
 ## Step 3: test JSON body
 
 ```bash
-curl -sS -X POST 'http://127.0.0.1:8080/fn/hello_world?name=Misael' \
+curl -sS -X POST 'http://127.0.0.1:8080/fn/hello-world?name=Misael' \
   -H 'content-type: application/json' \
   --data '{"city":"Cordoba","role":"admin"}'
 ```
@@ -64,7 +64,7 @@ Look for:
 ## Step 4: test plain text body
 
 ```bash
-curl -sS -X POST 'http://127.0.0.1:8080/fn/hello_world?name=Misael' \
+curl -sS -X POST 'http://127.0.0.1:8080/fn/hello-world?name=Misael' \
   -H 'content-type: text/plain' \
   --data 'hello from body'
 ```
@@ -76,4 +76,4 @@ Look for:
 ## If it does not work
 
 - Check you replaced the code in the same `app.js` file from chapter 1.
-- Check URL uses `/fn/hello_world` exactly.
+- Check URL uses `/fn/hello-world` exactly.

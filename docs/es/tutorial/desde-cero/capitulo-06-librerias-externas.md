@@ -4,11 +4,11 @@ Objetivo: usar dependencias de npm/pip por funcion.
 
 ## Node
 
-`/srv/fn/functions/node/my_fn/package.json`
+`/srv/fn/functions/node/my-fn/package.json`
 
 ```json
 {
-  "name": "my_fn",
+  "name": "my-fn",
   "private": true,
   "dependencies": {
     "dayjs": "^1.11.13"

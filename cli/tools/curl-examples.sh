@@ -41,24 +41,24 @@ echo "== hello version v2 =="
 curl -sS "$BASE_URL/fn/hello@v2?name=World" | jq .
 
 echo
-echo "== risk_score =="
-curl -sS "$BASE_URL/fn/risk_score?email=user@example.com" | jq .
+echo "== risk-score =="
+curl -sS "$BASE_URL/fn/risk-score?email=user@example.com" | jq .
 
 echo
-echo "== php_profile =="
-curl -sS "$BASE_URL/fn/php_profile?name=World" | jq .
+echo "== php-profile =="
+curl -sS "$BASE_URL/fn/php-profile?name=World" | jq .
 
 echo
-echo "== rust_profile =="
-curl -sS "$BASE_URL/fn/rust_profile?name=World" | jq .
+echo "== rust-profile =="
+curl -sS "$BASE_URL/fn/rust-profile?name=World" | jq .
 
 echo
-echo "== gmail_send (dry run) =="
-curl -sS "$BASE_URL/fn/gmail_send?to=demo@example.com&subject=Hi&text=Hello&dry_run=true" | jq .
+echo "== gmail-send (dry run) =="
+curl -sS "$BASE_URL/fn/gmail-send?to=demo@example.com&subject=Hi&text=Hello&dry_run=true" | jq .
 
 echo
-echo "== telegram_send (dry run) =="
-curl -sS "$BASE_URL/fn/telegram_send?chat_id=123456&text=Hello&dry_run=true" | jq .
+echo "== telegram-send (dry run) =="
+curl -sS "$BASE_URL/fn/telegram-send?chat_id=123456&text=Hello&dry_run=true" | jq .
 
 echo
 echo "== invoke helper with context =="
@@ -66,36 +66,36 @@ curl -sS "$BASE_URL/_fn/invoke" -X POST -H 'Content-Type: application/json' \
   --data '{"name":"hello","method":"GET","query":{"name":"FromInvoke"},"context":{"trace_id":"demo-123"}}' | jq .
 
 echo
-echo "== edge_filter (expect 401 without x-api-key) =="
-curl -sS -i "$BASE_URL/fn/edge_filter?user_id=123" | sed -n '1,12p'
+echo "== edge-filter (expect 401 without x-api-key) =="
+curl -sS -i "$BASE_URL/fn/edge-filter?user_id=123" | sed -n '1,12p'
 
 echo
-echo "== edge_filter (expect 200 with x-api-key: dev; proxied openapi) =="
-curl -sS "$BASE_URL/fn/edge_filter?user_id=123" -H 'x-api-key: dev' | jq '.openapi, .info.title'
+echo "== edge-filter (expect 200 with x-api-key: dev; proxied openapi) =="
+curl -sS "$BASE_URL/fn/edge-filter?user_id=123" -H 'x-api-key: dev' | jq '.openapi, .info.title'
 
 echo
-echo "== request_inspector (shows query/body/headers) =="
-curl -sS "$BASE_URL/fn/request_inspector?key=test" -X POST -H 'x-demo: 1' --data 'hello' | jq .
+echo "== request-inspector (shows query/body/headers) =="
+curl -sS "$BASE_URL/fn/request-inspector?key=test" -X POST -H 'x-demo: 1' --data 'hello' | jq .
 
 echo
-echo "== edge-header-inject (proxies to request_inspector; injects x-tenant) =="
+echo "== edge-header-inject (proxies to request-inspector; injects x-tenant) =="
 curl -sS "$BASE_URL/fn/edge-header-inject?tenant=acme" -X POST -H 'Content-Type: text/plain' --data 'hello' | jq .
 
 echo
-echo "== edge_auth_gateway (expect 401 without bearer) =="
-curl -sS -i "$BASE_URL/fn/edge_auth_gateway?target=health" | sed -n '1,12p'
+echo "== edge-auth-gateway (expect 401 without bearer) =="
+curl -sS -i "$BASE_URL/fn/edge-auth-gateway?target=health" | sed -n '1,12p'
 
 echo
-echo "== edge_auth_gateway (expect 200 with bearer; proxied health) =="
-curl -sS "$BASE_URL/fn/edge_auth_gateway?target=health" -H 'Authorization: Bearer dev-token' | jq .
+echo "== edge-auth-gateway (expect 200 with bearer; proxied health) =="
+curl -sS "$BASE_URL/fn/edge-auth-gateway?target=health" -H 'Authorization: Bearer dev-token' | jq .
 
 echo
-echo "== github_webhook_guard (expect 401 with bad signature) =="
-curl -sS -i "$BASE_URL/fn/github_webhook_guard" -X POST -H 'x-hub-signature-256: sha256=bad' --data '{"zen":"Keep it logically awesome.","hook_id":123}' | sed -n '1,12p'
+echo "== github-webhook-guard (expect 401 with bad signature) =="
+curl -sS -i "$BASE_URL/fn/github-webhook-guard" -X POST -H 'x-hub-signature-256: sha256=bad' --data '{"zen":"Keep it logically awesome.","hook_id":123}' | sed -n '1,12p'
 
 echo
-echo "== telegram_ai_reply (dry run) =="
-curl -sS "$BASE_URL/fn/telegram_ai_reply?dry_run=true" -X POST -H 'Content-Type: application/json' \
+echo "== telegram-ai-reply (dry run) =="
+curl -sS "$BASE_URL/fn/telegram-ai-reply?dry_run=true" -X POST -H 'Content-Type: application/json' \
   --data '{"message":{"chat":{"id":123},"text":"Hola"}}' | jq .
 
 echo
@@ -104,13 +104,13 @@ curl -sS -i "$BASE_URL/fn/nope" | sed -n '1,12p'
 
 echo
 echo "== html demo =="
-curl -sS -i "$BASE_URL/fn/html_demo" | sed -n '1,20p'
+curl -sS -i "$BASE_URL/fn/html-demo" | sed -n '1,20p'
 
 echo
 echo "== csv demo =="
-curl -sS -i "$BASE_URL/fn/csv_demo" | sed -n '1,20p'
+curl -sS -i "$BASE_URL/fn/csv-demo" | sed -n '1,20p'
 
 echo
 echo "== png demo (saved to /tmp/demo.png) =="
-curl -sS "$BASE_URL/fn/png_demo" -o /tmp/demo.png
+curl -sS "$BASE_URL/fn/png-demo" -o /tmp/demo.png
 file /tmp/demo.png

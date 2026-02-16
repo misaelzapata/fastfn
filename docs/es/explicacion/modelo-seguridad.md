@@ -18,6 +18,7 @@ Antes de invocar runtime, el gateway aplica:
 - límite de body (`max_body_bytes`)
 - timeout y concurrencia por función
 - mapeo consistente de errores (`404/405/413/429/502/503/504`)
+- denylist de edge proxy para paths del control-plane (`/_fn/*`, `/console/*`)
 
 ## 2) Sandbox estricto de filesystem (runtime, default)
 

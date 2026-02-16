@@ -10,9 +10,14 @@ tests/results/*
 !tests/results/.gitkeep
 srv/fn/functions/**/count.txt
 srv/fn/functions/**/.deps/
+examples/functions/**/count.txt
+examples/functions/**/.memory.json
+examples/functions/**/.loop_state.json
+examples/functions/**/.loop.lock
 .env
 .env.*
-docs/internal/
+docs/internal/*
+!docs/internal/STATUS_UPDATE.md
 bin/
 coverage/
 site/

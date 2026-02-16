@@ -60,10 +60,10 @@ def handler(event):
 
 ```bash
 # ❌ Fail
-curl -i 'http://127.0.0.1:8080/fn/secure_api'
+curl -i 'http://127.0.0.1:8080/fn/secure-api'
 
 # ✅ Success
-curl -i 'http://127.0.0.1:8080/fn/secure_api' \
+curl -i 'http://127.0.0.1:8080/fn/secure-api' \
   -H 'x-api-key: my-super-secret-key-123'
 ```
 

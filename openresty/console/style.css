@@ -245,6 +245,16 @@ a {
     color: #1e7e34;
 }
 
+.badge.warn {
+    background: #fff3cd;
+    color: #8a6d3b;
+}
+
+.badge.danger {
+    background: #f8d7da;
+    color: #a94442;
+}
+
 .btn {
     padding: 6px 16px;
     border-radius: 2px;

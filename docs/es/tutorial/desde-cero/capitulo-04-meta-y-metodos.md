@@ -4,7 +4,7 @@ Objetivo: controlar metodos, timeout, concurrencia y metadata de invocacion.
 
 ## Archivo
 
-`/srv/fn/functions/node/hello_world/fn.config.json`
+`/srv/fn/functions/node/hello-world/fn.config.json`
 
 ```json
 {

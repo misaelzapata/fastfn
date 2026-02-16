@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Manual E2E check: fastfn -> telegram_send -> Telegram API -> your phone.
+# Manual E2E check: fastfn -> telegram-send -> Telegram API -> your phone.
 #
 # Prereqs:
 # - fastfn running on http://127.0.0.1:8080
-# - TELEGRAM_BOT_TOKEN set in fn.env.json for node/telegram_send
+# - TELEGRAM_BOT_TOKEN set in fn.env.json for node/telegram-send
 # - you know your CHAT_ID (send /start to your bot, then getUpdates)
 #
 # Usage:
@@ -22,8 +22,8 @@ if [[ -z "$CHAT_ID" ]]; then
   exit 2
 fi
 
-echo "Sending Telegram message via fastfn (telegram_send)..."
-resp="$(curl -sS "${BASE_URL}/fn/telegram_send?chat_id=${CHAT_ID}&text=$(python3 - <<PY
+echo "Sending Telegram message via fastfn (telegram-send)..."
+resp="$(curl -sS "${BASE_URL}/fn/telegram-send?chat_id=${CHAT_ID}&text=$(python3 - <<PY
 import urllib.parse, os
 print(urllib.parse.quote(os.environ.get("TEXT","")))
 PY
@@ -42,7 +42,7 @@ except Exception as e:
     sys.exit(1)
 
 if obj.get("dry_run") is True:
-    print("fastfn returned dry_run=true; did you configure TELEGRAM_BOT_TOKEN in node/telegram_send/fn.env.json?", file=sys.stderr)
+    print("fastfn returned dry_run=true; did you configure TELEGRAM_BOT_TOKEN in node/telegram-send/fn.env.json?", file=sys.stderr)
     print(json.dumps(obj, indent=2), file=sys.stderr)
     sys.exit(1)
 
@@ -51,6 +51,6 @@ if not obj.get("sent"):
     print(json.dumps(obj, indent=2), file=sys.stderr)
     sys.exit(1)
 
-print("OK: telegram_send reports sent=true")
+print("OK: telegram-send reports sent=true")
 print(json.dumps(obj, indent=2))
 PY

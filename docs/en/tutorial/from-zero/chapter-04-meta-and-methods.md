@@ -4,7 +4,7 @@ Goal: enforce HTTP methods and execution limits.
 
 ## Step 1: create config
 
-Path: `srv/fn/functions/node/hello_world/fn.config.json`
+Path: `srv/fn/functions/node/hello-world/fn.config.json`
 
 ```json
 {
@@ -25,13 +25,13 @@ Path: `srv/fn/functions/node/hello_world/fn.config.json`
 Allowed:
 
 ```bash
-curl -i -sS 'http://127.0.0.1:8080/fn/hello_world' | sed -n '1,12p'
+curl -i -sS 'http://127.0.0.1:8080/fn/hello-world' | sed -n '1,12p'
 ```
 
 Blocked method example:
 
 ```bash
-curl -i -sS -X DELETE 'http://127.0.0.1:8080/fn/hello_world' | sed -n '1,20p'
+curl -i -sS -X DELETE 'http://127.0.0.1:8080/fn/hello-world' | sed -n '1,20p'
 ```
 
 Expected: `405 Method Not Allowed`.

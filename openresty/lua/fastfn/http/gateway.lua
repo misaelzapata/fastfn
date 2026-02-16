@@ -210,11 +210,31 @@ local function build_proxy_url(proxy, edge_cfg)
   return base_url .. path, nil
 end
 
+local function proxy_path_is_control_plane(path)
+  if type(path) ~= "string" or path == "" then
+    return false
+  end
+
+  local function matches_prefix(prefix)
+    if path == prefix then
+      return true
+    end
+    if path:sub(1, #prefix) ~= prefix then
+      return false
+    end
+    local nextc = path:sub(#prefix + 1, #prefix + 1)
+    return nextc == "/" or nextc == "?" or nextc == "#"
+  end
+
+  -- Prevent edge proxy from reaching control-plane surfaces.
+  return matches_prefix("/_fn") or matches_prefix("/console")
+end
+
 local function proxy_allowed(url, edge_cfg)
   if type(url) ~= "string" then
     return false, "invalid url"
   end
-  local m = ngx.re.match(url, [[^(https?)://([^/]+)]], "jo")
+  local m = ngx.re.match(url, [[^(https?)://([^/]+)(/.*)?$]], "jo")
   if not m then
     return false, "invalid url"
   end
@@ -224,12 +244,17 @@ local function proxy_allowed(url, edge_cfg)
   end
   local authority = m[2]
   local host = authority
+  local path = m[3] or "/"
   -- strip :port and [v6]
   local ipv6 = host:match("^%[([^%]]+)%]") -- ignore brackets
   if ipv6 then
     host = ipv6
   else
     host = host:match("^([^:]+)") or host
+  end
+
+  if proxy_path_is_control_plane(path) then
+    return false, "control-plane path not allowed"
   end
 
   if not (edge_cfg and edge_cfg.allow_private == true) and host_is_private(host) then
@@ -420,14 +445,14 @@ local function host_is_allowed(allowed_hosts)
 end
 
 local request_uri = ngx.var.uri or ""
-local fn_name, requested_version = utils.parse_legacy_target(request_uri)
+local legacy_name, legacy_version = utils.parse_legacy_target(request_uri)
 local runtime
+local fn_name
+local requested_version
 local path_params
 local resolve_err
 
--- STRICT MODE: Legacy /fn/name access is disabled in favor of routing catalog.
--- However, we still fallback to mapped search first.
-
+-- Prefer mapped routes for normal traffic; fall back to legacy /fn/<name> if present.
 runtime, fn_name, requested_version, path_params, resolve_err = routes_mod.resolve_mapped_target(
   request_uri,
   ngx.req.get_method(),
@@ -445,8 +470,21 @@ if not runtime then
     write_response(409, { ["Content-Type"] = "application/json" }, json_error(resolve_err))
     return
   end
-  write_response(404, { ["Content-Type"] = "application/json" }, json_error("not found"))
-  return
+
+  if legacy_name then
+    local legacy_runtime, legacy_resolved_version = routes_mod.resolve_legacy_target(legacy_name, legacy_version)
+    if legacy_runtime then
+      runtime = legacy_runtime
+      fn_name = legacy_name
+      requested_version = legacy_resolved_version
+      path_params = {}
+    end
+  end
+
+  if not runtime then
+    write_response(404, { ["Content-Type"] = "application/json" }, json_error("not found"))
+    return
+  end
 end
 
 local runtime_cfg = routes_mod.get_runtime_config(runtime)

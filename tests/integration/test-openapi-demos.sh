@@ -127,20 +127,20 @@ def query_param_map(op):
             out[p["name"]] = p
     return out
 
-telegram_send_get = ((paths.get("/telegram-send") or {}).get("get") or {})
-q = query_param_map(telegram_send_get)
+telegram-send_get = ((paths.get("/telegram-send") or {}).get("get") or {})
+q = query_param_map(telegram-send_get)
 for required in ("chat_id", "text", "dry_run"):
-    assert required in q, f"telegram_send GET missing query example param: {required}"
+    assert required in q, f"telegram-send GET missing query example param: {required}"
 
-telegram_send_post = ((paths.get("/telegram-send") or {}).get("post") or {})
-rb = (((telegram_send_post.get("requestBody") or {}).get("content") or {}).get("application/json") or {})
+telegram-send_post = ((paths.get("/telegram-send") or {}).get("post") or {})
+rb = (((telegram-send_post.get("requestBody") or {}).get("content") or {}).get("application/json") or {})
 examples = rb.get("examples") or {}
 example_values = [v.get("value") for v in examples.values() if isinstance(v, dict)]
 has_chat = any(isinstance(v, dict) and ("chat_id" in v) for v in example_values)
-assert has_chat, "telegram_send POST must expose chat_id example payload"
+assert has_chat, "telegram-send POST must expose chat_id example payload"
 
-telegram_ai_reply_post = ((paths.get("/telegram-ai-reply") or {}).get("post") or {})
-rb = (((telegram_ai_reply_post.get("requestBody") or {}).get("content") or {}).get("application/json") or {})
+telegram-ai-reply_post = ((paths.get("/telegram-ai-reply") or {}).get("post") or {})
+rb = (((telegram-ai-reply_post.get("requestBody") or {}).get("content") or {}).get("application/json") or {})
 examples = rb.get("examples") or {}
 example_values = [v.get("value") for v in examples.values() if isinstance(v, dict)]
 has_update = False
@@ -377,14 +377,6 @@ def is_expected_warn(item):
     path = item["path"]
     method = item["method"]
     code = item["code"]
-
-    # Edge proxy demos forward non-GET methods to GET-only internal endpoints.
-    if path.startswith("/edge-proxy") and method in ("POST", "PUT", "PATCH", "DELETE") and code == 405:
-        return True
-    if path.startswith("/edge-auth-gateway") and method in ("POST", "PUT", "PATCH", "DELETE") and code == 405:
-        return True
-    if path.startswith("/edge-filter") and method in ("POST", "PUT", "PATCH", "DELETE") and code == 405:
-        return True
 
     # WhatsApp "status" flow is GET-only by design.
     if path.startswith("/whatsapp") and method in ("POST", "DELETE") and code == 405:

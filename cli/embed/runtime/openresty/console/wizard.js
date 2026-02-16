@@ -32,9 +32,9 @@ function curlFor(baseUrl, route, method, queryExample, bodyExample) {
 
 function wizardTemplate(runtime, template) {
   const rt = String(runtime || 'python');
-  const t = String(template || 'hello_json');
+  const t = String(template || 'hello-json');
 
-  if (t === 'hello_json') {
+  if (t === 'hello-json') {
     if (rt === 'python') {
       return {
         summary: 'Hello JSON',
@@ -53,7 +53,7 @@ function wizardTemplate(runtime, template) {
     }
   }
 
-  if (t === 'hello_ts') {
+  if (t === 'hello-ts') {
     if (rt === 'node') {
       return {
         summary: 'Hello (TypeScript)',
@@ -138,7 +138,7 @@ function wizardTemplate(runtime, template) {
     }
   }
 
-  if (t === 'edge_proxy') {
+  if (t === 'edge-proxy') {
     if (rt === 'python') {
       return {
         summary: 'Edge passthrough (proxy)',
@@ -165,7 +165,7 @@ function wizardTemplate(runtime, template) {
     }
   }
 
-  if (t === 'edge_filter') {
+  if (t === 'edge-filter') {
     if (rt === 'node') {
       return {
         summary: 'Edge filter (auth + rewrite)',
@@ -192,7 +192,7 @@ function wizardTemplate(runtime, template) {
     }
   }
 
-  if (t === 'edge_auth_gateway') {
+  if (t === 'edge-auth-gateway') {
     if (rt === 'node') {
       return {
         summary: 'Edge gateway auth (Bearer) + passthrough',
@@ -219,13 +219,13 @@ function wizardTemplate(runtime, template) {
     }
   }
 
-  if (t === 'github_webhook_guard') {
+  if (t === 'github-webhook-guard') {
     if (rt === 'node') {
       return {
         summary: 'GitHub webhook guard (signature verify)',
         methods: ['POST'],
         body_example: '{"zen":"Keep it logically awesome.","hook_id":123}',
-        code: `// @summary GitHub webhook guard (signature verify)\n// @methods POST\n// @body {\"zen\":\"Keep it logically awesome.\",\"hook_id\":123}\nconst crypto = require('node:crypto');\n\nfunction header(event, name) {\n  const h = event.headers || {};\n  return h[name] || h[name.toLowerCase()] || h[name.toUpperCase()] || null;\n}\n\nfunction json(status, payload) {\n  return { status, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) };\n}\n\nfunction timingSafeEq(a, b) {\n  const ab = Buffer.from(String(a || ''), 'utf8');\n  const bb = Buffer.from(String(b || ''), 'utf8');\n  if (ab.length !== bb.length) return false;\n  return crypto.timingSafeEqual(ab, bb);\n}\n\nfunction computeSig(secret, body) {\n  return 'sha256=' + crypto.createHmac('sha256', Buffer.from(secret, 'utf8')).update(Buffer.from(body || '', 'utf8')).digest('hex');\n}\n\nexports.handler = async (event) => {\n  const env = event.env || {};\n  const ctx = event.context || {};\n  const secret = String(env.GITHUB_WEBHOOK_SECRET || '');\n  if (!secret) return json(500, { error: 'GITHUB_WEBHOOK_SECRET not configured' });\n\n  const body = typeof event.body === 'string' ? event.body : '';\n  const provided = String(header(event, 'x-hub-signature-256') || '');\n  if (!provided) return json(400, { error: 'missing x-hub-signature-256' });\n\n  const expected = computeSig(secret, body);\n  if (!timingSafeEq(provided, expected)) return json(401, { error: 'invalid signature' });\n\n  const q = event.query || {};\n  const forward = String(q.forward || '').trim() === '1';\n  if (!forward) return json(200, { ok: true, verified: true });\n\n  return {\n    proxy: {\n      path: '/fn/request_inspector',\n      method: 'POST',\n      headers: { 'x-fastfn-edge': '1', 'x-fastfn-request-id': String(ctx.request_id || ''), 'x-webhook-verified': '1' },\n      body,\n      timeout_ms: ctx.timeout_ms || 2000,\n    },\n  };\n};\n`,
+        code: `// @summary GitHub webhook guard (signature verify)\n// @methods POST\n// @body {\"zen\":\"Keep it logically awesome.\",\"hook_id\":123}\nconst crypto = require('node:crypto');\n\nfunction header(event, name) {\n  const h = event.headers || {};\n  return h[name] || h[name.toLowerCase()] || h[name.toUpperCase()] || null;\n}\n\nfunction json(status, payload) {\n  return { status, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) };\n}\n\nfunction timingSafeEq(a, b) {\n  const ab = Buffer.from(String(a || ''), 'utf8');\n  const bb = Buffer.from(String(b || ''), 'utf8');\n  if (ab.length !== bb.length) return false;\n  return crypto.timingSafeEqual(ab, bb);\n}\n\nfunction computeSig(secret, body) {\n  return 'sha256=' + crypto.createHmac('sha256', Buffer.from(secret, 'utf8')).update(Buffer.from(body || '', 'utf8')).digest('hex');\n}\n\nexports.handler = async (event) => {\n  const env = event.env || {};\n  const ctx = event.context || {};\n  const secret = String(env.GITHUB_WEBHOOK_SECRET || '');\n  if (!secret) return json(500, { error: 'GITHUB_WEBHOOK_SECRET not configured' });\n\n  const body = typeof event.body === 'string' ? event.body : '';\n  const provided = String(header(event, 'x-hub-signature-256') || '');\n  if (!provided) return json(400, { error: 'missing x-hub-signature-256' });\n\n  const expected = computeSig(secret, body);\n  if (!timingSafeEq(provided, expected)) return json(401, { error: 'invalid signature' });\n\n  const q = event.query || {};\n  const forward = String(q.forward || '').trim() === '1';\n  if (!forward) return json(200, { ok: true, verified: true });\n\n  return {\n    proxy: {\n      path: '/fn/request-inspector',\n      method: 'POST',\n      headers: { 'x-fastfn-edge': '1', 'x-fastfn-request-id': String(ctx.request_id || ''), 'x-webhook-verified': '1' },\n      body,\n      timeout_ms: ctx.timeout_ms || 2000,\n    },\n  };\n};\n`,
         edgeConfig: {
           edge: { base_url: 'http://127.0.0.1:8080', allow_hosts: ['127.0.0.1:8080'], allow_private: true, max_response_bytes: 1048576 },
         },
@@ -248,7 +248,7 @@ function wizardTemplate(runtime, template) {
         methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
         query_example: { tenant: 'demo' },
         body_example: 'hello',
-        code: `// @summary Edge header injection + passthrough\n// @methods GET,POST,PUT,PATCH,DELETE\n// @query {\"tenant\":\"demo\"}\n// @body hello\nexports.handler = async (event) => {\n  const ctx = event.context || {};\n  const q = event.query || {};\n  const tenant = String(q.tenant || 'demo');\n  return {\n    proxy: {\n      path: '/fn/request_inspector',\n      method: event.method || 'GET',\n      headers: {\n        'x-fastfn-edge': '1',\n        'x-fastfn-request-id': String(ctx.request_id || ''),\n        'x-tenant': tenant,\n      },\n      body: event.body || '',\n      timeout_ms: ctx.timeout_ms || 2000,\n    },\n  };\n};\n`,
+        code: `// @summary Edge header injection + passthrough\n// @methods GET,POST,PUT,PATCH,DELETE\n// @query {\"tenant\":\"demo\"}\n// @body hello\nexports.handler = async (event) => {\n  const ctx = event.context || {};\n  const q = event.query || {};\n  const tenant = String(q.tenant || 'demo');\n  return {\n    proxy: {\n      path: '/fn/request-inspector',\n      method: event.method || 'GET',\n      headers: {\n        'x-fastfn-edge': '1',\n        'x-fastfn-request-id': String(ctx.request_id || ''),\n        'x-tenant': tenant,\n      },\n      body: event.body || '',\n      timeout_ms: ctx.timeout_ms || 2000,\n    },\n  };\n};\n`,
         edgeConfig: {
           edge: { base_url: 'http://127.0.0.1:8080', allow_hosts: ['127.0.0.1:8080'], allow_private: true, max_response_bytes: 1048576 },
         },
@@ -260,7 +260,7 @@ function wizardTemplate(runtime, template) {
         methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
         query_example: { tenant: 'demo' },
         body_example: 'hello',
-        code: `# @summary Edge header injection + passthrough\n# @methods GET,POST,PUT,PATCH,DELETE\n# @query {\"tenant\":\"demo\"}\n# @body hello\n\ndef handler(event):\n    ctx = event.get(\"context\") or {}\n    q = event.get(\"query\") or {}\n    tenant = str(q.get(\"tenant\") or \"demo\")\n    return {\n        \"proxy\": {\n            \"path\": \"/fn/request_inspector\",\n            \"method\": event.get(\"method\") or \"GET\",\n            \"headers\": {\n                \"x-fastfn-edge\": \"1\",\n                \"x-fastfn-request-id\": str(ctx.get(\"request_id\") or \"\"),\n                \"x-tenant\": tenant,\n            },\n            \"body\": event.get(\"body\") or \"\",\n            \"timeout_ms\": int(ctx.get(\"timeout_ms\") or 2000),\n        }\n    }\n`,
+        code: `# @summary Edge header injection + passthrough\n# @methods GET,POST,PUT,PATCH,DELETE\n# @query {\"tenant\":\"demo\"}\n# @body hello\n\ndef handler(event):\n    ctx = event.get(\"context\") or {}\n    q = event.get(\"query\") or {}\n    tenant = str(q.get(\"tenant\") or \"demo\")\n    return {\n        \"proxy\": {\n            \"path\": \"/fn/request-inspector\",\n            \"method\": event.get(\"method\") or \"GET\",\n            \"headers\": {\n                \"x-fastfn-edge\": \"1\",\n                \"x-fastfn-request-id\": str(ctx.get(\"request_id\") or \"\"),\n                \"x-tenant\": tenant,\n            },\n            \"body\": event.get(\"body\") or \"\",\n            \"timeout_ms\": int(ctx.get(\"timeout_ms\") or 2000),\n        }\n    }\n`,
         edgeConfig: {
           edge: { base_url: 'http://127.0.0.1:8080', allow_hosts: ['127.0.0.1:8080'], allow_private: true, max_response_bytes: 1048576 },
         },
@@ -268,7 +268,7 @@ function wizardTemplate(runtime, template) {
     }
   }
 
-  if (t === 'telegram_ai_reply') {
+  if (t === 'telegram-ai-reply') {
     if (rt === 'node') {
       return {
         summary: 'Telegram webhook -> OpenAI -> Telegram reply (AI bot)',
@@ -279,7 +279,7 @@ function wizardTemplate(runtime, template) {
     }
   }
 
-  if (t === 'edge_proxy_ts') {
+  if (t === 'edge-proxy-ts') {
     if (rt === 'node') {
       return {
         summary: 'Edge passthrough (proxy) (TypeScript)',
@@ -321,7 +321,7 @@ export function initWizard(opts) {
     const runtime = String(wizRuntimeEl.value || '').trim();
     const name = String(wizNameEl.value || '').trim();
     const version = wizVersionEl ? String(wizVersionEl.value || '').trim() : '';
-    const template = String(wizTemplateEl.value || 'hello_json');
+    const template = String(wizTemplateEl.value || 'hello-json');
     if (!runtime || !name) {
       if (wizStatusEl) wizStatusEl.textContent = 'Runtime and name are required.';
       return;
@@ -396,7 +396,7 @@ export function initWizard(opts) {
     if (!wizRuntimeEl || !wizNameEl || !wizTemplateEl) return;
     const runtime = String(wizRuntimeEl.value || '').trim();
     const name = String(wizNameEl.value || '').trim();
-    const template = String(wizTemplateEl.value || 'hello_json');
+    const template = String(wizTemplateEl.value || 'hello-json');
     const prompt = wizPromptEl ? String(wizPromptEl.value || '') : '';
     if (!runtime || !name) {
       if (wizStatusEl) wizStatusEl.textContent = 'Runtime and name are required.';

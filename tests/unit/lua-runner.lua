@@ -366,7 +366,7 @@ local function test_openapi_builder()
       python = {
         functions = {
           hello = { has_default = true, versions = { "v2" }, policy = { methods = { "GET" } }, versions_policy = { v2 = { methods = { "GET" } } } },
-          risk_score = { has_default = true, versions = {}, policy = { methods = { "GET", "POST" } }, versions_policy = {} },
+          ["risk-score"] = { has_default = true, versions = {}, policy = { methods = { "GET", "POST" } }, versions_policy = {} },
         },
       },
       node = {
@@ -376,12 +376,12 @@ local function test_openapi_builder()
       },
       php = {
         functions = {
-          php_profile = { has_default = true, versions = {}, policy = { methods = { "GET" } }, versions_policy = {} },
+          ["php-profile"] = { has_default = true, versions = {}, policy = { methods = { "GET" } }, versions_policy = {} },
         },
       },
       rust = {
         functions = {
-          rust_profile = { has_default = true, versions = {}, policy = { methods = { "GET" } }, versions_policy = {} },
+          ["rust-profile"] = { has_default = true, versions = {}, policy = { methods = { "GET" } }, versions_policy = {} },
         },
       },
     },
@@ -394,10 +394,10 @@ local function test_openapi_builder()
       },
       ["/api/dispatch"] = {
         { runtime = "python", fn_name = "hello", version = nil, methods = { "GET" } },
-        { runtime = "python", fn_name = "risk_score", version = nil, methods = { "POST" } },
+        { runtime = "python", fn_name = "risk-score", version = nil, methods = { "POST" } },
       },
       ["/api/users/:id"] = {
-        { runtime = "python", fn_name = "risk_score", version = nil, methods = { "GET" } },
+        { runtime = "python", fn_name = "risk-score", version = nil, methods = { "GET" } },
       },
       ["/api/blog/:slug*"] = {
         { runtime = "python", fn_name = "hello", version = nil, methods = { "GET" } },
@@ -416,9 +416,9 @@ local function test_openapi_builder()
 
   assert_true(spec.paths["/fn/hello"] == nil, "legacy default hello path hidden")
   assert_true(spec.paths["/fn/hello@v2"] == nil, "legacy versioned hello path hidden")
-  assert_true(spec.paths["/fn/risk_score"] == nil, "legacy risk path hidden")
-  assert_true(spec.paths["/fn/php_profile"] == nil, "legacy php path hidden")
-  assert_true(spec.paths["/fn/rust_profile"] == nil, "legacy rust path hidden")
+  assert_true(spec.paths["/fn/risk-score"] == nil, "legacy risk path hidden")
+  assert_true(spec.paths["/fn/php-profile"] == nil, "legacy php path hidden")
+  assert_true(spec.paths["/fn/rust-profile"] == nil, "legacy rust path hidden")
   assert_true(spec.paths["/api/hello"] ~= nil, "mapped route path")
   assert_true(spec.paths["/api/hello-v2"] ~= nil, "mapped version route path")
   assert_true(spec.paths["/api/dispatch"] ~= nil, "mapped route multi-entry path")
@@ -440,7 +440,7 @@ local function test_openapi_builder()
   assert_eq(spec.paths["/api/hello"].get.tags[2], nil, "mapped tags should avoid file/function tag fanout")
   assert_true(spec.paths["/api/hello"].get.summary:find("unknown/unknown", 1, true) == nil, "mapped summary should not be unknown")
   assert_true(spec.paths["/api/dispatch"].get.summary:find("python/hello", 1, true) ~= nil, "dispatch GET target summary")
-  assert_true(spec.paths["/api/dispatch"].post.summary:find("python/risk_score", 1, true) ~= nil, "dispatch POST target summary")
+  assert_true(spec.paths["/api/dispatch"].post.summary:find("python/risk-score", 1, true) ~= nil, "dispatch POST target summary")
   assert_true(spec.paths["/api/users/{id}"].get.parameters ~= nil, "dynamic route should expose path parameters")
   assert_eq(spec.paths["/api/users/{id}"].get.parameters[1].name, "id", "dynamic path param name")
   assert_eq(spec.paths["/api/users/{id}"].get.parameters[1]["in"], "path", "dynamic path param in")
@@ -792,6 +792,550 @@ local function test_routes_skip_disabled_runtime_file_routes()
   end)
 end
 
+local function test_routes_nested_project_root_scan_with_file_routes()
+  with_fake_ngx(function(cache, conc, _set_now)
+    local cjson = require("cjson.safe")
+    package.loaded["fastfn.core.routes"] = nil
+    local routes = require("fastfn.core.routes")
+    local uniq = tostring(math.floor((ngx.now and ngx.now() or os.time()) * 1000000))
+    local root = "/tmp/fastfn-lua-routes-nested-root-" .. uniq
+
+    rm_rf(root)
+    mkdir_p(root .. "/nextstyle-clean/node")
+    mkdir_p(root .. "/nextstyle-clean/users")
+
+    -- File route in the nested project root.
+    write_file(
+      root .. "/nextstyle-clean/get.conflict-route.js",
+      "exports.handler = async () => ({ status: 200, headers: { 'Content-Type': 'application/json' }, body: '{}' });\n"
+    )
+
+    -- Nested Next-style routes inside the same project.
+    write_file(
+      root .. "/nextstyle-clean/users/index.js",
+      "exports.handler = async () => ({ status: 200, headers: { 'Content-Type': 'application/json' }, body: '{}' });\n"
+    )
+    write_file(
+      root .. "/nextstyle-clean/users/[id].js",
+      "exports.handler = async () => ({ status: 200, headers: { 'Content-Type': 'application/json' }, body: '{}' });\n"
+    )
+
+    local cfg = {
+      functions_root = root,
+      socket_base_dir = "/tmp/fastfn",
+      runtime_order = { "node" },
+      defaults = {
+        timeout_ms = 2500,
+        max_concurrency = 20,
+        max_body_bytes = 1048576,
+      },
+      runtimes = {
+        node = { socket = "unix:/tmp/fastfn/fn-node.sock", timeout_ms = 2500 },
+      },
+    }
+
+    reset_shared_dict(cache)
+    reset_shared_dict(conc)
+    cache:set("runtime:config", cjson.encode(cfg))
+
+    local catalog = routes.discover_functions(true)
+    assert_true(catalog.mapped_routes["/nextstyle-clean/users"] ~= nil, "nested project should include users route")
+    assert_true(catalog.mapped_routes["/nextstyle-clean/users/:id"] ~= nil, "nested project should include users/:id route")
+
+    rm_rf(root)
+  end)
+end
+
+local function test_routes_force_url_policy_override()
+  with_fake_ngx(function(cache, conc, _set_now)
+    local cjson = require("cjson.safe")
+    package.loaded["fastfn.core.routes"] = nil
+    local routes = require("fastfn.core.routes")
+    local uniq = tostring(math.floor((ngx.now and ngx.now() or os.time()) * 1000000))
+    local root = "/tmp/fastfn-lua-force-url-" .. uniq
+
+    rm_rf(root)
+    mkdir_p(root .. "/node/policyfn")
+
+    -- File-based route: GET /conflict-route (node)
+    write_file(
+      root .. "/get.conflict-route.js",
+      "exports.handler = async () => ({ status: 200, headers: { 'Content-Type': 'application/json' }, body: '{}' });\n"
+    )
+
+    -- Config/policy function that wants the same route.
+    write_file(
+      root .. "/node/policyfn/app.js",
+      "exports.handler = async () => ({ status: 200, headers: { 'Content-Type': 'application/json' }, body: '{}' });\n"
+    )
+    write_file(
+      root .. "/node/policyfn/fn.config.json",
+      cjson.encode({
+        invoke = {
+          methods = { "GET", "POST" },
+          routes = { "/conflict-route" },
+        },
+      }) .. "\n"
+    )
+
+    local cfg = {
+      functions_root = root,
+      socket_base_dir = "/tmp/fastfn",
+      runtime_order = { "node" },
+      defaults = {
+        timeout_ms = 2500,
+        max_concurrency = 20,
+        max_body_bytes = 1048576,
+      },
+      runtimes = {
+        node = { socket = "unix:/tmp/fastfn/fn-node.sock", timeout_ms = 2500 },
+      },
+    }
+
+    reset_shared_dict(cache)
+    reset_shared_dict(conc)
+    cache:set("runtime:config", cjson.encode(cfg))
+
+    local catalog = routes.discover_functions(true)
+    assert_true(catalog.mapped_routes["/conflict-route"] ~= nil, "conflict-route mapped")
+
+    -- Without force-url, policy route must not override the already-mapped file route.
+    local rt1, fn1 = routes.resolve_mapped_target("/conflict-route", "GET", { host = "localhost" })
+    assert_eq(rt1, "node", "conflict-route runtime")
+    assert_eq(fn1, "get.conflict-route.js", "file route wins without force-url")
+
+    -- But non-overlapping methods can still be served by the policy entry.
+    local rt1p, fn1p = routes.resolve_mapped_target("/conflict-route", "POST", { host = "localhost" })
+    assert_eq(rt1p, "node", "conflict-route POST runtime")
+    assert_eq(fn1p, "policyfn", "policy route serves POST without overriding GET")
+
+    -- Now opt into override explicitly via force-url (invoke-scoped).
+    write_file(
+      root .. "/node/policyfn/fn.config.json",
+      cjson.encode({
+        invoke = {
+          ["force-url"] = true,
+          methods = { "GET", "POST" },
+          routes = { "/conflict-route" },
+        },
+      }) .. "\n"
+    )
+
+    routes.discover_functions(true)
+
+    local rt2, fn2 = routes.resolve_mapped_target("/conflict-route", "GET", { host = "localhost" })
+    assert_eq(rt2, "node", "forced conflict-route runtime")
+    assert_eq(fn2, "policyfn", "policy route overrides GET with force-url")
+
+    rm_rf(root)
+  end)
+end
+
+local function test_routes_force_url_ignored_for_version_scoped_configs()
+  with_env({ FN_FORCE_URL = "" }, function()
+    with_fake_ngx(function(cache, conc, _set_now)
+      local cjson = require("cjson.safe")
+      package.loaded["fastfn.core.routes"] = nil
+      local routes = require("fastfn.core.routes")
+      local uniq = tostring(math.floor((ngx.now and ngx.now() or os.time()) * 1000000))
+      local root = "/tmp/fastfn-lua-force-url-version-" .. uniq
+
+      rm_rf(root)
+      mkdir_p(root .. "/node/demo")
+      mkdir_p(root .. "/node/demo/test")
+
+      -- File-based route: GET /conflict-route (node)
+      write_file(
+        root .. "/get.conflict-route.js",
+        "exports.handler = async () => ({ status: 200, headers: { 'Content-Type': 'application/json' }, body: '{}' });\n"
+      )
+
+      -- Function root (default) exists, so the version can be discovered.
+      write_file(
+        root .. "/node/demo/app.js",
+        "exports.handler = async () => ({ status: 200, headers: { 'Content-Type': 'application/json' }, body: '{}' });\n"
+      )
+
+      -- Version-scoped config wants to take the same route with force-url. This must not override
+      -- an already-mapped URL unless FN_FORCE_URL is enabled globally by the operator.
+      write_file(
+        root .. "/node/demo/test/app.js",
+        "exports.handler = async () => ({ status: 200, headers: { 'Content-Type': 'application/json' }, body: '{}' });\n"
+      )
+      write_file(
+        root .. "/node/demo/test/fn.config.json",
+        cjson.encode({
+          invoke = {
+            ["force-url"] = true,
+            methods = { "GET" },
+            routes = { "/conflict-route" },
+          },
+        }) .. "\n"
+      )
+
+      local cfg = {
+        functions_root = root,
+        socket_base_dir = "/tmp/fastfn",
+        runtime_order = { "node" },
+        defaults = {
+          timeout_ms = 2500,
+          max_concurrency = 20,
+          max_body_bytes = 1048576,
+        },
+        runtimes = {
+          node = { socket = "unix:/tmp/fastfn/fn-node.sock", timeout_ms = 2500 },
+        },
+      }
+
+      reset_shared_dict(cache)
+      reset_shared_dict(conc)
+      cache:set("runtime:config", cjson.encode(cfg))
+
+      local catalog = routes.discover_functions(true)
+      assert_true(catalog.mapped_routes["/conflict-route"] ~= nil, "conflict-route mapped")
+
+      local rt1, fn1 = routes.resolve_mapped_target("/conflict-route", "GET", { host = "localhost" })
+      assert_eq(rt1, "node", "conflict-route runtime")
+      assert_eq(fn1, "get.conflict-route.js", "version force-url must not override file route without global FN_FORCE_URL")
+
+      rm_rf(root)
+    end)
+  end)
+end
+
+local function test_routes_force_url_breaks_policy_ties()
+  with_fake_ngx(function(cache, conc, _set_now)
+    local cjson = require("cjson.safe")
+    package.loaded["fastfn.core.routes"] = nil
+    local routes = require("fastfn.core.routes")
+    local uniq = tostring(math.floor((ngx.now and ngx.now() or os.time()) * 1000000))
+    local root = "/tmp/fastfn-lua-force-url-tie-" .. uniq
+
+    rm_rf(root)
+    mkdir_p(root .. "/node/a")
+    mkdir_p(root .. "/python/b")
+
+    write_file(root .. "/node/a/app.js", "exports.handler = async () => ({ status: 200, headers: {}, body: '{}' });\n")
+    write_file(
+      root .. "/node/a/fn.config.json",
+      cjson.encode({
+        invoke = {
+          methods = { "GET" },
+          routes = { "/tie" },
+        },
+      }) .. "\n"
+    )
+
+    write_file(
+      root .. "/python/b/app.py",
+      "def handler(event):\n"
+        .. "    return {'status':200,'headers':{'Content-Type':'application/json'},'body':'{}'}\n"
+    )
+    write_file(
+      root .. "/python/b/fn.config.json",
+      cjson.encode({
+        invoke = {
+          ["force-url"] = true,
+          methods = { "GET" },
+          routes = { "/tie" },
+        },
+      }) .. "\n"
+    )
+
+    local cfg = {
+      functions_root = root,
+      socket_base_dir = "/tmp/fastfn",
+      runtime_order = { "node", "python" },
+      defaults = {
+        timeout_ms = 2500,
+        max_concurrency = 20,
+        max_body_bytes = 1048576,
+      },
+      runtimes = {
+        node = { socket = "unix:/tmp/fastfn/fn-node.sock", timeout_ms = 2500 },
+        python = { socket = "unix:/tmp/fastfn/fn-python.sock", timeout_ms = 2500 },
+      },
+    }
+
+    reset_shared_dict(cache)
+    reset_shared_dict(conc)
+    cache:set("runtime:config", cjson.encode(cfg))
+
+    local catalog = routes.discover_functions(true)
+    assert_true(catalog.mapped_routes["/tie"] ~= nil, "tie route mapped")
+    assert_true(catalog.mapped_route_conflicts["/tie"] ~= true, "force-url should avoid tie conflict")
+
+    local rt, fn_name = routes.resolve_mapped_target("/tie", "GET", { host = "localhost" })
+    assert_eq(rt, "python", "forced policy wins tie")
+    assert_eq(fn_name, "b", "forced policy function name")
+
+    rm_rf(root)
+  end)
+end
+
+local function test_routes_force_url_global_env_policy_override()
+  with_env({ FN_FORCE_URL = "1" }, function()
+    with_fake_ngx(function(cache, conc, _set_now)
+      local cjson = require("cjson.safe")
+      package.loaded["fastfn.core.routes"] = nil
+      local routes = require("fastfn.core.routes")
+      local uniq = tostring(math.floor((ngx.now and ngx.now() or os.time()) * 1000000))
+      local root = "/tmp/fastfn-lua-force-url-global-" .. uniq
+
+      rm_rf(root)
+      mkdir_p(root .. "/node/policyfn")
+
+      -- File-based route: GET /conflict-route (node)
+      write_file(
+        root .. "/get.conflict-route.js",
+        "exports.handler = async () => ({ status: 200, headers: { 'Content-Type': 'application/json' }, body: '{}' });\n"
+      )
+
+      -- Config/policy function that wants the same route.
+      write_file(
+        root .. "/node/policyfn/app.js",
+        "exports.handler = async () => ({ status: 200, headers: { 'Content-Type': 'application/json' }, body: '{}' });\n"
+      )
+      write_file(
+        root .. "/node/policyfn/fn.config.json",
+        cjson.encode({
+          invoke = {
+            methods = { "GET" },
+            routes = { "/conflict-route" },
+          },
+        }) .. "\n"
+      )
+
+      local cfg = {
+        functions_root = root,
+        socket_base_dir = "/tmp/fastfn",
+        runtime_order = { "node" },
+        defaults = {
+          timeout_ms = 2500,
+          max_concurrency = 20,
+          max_body_bytes = 1048576,
+        },
+        runtimes = {
+          node = { socket = "unix:/tmp/fastfn/fn-node.sock", timeout_ms = 2500 },
+        },
+      }
+
+      reset_shared_dict(cache)
+      reset_shared_dict(conc)
+      cache:set("runtime:config", cjson.encode(cfg))
+
+      local catalog = routes.discover_functions(true)
+      assert_true(catalog.mapped_routes["/conflict-route"] ~= nil, "conflict-route mapped (global env)")
+
+      local rt, fn_name = routes.resolve_mapped_target("/conflict-route", "GET", { host = "localhost" })
+      assert_eq(rt, "node", "conflict-route runtime (global env)")
+      assert_eq(fn_name, "policyfn", "policy route overrides GET with FN_FORCE_URL=1")
+
+      rm_rf(root)
+    end)
+  end)
+end
+
+local function test_routes_force_url_global_env_keeps_policy_policy_conflict()
+  with_env({ FN_FORCE_URL = "1" }, function()
+    with_fake_ngx(function(cache, conc, _set_now)
+      local cjson = require("cjson.safe")
+      package.loaded["fastfn.core.routes"] = nil
+      local routes = require("fastfn.core.routes")
+      local uniq = tostring(math.floor((ngx.now and ngx.now() or os.time()) * 1000000))
+      local root = "/tmp/fastfn-lua-force-url-global-tie-" .. uniq
+
+      rm_rf(root)
+      mkdir_p(root .. "/node/a")
+      mkdir_p(root .. "/python/b")
+
+      write_file(root .. "/node/a/app.js", "exports.handler = async () => ({ status: 200, headers: {}, body: '{}' });\n")
+      write_file(
+        root .. "/node/a/fn.config.json",
+        cjson.encode({
+          invoke = {
+            methods = { "GET" },
+            routes = { "/tie" },
+          },
+        }) .. "\n"
+      )
+
+      write_file(
+        root .. "/python/b/app.py",
+        "def handler(event):\n"
+          .. "    return {'status':200,'headers':{'Content-Type':'application/json'},'body':'{}'}\n"
+      )
+      write_file(
+        root .. "/python/b/fn.config.json",
+        cjson.encode({
+          invoke = {
+            methods = { "GET" },
+            routes = { "/tie" },
+          },
+        }) .. "\n"
+      )
+
+      local cfg = {
+        functions_root = root,
+        socket_base_dir = "/tmp/fastfn",
+        runtime_order = { "node", "python" },
+        defaults = {
+          timeout_ms = 2500,
+          max_concurrency = 20,
+          max_body_bytes = 1048576,
+        },
+        runtimes = {
+          node = { socket = "unix:/tmp/fastfn/fn-node.sock", timeout_ms = 2500 },
+          python = { socket = "unix:/tmp/fastfn/fn-python.sock", timeout_ms = 2500 },
+        },
+      }
+
+      reset_shared_dict(cache)
+      reset_shared_dict(conc)
+      cache:set("runtime:config", cjson.encode(cfg))
+
+      local catalog = routes.discover_functions(true)
+      assert_true(catalog.mapped_routes["/tie"] == nil, "tie route removed when both policies forced")
+      assert_true(catalog.mapped_route_conflicts["/tie"] == true, "tie route conflict tracked when both policies forced")
+
+      rm_rf(root)
+    end)
+  end)
+end
+
+local function test_routes_policy_routes_disjoint_allow_hosts()
+  with_fake_ngx(function(cache, conc, _set_now)
+    local cjson = require("cjson.safe")
+    package.loaded["fastfn.core.routes"] = nil
+    local routes = require("fastfn.core.routes")
+    local uniq = tostring(math.floor((ngx.now and ngx.now() or os.time()) * 1000000))
+    local root = "/tmp/fastfn-lua-host-routing-" .. uniq
+
+    rm_rf(root)
+    mkdir_p(root .. "/node/a")
+    mkdir_p(root .. "/python/b")
+
+    write_file(root .. "/node/a/app.js", "exports.handler = async () => ({ status: 200, headers: {}, body: '{}' });\n")
+    write_file(
+      root .. "/node/a/fn.config.json",
+      cjson.encode({
+        invoke = {
+          methods = { "GET" },
+          routes = { "/hosted" },
+          allow_hosts = { "a.example.com" },
+        },
+      }) .. "\n"
+    )
+
+    write_file(
+      root .. "/python/b/app.py",
+      "def handler(event):\n"
+        .. "    return {'status':200,'headers':{'Content-Type':'application/json'},'body':'{}'}\n"
+    )
+    write_file(
+      root .. "/python/b/fn.config.json",
+      cjson.encode({
+        invoke = {
+          methods = { "GET" },
+          routes = { "/hosted" },
+          allow_hosts = { "b.example.com" },
+        },
+      }) .. "\n"
+    )
+
+    local cfg = {
+      functions_root = root,
+      socket_base_dir = "/tmp/fastfn",
+      runtime_order = { "node", "python" },
+      defaults = {
+        timeout_ms = 2500,
+        max_concurrency = 20,
+        max_body_bytes = 1048576,
+      },
+      runtimes = {
+        node = { socket = "unix:/tmp/fastfn/fn-node.sock", timeout_ms = 2500 },
+        python = { socket = "unix:/tmp/fastfn/fn-python.sock", timeout_ms = 2500 },
+      },
+    }
+
+    reset_shared_dict(cache)
+    reset_shared_dict(conc)
+    cache:set("runtime:config", cjson.encode(cfg))
+
+    local catalog = routes.discover_functions(true)
+    assert_true(type(catalog.mapped_routes["/hosted"]) == "table", "/hosted mapped")
+    assert_true(catalog.mapped_route_conflicts["/hosted"] ~= true, "/hosted should not be a conflict")
+
+    local rt_a, fn_a, _, _, err_a = routes.resolve_mapped_target("/hosted", "GET", { host = "a.example.com" })
+    assert_eq(rt_a, "node", "a.example.com resolves to node")
+    assert_eq(fn_a, "a", "a.example.com resolves to function a")
+    assert_eq(err_a, nil, "a.example.com no err")
+
+    local rt_b, fn_b, _, _, err_b = routes.resolve_mapped_target("/hosted", "GET", { host = "b.example.com" })
+    assert_eq(rt_b, "python", "b.example.com resolves to python")
+    assert_eq(fn_b, "b", "b.example.com resolves to function b")
+    assert_eq(err_b, nil, "b.example.com no err")
+
+    local rt_c, _, _, _, err_c = routes.resolve_mapped_target("/hosted", "GET", { host = "c.example.com" })
+    assert_eq(rt_c, nil, "c.example.com blocked")
+    assert_eq(err_c, "host not allowed", "c.example.com host not allowed")
+
+    rm_rf(root)
+  end)
+end
+
+local function test_routes_dynamic_order_is_deterministic_and_specific()
+  with_fake_ngx(function(cache, conc, _set_now)
+    local cjson = require("cjson.safe")
+    package.loaded["fastfn.core.routes"] = nil
+    local routes = require("fastfn.core.routes")
+    local uniq = tostring(math.floor((ngx.now and ngx.now() or os.time()) * 1000000))
+    local root = "/tmp/fastfn-lua-dynamic-order-" .. uniq
+
+    rm_rf(root)
+    mkdir_p(root)
+
+    write_file(root .. "/get.users.[id].js", "exports.handler = async () => ({ status: 200, headers: {}, body: '{}' });\n")
+    write_file(root .. "/get.users.[...id].js", "exports.handler = async () => ({ status: 200, headers: {}, body: '{}' });\n")
+
+    local cfg = {
+      functions_root = root,
+      socket_base_dir = "/tmp/fastfn",
+      runtime_order = { "node" },
+      defaults = {
+        timeout_ms = 2500,
+        max_concurrency = 20,
+        max_body_bytes = 1048576,
+      },
+      runtimes = {
+        node = { socket = "unix:/tmp/fastfn/fn-node.sock", timeout_ms = 2500 },
+      },
+    }
+
+    reset_shared_dict(cache)
+    reset_shared_dict(conc)
+    cache:set("runtime:config", cjson.encode(cfg))
+
+    local catalog = routes.discover_functions(true)
+    assert_true(type(catalog.mapped_routes["/users/:id"]) == "table", "dynamic /users/:id mapped")
+    assert_true(type(catalog.mapped_routes["/users/:id*"]) == "table", "catch-all /users/:id* mapped")
+    assert_true(type(catalog.dynamic_routes) == "table" and #catalog.dynamic_routes >= 2, "dynamic_routes computed")
+    assert_eq(catalog.dynamic_routes[1], "/users/:id", "dynamic route order prefers specific over catch-all")
+
+    local rt1, fn1, _, params1 = routes.resolve_mapped_target("/users/123", "GET", { host = "localhost" })
+    assert_eq(rt1, "node", "dynamic /users/123 runtime")
+    assert_eq(fn1, "get.users.[id].js", "dynamic /users/123 chooses specific handler")
+    assert_true(type(params1) == "table" and params1.id == "123", "dynamic /users/123 param")
+
+    local rt2, fn2, _, params2 = routes.resolve_mapped_target("/users/123/extra", "GET", { host = "localhost" })
+    assert_eq(rt2, "node", "catch-all /users/123/extra runtime")
+    assert_eq(fn2, "get.users.[...id].js", "catch-all chooses catch-all handler")
+    assert_true(type(params2) == "table" and params2.id == "123/extra", "catch-all param")
+
+    rm_rf(root)
+  end)
+end
+
 local function test_console_data_crud_and_secrets()
   with_fake_ngx(function(cache, conc, _set_now)
     local cjson = require("cjson.safe")
@@ -860,11 +1404,20 @@ local function test_console_data_crud_and_secrets()
       schedule = {
         enabled = true,
         every_seconds = 60,
+        cron = "*/5 * * * *",
+        timezone = "UTC",
         method = "POST",
         query = { once = true },
         headers = { ["X-Test"] = "1" },
         body = { hello = "world" },
         context = { source = "lua_unit" },
+        retry = {
+          enabled = true,
+          max_attempts = 3,
+          base_delay_seconds = 1,
+          max_delay_seconds = 8,
+          jitter = 0.1,
+        },
       },
       shared_deps = { "base_pack", "base_pack" },
       edge = {
@@ -884,6 +1437,30 @@ local function test_console_data_crud_and_secrets()
     })
     assert_true(bad_cfg == nil, "invalid config should fail")
     assert_true(type(bad_err) == "string" and bad_err:find("schedule.method", 1, true) ~= nil, "invalid schedule error")
+
+    local bad_cron, bad_cron_err = data.set_function_config("python", "unitcrud", nil, {
+      schedule = {
+        cron = "not a cron",
+      },
+    })
+    assert_true(bad_cron == nil, "invalid cron should fail")
+    assert_true(type(bad_cron_err) == "string" and bad_cron_err:find("schedule.cron", 1, true) ~= nil, "invalid cron error")
+
+    local bad_tz, bad_tz_err = data.set_function_config("python", "unitcrud", nil, {
+      schedule = {
+        timezone = "America/New_York",
+      },
+    })
+    assert_true(bad_tz == nil, "invalid timezone should fail")
+    assert_true(type(bad_tz_err) == "string" and bad_tz_err:find("schedule.timezone", 1, true) ~= nil, "invalid timezone error")
+
+    local bad_retry, bad_retry_err = data.set_function_config("python", "unitcrud", nil, {
+      schedule = {
+        retry = {},
+      },
+    })
+    assert_true(bad_retry == nil, "empty retry object should fail")
+    assert_true(type(bad_retry_err) == "string" and bad_retry_err:find("schedule.retry", 1, true) ~= nil, "invalid retry error")
 
     local env_detail, env_err = data.set_function_env("python", "unitcrud", nil, {
       API_TOKEN = { value = "token-1", is_secret = true },
@@ -1530,7 +2107,7 @@ local function test_assistant_modes_and_providers()
       local text, err, mode = assistant.generate({
         runtime = "node",
         name = "demo",
-        template = "hello_json",
+        template = "hello-json",
         prompt = "build hello",
       })
       assert_eq(err, nil, "assistant openai err")
@@ -2109,6 +2686,480 @@ local function test_scheduler_tick_and_snapshot()
   end)
 end
 
+local function test_scheduler_cron_and_retry_backoff()
+  with_fake_ngx(function(cache, conc, set_now)
+    local runtime_cfg = { socket = "inprocess:lua", timeout_ms = 2500, in_process = true }
+    local runtime_up = true
+
+    local routes_stub = {
+      get_config = function()
+        return { runtimes = { lua = runtime_cfg } }
+      end,
+      discover_functions = function()
+        return {
+          runtimes = {
+            lua = {
+              functions = {
+                demo = {
+                  has_default = true,
+                  versions = {},
+                  policy = {
+                    methods = { "GET" },
+                    timeout_ms = 500,
+                    schedule = {
+                      enabled = true,
+                      cron = "*/1 * * * * *",
+                      timezone = "UTC",
+                      method = "GET",
+                      retry = {
+                        enabled = true,
+                        max_attempts = 3,
+                        base_delay_seconds = 1,
+                        max_delay_seconds = 1,
+                        jitter = 0,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        }
+      end,
+      resolve_function_policy = function(runtime, name, _version)
+        if runtime ~= "lua" or name ~= "demo" then
+          return nil, "not found"
+        end
+        return {
+          methods = { "GET" },
+          timeout_ms = 500,
+          max_concurrency = 1,
+          schedule = {
+            enabled = true,
+            cron = "*/1 * * * * *",
+            timezone = "UTC",
+            method = "GET",
+            retry = {
+              enabled = true,
+              max_attempts = 3,
+              base_delay_seconds = 1,
+              max_delay_seconds = 1,
+              jitter = 0,
+            },
+          },
+        }
+      end,
+      get_runtime_config = function(runtime)
+        if runtime == "lua" then
+          return runtime_cfg
+        end
+        return nil
+      end,
+      runtime_is_up = function(_runtime)
+        return runtime_up
+      end,
+      check_runtime_health = function(_runtime, _cfg)
+        if runtime_up then
+          return true, "ok"
+        end
+        return false, "down"
+      end,
+      set_runtime_health = function() end,
+      runtime_is_in_process = function(_runtime, cfg)
+        return cfg and cfg.in_process == true
+      end,
+    }
+
+    local inflight = {}
+    local limits_stub = {
+      try_acquire = function(_dict, key, max_concurrency)
+        local next_value = (inflight[key] or 0) + 1
+        if tonumber(max_concurrency) and tonumber(max_concurrency) > 0 and next_value > tonumber(max_concurrency) then
+          return false, "busy"
+        end
+        inflight[key] = next_value
+        return true
+      end,
+      release = function(_dict, key)
+        local next_value = (inflight[key] or 1) - 1
+        if next_value < 0 then
+          next_value = 0
+        end
+        inflight[key] = next_value
+      end,
+    }
+
+    local lua_calls = 0
+    local lua_runtime_stub = {
+      call = function(_payload)
+        lua_calls = lua_calls + 1
+        return {
+          status = 200,
+          headers = { ["Content-Type"] = "application/json" },
+          body = "{\"ok\":true}",
+        }
+      end,
+    }
+
+    local timers = {}
+    ngx.timer.at = function(delay, fn, ...)
+      timers[#timers + 1] = {
+        delay = tonumber(delay) or 0,
+        fn = fn,
+        args = { ... },
+      }
+      return true
+    end
+
+    with_module_stubs({
+      ["fastfn.core.routes"] = routes_stub,
+      ["fastfn.core.limits"] = limits_stub,
+      ["fastfn.core.lua_runtime"] = lua_runtime_stub,
+      ["fastfn.core.client"] = { call_unix = function() return nil, "connect_error", "down" end },
+      ["fastfn.core.gateway_utils"] = {
+        map_runtime_error = function(code)
+          if code == "connect_error" then
+            return 503, "runtime down"
+          end
+          return 502, "runtime error"
+        end,
+      },
+    }, function()
+      package.loaded["fastfn.core.scheduler"] = nil
+      local scheduler = require("fastfn.core.scheduler")
+
+      local tick_fn = nil
+      ngx.timer.every = function(_interval, fn)
+        tick_fn = fn
+        return true
+      end
+
+      scheduler.init()
+      assert_true(type(tick_fn) == "function", "scheduler init should register timer")
+
+      -- Tick 1: seed next cron run (no dispatch yet).
+      set_now(1000)
+      tick_fn(false)
+      assert_true(#timers == 0, "cron seeding should not dispatch immediately")
+
+      -- Tick 2: due -> dispatch; runtime is down so first attempt schedules retry.
+      runtime_up = false
+      set_now(1001)
+      tick_fn(false)
+      assert_true(#timers >= 1, "schedule invocation should be queued via timer.at")
+
+      local t1 = table.remove(timers, 1)
+      assert_eq(math.floor(t1.delay), 0, "first attempt delay")
+      t1.fn(false, unpack(t1.args))
+
+      assert_true(#timers >= 1, "retry timer queued")
+      local t2 = table.remove(timers, 1)
+      assert_eq(math.floor(t2.delay), 1, "retry delay seconds")
+
+      runtime_up = true
+      set_now(1002)
+      t2.fn(false, unpack(t2.args))
+      assert_eq(lua_calls, 1, "lua runtime should be called once after recovery")
+
+      local snapshot = scheduler.snapshot()
+      assert_true(type(snapshot) == "table" and type(snapshot.schedules) == "table", "snapshot structure")
+
+      local found_ok = false
+      for _, row in ipairs(snapshot.schedules) do
+        local status = tonumber(((row or {}).state or {}).last_status)
+        if status == 200 then
+          found_ok = true
+        end
+      end
+      assert_true(found_ok, "cron schedule should record 200 after retry")
+
+      reset_shared_dict(cache)
+      reset_shared_dict(conc)
+    end)
+  end)
+end
+
+local function test_scheduler_cron_timezone_and_invalid_timezone()
+  with_fake_ngx(function(cache, conc, set_now)
+    local runtime_cfg = { socket = "inprocess:lua", timeout_ms = 2500, in_process = true }
+
+    local function policy_for(name)
+      if name == "offset" then
+        return {
+          methods = { "GET" },
+          timeout_ms = 500,
+          max_concurrency = 1,
+          schedule = {
+            enabled = true,
+            cron = "0 9 * * *",
+            timezone = "-05:00",
+            method = "GET",
+          },
+        }
+      end
+      if name == "badtz" then
+        return {
+          methods = { "GET" },
+          timeout_ms = 500,
+          max_concurrency = 1,
+          schedule = {
+            enabled = true,
+            cron = "0 9 * * *",
+            timezone = "Mars/Phobos",
+            method = "GET",
+          },
+        }
+      end
+      return nil
+    end
+
+    local routes_stub = {
+      get_config = function()
+        return { runtimes = { lua = runtime_cfg } }
+      end,
+      discover_functions = function()
+        return {
+          runtimes = {
+            lua = {
+              functions = {
+                offset = { has_default = true, versions = {}, policy = policy_for("offset") },
+                badtz = { has_default = true, versions = {}, policy = policy_for("badtz") },
+              },
+            },
+          },
+        }
+      end,
+      resolve_function_policy = function(runtime, name, _version)
+        if runtime ~= "lua" then
+          return nil, "not found"
+        end
+        local out = policy_for(name)
+        if not out then
+          return nil, "not found"
+        end
+        return out
+      end,
+      get_runtime_config = function(runtime)
+        if runtime == "lua" then
+          return runtime_cfg
+        end
+        return nil
+      end,
+      runtime_is_up = function(_runtime)
+        return true
+      end,
+      check_runtime_health = function(_runtime, _cfg)
+        return true, "ok"
+      end,
+      set_runtime_health = function() end,
+      runtime_is_in_process = function(_runtime, cfg)
+        return cfg and cfg.in_process == true
+      end,
+    }
+
+    local limits_stub = {
+      try_acquire = function()
+        return true
+      end,
+      release = function() end,
+    }
+
+    local lua_runtime_stub = {
+      call = function(_payload)
+        return {
+          status = 200,
+          headers = { ["Content-Type"] = "application/json" },
+          body = "{\"ok\":true}",
+        }
+      end,
+    }
+
+    with_module_stubs({
+      ["fastfn.core.routes"] = routes_stub,
+      ["fastfn.core.limits"] = limits_stub,
+      ["fastfn.core.lua_runtime"] = lua_runtime_stub,
+      ["fastfn.core.client"] = { call_unix = function() return nil, "connect_error", "down" end },
+      ["fastfn.core.gateway_utils"] = {
+        map_runtime_error = function(code)
+          if code == "connect_error" then
+            return 503, "runtime down"
+          end
+          return 502, "runtime error"
+        end,
+      },
+    }, function()
+      package.loaded["fastfn.core.scheduler"] = nil
+      local scheduler = require("fastfn.core.scheduler")
+
+      local tick_fn = nil
+      ngx.timer.every = function(_interval, fn)
+        tick_fn = fn
+        return true
+      end
+
+      scheduler.init()
+      assert_true(type(tick_fn) == "function", "scheduler init should register timer")
+
+      set_now(0)
+      tick_fn(false)
+
+      local snap = scheduler.snapshot()
+      local next_offset = nil
+      local bad_err = nil
+
+      for _, row in ipairs((snap and snap.schedules) or {}) do
+        if row.name == "offset" then
+          next_offset = tonumber(((row.state or {}).next))
+        elseif row.name == "badtz" then
+          bad_err = (row.state or {}).last_error
+        end
+      end
+
+      -- Epoch 00:00 UTC, cron is 09:00 in -05:00 -> 14:00 UTC => 14 * 3600 = 50400.
+      assert_eq(next_offset, 50400, "timezone offset should shift cron schedule next time")
+      assert_true(type(bad_err) == "string" and bad_err:find("unsupported timezone", 1, true) ~= nil, "invalid timezone should surface in last_error")
+
+      reset_shared_dict(cache)
+      reset_shared_dict(conc)
+    end)
+  end)
+end
+
+local function test_scheduler_persist_state_roundtrip()
+  with_fake_ngx(function(cache, conc, _set_now)
+    local uniq = tostring(math.floor((ngx.now and ngx.now() or os.time()) * 1000000))
+    local root = "/tmp/fastfn-lua-scheduler-persist-" .. uniq
+    local state_path = root .. "/scheduler-state.json"
+
+    rm_rf(root)
+    mkdir_p(root)
+
+    local runtime_cfg = { socket = "inprocess:lua", timeout_ms = 2500, in_process = true }
+    local routes_stub = {
+      get_config = function()
+        return { functions_root = root, runtimes = { lua = runtime_cfg } }
+      end,
+      discover_functions = function()
+        return {
+          runtimes = {
+            lua = {
+              functions = {
+                demo = {
+                  has_default = true,
+                  versions = {},
+                  policy = {
+                    methods = { "GET" },
+                    timeout_ms = 500,
+                    schedule = { enabled = true, every_seconds = 60, method = "GET" },
+                    keep_warm = { enabled = true, min_warm = 1, ping_every_seconds = 60, idle_ttl_seconds = 60 },
+                  },
+                },
+              },
+            },
+          },
+        }
+      end,
+      resolve_function_policy = function(runtime, name, _version)
+        if runtime ~= "lua" or name ~= "demo" then
+          return nil, "not found"
+        end
+        return {
+          methods = { "GET" },
+          timeout_ms = 500,
+          max_concurrency = 1,
+          schedule = { enabled = true, every_seconds = 60, method = "GET" },
+          keep_warm = { enabled = true, min_warm = 1, ping_every_seconds = 60, idle_ttl_seconds = 60 },
+        }
+      end,
+      get_runtime_config = function(runtime)
+        if runtime == "lua" then
+          return runtime_cfg
+        end
+        return nil
+      end,
+      runtime_is_up = function()
+        return true
+      end,
+      check_runtime_health = function()
+        return true, "ok"
+      end,
+      set_runtime_health = function() end,
+      runtime_is_in_process = function(_runtime, cfg)
+        return cfg and cfg.in_process == true
+      end,
+    }
+
+    with_module_stubs({
+      ["fastfn.core.routes"] = routes_stub,
+      ["fastfn.core.limits"] = { try_acquire = function() return true end, release = function() end },
+      ["fastfn.core.lua_runtime"] = { call = function() return { status = 200, headers = {}, body = "{}" } end },
+      ["fastfn.core.client"] = { call_unix = function() return nil, "connect_error", "down" end },
+      ["fastfn.core.gateway_utils"] = { map_runtime_error = function() return 503, "runtime down" end },
+    }, function()
+      with_env({
+        FN_SCHEDULER_STATE_PATH = state_path,
+        FN_SCHEDULER_PERSIST_ENABLED = "1",
+        FN_SCHEDULER_PERSIST_INTERVAL = "3600",
+      }, function()
+        package.loaded["fastfn.core.scheduler"] = nil
+        local scheduler = require("fastfn.core.scheduler")
+
+        local key = "lua/demo@default"
+        cache:set("sched:" .. key .. ":next", 2000)
+        cache:set("sched:" .. key .. ":retry_due", 1600)
+        cache:set("sched:" .. key .. ":retry_attempt", 2)
+        cache:set("sched:" .. key .. ":last", 1500)
+        cache:set("sched:" .. key .. ":last_status", 503)
+        cache:set("sched:" .. key .. ":last_error", "boom")
+        cache:set("warm:" .. key, 1400)
+
+        cache:set("sched:" .. key .. ":keep_warm_next", 2100)
+        cache:set("sched:" .. key .. ":keep_warm_last", 1550)
+        cache:set("sched:" .. key .. ":keep_warm_last_status", 200)
+        cache:set("sched:" .. key .. ":keep_warm_last_error", "")
+
+        local ok_persist, err_persist = scheduler.persist_now()
+        assert_eq(ok_persist, true, "scheduler persist_now should succeed")
+        assert_true(err_persist == nil or type(err_persist) == "string", "persist err type")
+
+        reset_shared_dict(cache)
+        reset_shared_dict(conc)
+
+        package.loaded["fastfn.core.scheduler"] = nil
+        local scheduler2 = require("fastfn.core.scheduler")
+        scheduler2.init()
+        local snap = scheduler2.snapshot()
+
+        local found = nil
+        for _, row in ipairs(snap.schedules or {}) do
+          if row.key == key then
+            found = row
+          end
+        end
+        assert_true(found ~= nil, "restored schedule row should be present")
+        assert_eq(tonumber(found.state.next), 2000, "restored next")
+        assert_eq(tonumber(found.state.retry_due), 1600, "restored retry_due")
+        assert_eq(tonumber(found.state.retry_attempt), 2, "restored retry_attempt")
+        assert_eq(tonumber(found.state.last_status), 503, "restored last_status")
+        assert_true(type(found.state.last_error) == "string" and found.state.last_error:find("boom", 1, true) ~= nil, "restored last_error")
+
+        local kw = nil
+        for _, row in ipairs(snap.keep_warm or {}) do
+          if row.key == key then
+            kw = row
+          end
+        end
+        assert_true(kw ~= nil, "restored keep_warm row should be present")
+        assert_eq(tonumber(kw.state.warm_at), 1400, "restored warm_at")
+        assert_eq(tonumber(kw.state.next), 2100, "restored keep_warm next")
+        assert_eq(tonumber(kw.state.last_status), 200, "restored keep_warm status")
+
+        rm_rf(root)
+      end)
+    end)
+  end)
+end
+
 local function test_watchdog_mock_linux_backend()
   with_fake_ngx(function(_cache, _conc, _set_now)
     local uniq = tostring(math.floor((ngx.now and ngx.now() or os.time()) * 1000000))
@@ -2315,12 +3366,22 @@ local function main()
   test_console_guard_state_snapshot_current_user()
   test_routes_discovery_and_host_routing()
   test_routes_skip_disabled_runtime_file_routes()
+  test_routes_nested_project_root_scan_with_file_routes()
+  test_routes_force_url_policy_override()
+  test_routes_force_url_ignored_for_version_scoped_configs()
+  test_routes_force_url_breaks_policy_ties()
+  test_routes_force_url_global_env_policy_override()
+  test_routes_force_url_global_env_keeps_policy_policy_conflict()
+  test_routes_policy_routes_disjoint_allow_hosts()
+  test_routes_dynamic_order_is_deterministic_and_specific()
   test_console_data_crud_and_secrets()
   test_core_client_frame_protocol()
   test_core_http_client_request_paths()
   test_assistant_modes_and_providers()
   test_jobs_module_queue_and_result()
   test_scheduler_tick_and_snapshot()
+  test_scheduler_cron_and_retry_backoff()
+  test_scheduler_persist_state_roundtrip()
   test_watchdog_mock_linux_backend()
   test_lua_runtime_in_process()
   test_watchdog_guardrails()

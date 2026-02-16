@@ -8,8 +8,8 @@ The file structure of your project determines the public URL paths.
 
 | File Path | URL Path |
 | :--- | :--- |
-| `functions/users.py` | `/fn/users` |
-| `functions/settings/profile.js` | `/fn/settings/profile` |
+| `users/index.py` | `/users` |
+| `settings/profile.js` | `/settings/profile` |
 
 ## Dynamic Segments
 
@@ -17,17 +17,17 @@ You can use brackets `[]` to create dynamic path parameters.
 
 | File Path | URL Path | Example Match |
 | :--- | :--- | :--- |
-| `functions/users/[id].py` | `/fn/users/:id` | `/fn/users/42` |
-| `functions/posts/[category]/[slug].py` | `/fn/posts/:category/:slug` | `/fn/posts/tech/fastfn-intro` |
+| `users/[id].py` | `/users/:id` | `/users/42` |
+| `posts/[category]/[slug].py` | `/posts/:category/:slug` | `/posts/tech/fastfn-intro` |
 
 ### Accessing Parameters
 
-Inside your handler, the parameters are available in the `context` (Node) or `event` (Python).
+Inside your handler, the parameters are available in `event.params`.
 
 **Python (`event`)**:
 ```python
 def handler(event):
-    # For /fn/users/42, user_id will be "42"
+    # For /users/42, user_id will be "42"
     user_id = event.get("params", {}).get("id")
     return {"status": 200, "body": user_id}
 ```
@@ -35,7 +35,7 @@ def handler(event):
 **Node (`event` or `context`)**:
 ```javascript
 exports.handler = async (event) => {
-    // For /fn/users/42, userId will be "42"
+    // For /users/42, userId will be "42"
     const userId = event.params.id;
     return { status: 200, body: userId };
 };
@@ -45,13 +45,15 @@ exports.handler = async (event) => {
 
 If you have overlapping routes, FastFN follows strict precedence:
 
-1.  **Static Routes**: `functions/users/settings.py` (Specific)
-2.  **Dynamic Routes**: `functions/users/[id].py` (General)
-3.  **Catch-all Routes**: `functions/users/[...slug].py` (Most General)
+1.  **Static Routes**: `users/settings.py` (Specific)
+2.  **Dynamic Routes**: `users/[id].py` (General)
+3.  **Catch-all Routes**: `users/[...slug].py` (Most General)
+
+FastFN applies a deterministic "most specific wins" ordering, so a catch-all route cannot steal a more specific match.
 
 ## HTTP Methods
 
-By default, a handler file accepts **ALL** methods (`GET`, `POST`, `PUT`, `DELETE`).
+By default, a route is `GET` unless you opt into another method.
 
 To restrict methods or handle them differently:
 
@@ -73,7 +75,7 @@ def handler(event):
 
 Add a config file next to your handler:
 
-`functions/users/[id]/fn.config.json`:
+`users/[id]/fn.config.json`:
 ```json
 {
   "invoke": {
@@ -82,6 +84,6 @@ Add a config file next to your handler:
 }
 ```
 
-Now `POST /fn/users/42` will automatically return `405 Method Not Allowed`.
+Now `POST /users/42` will automatically return `405 Method Not Allowed`.
 
 [Next: Operational Recipes :arrow_right:](../how-to/operational-recipes.md)

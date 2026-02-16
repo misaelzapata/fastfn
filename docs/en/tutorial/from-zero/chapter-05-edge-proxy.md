@@ -1,4 +1,4 @@
-# Chapter 5 - Super Fast Proxy (Edge Mode) 🚀
+# Chapter 5 - Edge Proxy (Workers-style)
 
 In traditional architectures, if your API needs to fetch data from another service (e.g., GitHub API, Stripe, or an internal microservice), your function would:
 1. Receive the request.
@@ -8,7 +8,7 @@ In traditional architectures, if your API needs to fetch data from another servi
 
 This consumes memory and execution time in your function while just "waiting".
 
-**FastFn** has a superpower called **Edge Proxy**. Your function can simply "instruct" the internal router to fetch the data for you right after your function exits. This is incredibly fast and efficient.
+**FastFN** has a superpower called **Edge Proxy**. Your function can simply "instruct" the gateway to fetch the data for you right after your function returns.
 
 ## Goal
 We will configure a function that delegates the fetching of data to the core engine.
@@ -47,10 +47,12 @@ Instead of using `axios` or `fetch`, you just return a special JSON object.
         return { status: 401, body: "Unauthorized" };
       }
 
-      // Pro pass-through
+      // Pass-through via the gateway
       return {
         proxy: {
-          path: "/_fn/health", // The target path
+          // Control-plane paths (/_fn/* and /console/*) are blocked. Proxy to a public endpoint instead.
+          // In this tutorial we'll proxy to the "hello" endpoint from Chapter 1.
+          path: "/hello?name=edge",
           method: "GET",
           headers: {
             "x-proxy-client": "fastfn-fn"
@@ -66,7 +68,7 @@ Instead of using `axios` or `fetch`, you just return a special JSON object.
     def handler(req):
         return {
             "proxy": {
-                "path": "/_fn/health",
+                "path": "/hello?name=edge",
                 "method": "GET"
             }
         }
@@ -74,12 +76,12 @@ Instead of using `axios` or `fetch`, you just return a special JSON object.
 
 ## Step 3: Verify it works
 
-Run the function. You should see the response from the *target* service (in this case, our own health check endpoints), but delivered through your function.
+Run the function. You should see the response from the *target* endpoint (in this case `/hello`), delivered through your function.
 
 ```bash
-curl -v http://127.0.0.1:8080/fn/my-proxy-fn
+curl -v http://127.0.0.1:8080/my-proxy-fn
 ```
 
-### Why uses this?
-*   **Performance:** The core engine (Nginx/Lua) handles the networking much faster than a runtime like Node or Python.
-*   **Cost:** Your function execution time stops the moment you return the JSON. The download happens outside your billed time (if you are calculating runtime costs).
+### Why use this?
+*   **Performance:** The gateway (OpenResty/Lua) handles networking efficiently.
+*   **Cost model:** Function execution ends when you return the directive; the proxy happens after.

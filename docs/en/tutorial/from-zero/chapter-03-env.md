@@ -16,7 +16,7 @@ Use `fn.env.json` instead.
 
 Path:
 
-- `srv/fn/functions/node/hello_world/fn.env.json`
+- `srv/fn/functions/node/hello-world/fn.env.json`
 
 Content:
 
@@ -58,7 +58,7 @@ exports.handler = async (event) => {
 ## Step 3: test
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/hello_world?name=Ana'
+curl -sS 'http://127.0.0.1:8080/fn/hello-world?name=Ana'
 ```
 
 Expected fields:
@@ -70,7 +70,7 @@ Expected fields:
 ## If values do not change
 
 1. Confirm file path:
-   - `srv/fn/functions/node/hello_world/fn.env.json`
+   - `srv/fn/functions/node/hello-world/fn.env.json`
 2. Confirm valid JSON syntax.
 3. Wait a few seconds for hot reload, or restart stack:
 

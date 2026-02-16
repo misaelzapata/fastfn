@@ -11,7 +11,7 @@ async function assertOk(res, label) {
 
 test.describe('Console Gateway mapping UX', () => {
   test.beforeEach(async ({ request }) => {
-    const cfg = await request.put('/_fn/function-config?runtime=node&name=node_echo', {
+    const cfg = await request.put('/_fn/function-config?runtime=node&name=node-echo', {
       headers: {
         'Content-Type': 'application/json',
         'x-fn-admin-token': ADMIN_TOKEN,
@@ -38,14 +38,14 @@ test.describe('Console Gateway mapping UX', () => {
 
     const row = page.locator('#routeTableBody tr', { hasText: '/api/e2e-node-echo' }).first();
     await expect(row).toBeVisible();
-    await expect(row).toContainText('node/node_echo');
+    await expect(row).toContainText('node/node-echo');
     await expect(row).toContainText('GET, POST');
 
     await row.getByRole('button', { name: 'Edit mapping' }).click();
 
     await expect(page).toHaveURL(/\/console\/configuration/);
     await expect(page).toHaveURL(/runtime=node/);
-    await expect(page).toHaveURL(/name=node_echo/);
+    await expect(page).toHaveURL(/name=node-echo/);
     await expect(page.locator('#cfgRoutes')).toHaveValue(/\/api\/e2e-node-echo/);
   });
 });

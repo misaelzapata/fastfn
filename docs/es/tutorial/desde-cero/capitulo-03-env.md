@@ -4,7 +4,7 @@ Objetivo: configurar secretos y flags por funcion.
 
 ## Archivo
 
-`/srv/fn/functions/node/hello_world/fn.env.json`
+`/srv/fn/functions/node/hello-world/fn.env.json`
 
 ```json
 {

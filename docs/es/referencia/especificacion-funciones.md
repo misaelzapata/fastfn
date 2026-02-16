@@ -150,6 +150,7 @@ Campos clave:
 - `invoke.methods`
 - `invoke.handler` (opcional, nombre de funcion exportada; default `handler`)
 - `invoke.routes` (mapeo opcional de endpoint publico)
+- `invoke.force-url` (opcional, si `true` puede sobrescribir una URL ya mapeada)
 - `invoke.summary`
 - `invoke.query`
 - `invoke.body`
@@ -166,6 +167,7 @@ Ejemplo:
   "include_debug_headers": false,
   "invoke": {
     "handler": "main",
+    "force-url": false,
     "methods": ["GET", "POST"],
     "routes": ["/api/mi-funcion"],
     "summary": "Mi funcion",
@@ -183,6 +185,10 @@ Notas:
 - Si existe, cada ruta debe ser absoluta (por ejemplo `/api/mi-funcion`).
 - Prefijos reservados no permitidos (`/fn`, `/_fn`, `/console`, `/docs`).
 - Conflictos de rutas devuelven `409`.
+- Por defecto, FastFN no sobrescribe silenciosamente un mapeo de URL existente.
+- Usa `invoke.force-url: true` solo cuando realmente queres que esta funcion se quede con una ruta (por ejemplo, durante una migracion).
+- Los configs por version (por ejemplo `node/mi-fn/v2/fn.config.json`) no pueden "tomar" una URL existente por si solos; usa `FN_FORCE_URL=1` si necesitas que una ruta versionada gane.
+- Override global: setea `FN_FORCE_URL=1` (o `fastfn dev --force-url`) para tratar todas las rutas config/policy como forced.
 
 ## Config edge passthrough (`edge`)
 
@@ -232,9 +238,14 @@ En runtime:
 
 Esto no es aislamiento nivel kernel (virtualenv/cargo completo), pero sirve para deduplicar instalaciones de forma simple.
 
-## Schedule (cron por intervalo)
+## Schedule (cron o intervalo)
 
-Puedes adjuntar un schedule por intervalo a una funcion:
+Puedes adjuntar un schedule a una funcion usando:
+
+- `every_seconds` (intervalo)
+- `cron` (expresion cron)
+
+### Schedule por intervalo (`every_seconds`)
 
 ```json
 {
@@ -250,9 +261,58 @@ Puedes adjuntar un schedule por intervalo a una funcion:
 }
 ```
 
+### Schedule cron (`cron`)
+
+Cron soporta:
+
+- 5 campos: `min hour dom mon dow`
+- 6 campos: `sec min hour dom mon dow`
+- macros: `@hourly`, `@daily`, `@weekly`, `@monthly`, `@yearly`
+
+```json
+{
+  "schedule": {
+    "enabled": true,
+    "cron": "*/5 * * * *",
+    "timezone": "UTC",
+    "method": "GET",
+    "query": {},
+    "headers": {},
+    "body": "",
+    "context": {}
+  }
+}
+```
+
+Timezones:
+
+- `UTC`, `Z`
+- `local` (default si se omite)
+- offsets fijos como `+02:00` o `-05:00`
+
 - El scheduler corre dentro de OpenResty (worker 0).
 - Invoca el runtime por unix socket.
 - La policy aplica igual (metodos, body, concurrencia, timeout).
+- Para correr cada **X minutos**, usa `every_seconds = X * 60` (ejemplo: 15 minutos => `900`).
+- Estado del scheduler: `GET /_fn/schedules` (`next`, `last`, `last_status`, `last_error`).
+- Los schedules se guardan en `fn.config.json` (la definicion persiste entre restarts).
+- El estado del scheduler se persiste por defecto en `<FN_FUNCTIONS_ROOT>/.fastfn/scheduler-state.json` (para mantener `last/next/status/error` entre restarts).
+- Fallos comunes (`last_status` / `last_error`):
+  - `405`: el `method` del schedule no esta permitido por la policy de la funcion.
+  - `413`: el `body` excedio `max_body_bytes`.
+  - `429`: la funcion estaba ocupada (gate de concurrencia).
+  - `503`: runtime caido/no saludable.
+- Retry/backoff (opcional):
+  - Setea `schedule.retry=true` para defaults, o un objeto:
+  - `max_attempts` (default `3`), `base_delay_seconds` (default `1`), `max_delay_seconds` (default `30`), `jitter` (default `0.2`).
+  - Retries aplican a status `0`, `429`, `503` y `>=500`. El scheduler actualiza `last_error` con `retrying ...`.
+- Consola: `GET /console/scheduler` muestra schedules + keep_warm (requiere `FN_UI_ENABLED=1`).
+- Toggles globales:
+  - `FN_SCHEDULER_ENABLED=0` deshabilita el scheduler.
+  - `FN_SCHEDULER_INTERVAL` controla el tick (default `1` segundo).
+  - `FN_SCHEDULER_PERSIST_ENABLED=0` deshabilita persistencia de estado.
+  - `FN_SCHEDULER_PERSIST_INTERVAL` controla cada cuánto se escribe el estado (segundos).
+  - `FN_SCHEDULER_STATE_PATH` permite override del path del archivo.
 
 ## `fn.env.json` y secretos
 

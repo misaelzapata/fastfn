@@ -418,7 +418,7 @@ local function openai_chat(opts)
     current_code = current_code:sub(1, 12000) .. "\n...truncated..."
   end
 
-  local system = [[You are a concise FastFn coding assistant.
+  local system = [[You are a concise FastFN coding assistant.
 Reply in plain text. Do not use markdown fences.
 If asked what the function does, explain behavior from the provided code context.
 If asked to modify code, provide clear concrete changes.
@@ -456,7 +456,7 @@ local function claude_chat(opts)
     current_code = current_code:sub(1, 12000) .. "\n...truncated..."
   end
 
-  local system = [[You are a concise FastFn coding assistant.
+  local system = [[You are a concise FastFN coding assistant.
 Reply in plain text. Do not use markdown fences.
 If asked what the function does, explain behavior from the provided code context.
 If asked to modify code, provide clear concrete changes.

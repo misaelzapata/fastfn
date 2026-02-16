@@ -42,8 +42,8 @@ curl -sS 'http://127.0.0.1:8080/fn/hello@v2?name=NodeWay'
 curl -sS 'http://127.0.0.1:8080/fn/echo?key=test'
 curl -sS 'http://127.0.0.1:8080/fn/qr?text=PythonQR' -o /tmp/qr-python.svg
 curl -sS 'http://127.0.0.1:8080/fn/qr@v2?text=NodeQR' -o /tmp/qr-node.png
-curl -sS 'http://127.0.0.1:8080/fn/php_profile?name=PHP'
-curl -sS 'http://127.0.0.1:8080/fn/rust_profile?name=Rust'
+curl -sS 'http://127.0.0.1:8080/fn/php-profile?name=PHP'
+curl -sS 'http://127.0.0.1:8080/fn/rust-profile?name=Rust'
 ```
 
 Chequeo opcional de aislamiento de dependencias:

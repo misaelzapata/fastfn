@@ -11,6 +11,7 @@ FastFN lo busca en el directorio actual cuando ejecutas comandos como `fastfn de
 | `functions-dir` | `string` | Root default de funciones cuando no pasas directorio al CLI. |
 | `public-base-url` | `string` | Base URL publica canonica para `servers[0].url` en OpenAPI. |
 | `openapi-include-internal` | `boolean` | Controla si endpoints internos/admin (`/_fn/*`) se muestran en OpenAPI/Swagger. No deshabilita esos endpoints. Default `false`. |
+| `force-url` | `boolean` | Opt-in global para permitir que rutas config/policy sobrescriban una URL ya mapeada. Default `false`. Preferi `invoke.force-url` por funcion. |
 | `domains` | `array` | Dominios usados por `fastfn doctor domains` para diagnostico DNS/TLS/HTTP. |
 
 Notas:
@@ -19,6 +20,7 @@ Notas:
 - Tambien se aceptan alias para OpenAPI interna: `openapi_include_internal`, `openapi.include_internal`, `swagger-include-admin`.
 - `domains` es solo para checks de `fastfn doctor domains`. No aplica restriccion de host entrante por si solo.
 - Para restringir hosts entrantes por funcion, usa `invoke.allow_hosts` en cada `fn.config.json`.
+- Tambien podes optar globalmente via `force-url` o el flag `--force-url` (riesgoso; usalo con cuidado).
 
 ## Ejemplo 1: Directorio Default en Desarrollo
 

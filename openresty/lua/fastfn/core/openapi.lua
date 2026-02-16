@@ -595,7 +595,7 @@ function M.build(catalog, opts)
                   properties = {
                     runtime = { type = "string", examples = { "python" } },
                     name = { type = "string", examples = { "hello" } },
-                    template = { type = "string", examples = { "hello_json" } },
+                    template = { type = "string", examples = { "hello-json" } },
                     mode = { type = "string", examples = { "generate", "chat", "auto" } },
                     prompt = { type = "string", examples = { "Make an echo handler" } },
                     current_code = { type = "string", examples = { "exports.handler = async () => ({ status: 200, body: \"ok\" });" } },
@@ -1059,7 +1059,7 @@ function M.build(catalog, opts)
                   with_context = {
                     value = {
                       runtime = "python",
-                      name = "risk_score",
+                      name = "risk-score",
                       method = "POST",
                       body = { email = "user@example.com" },
                       context = { trace_id = "trace-123" },

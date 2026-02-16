@@ -224,6 +224,9 @@ func RunNative(cfg RunConfig) error {
 		"LUA_PATH=" + filepath.Join(runtimeDir, "openresty", "lua", "?.lua") + ";" + filepath.Join(runtimeDir, "openresty", "lua", "?", "init.lua") + ";;",
 		"LUA_CPATH=;;", // Default
 	}
+	if v := strings.TrimSpace(os.Getenv("FN_FORCE_URL")); v != "" {
+		baseEnv = append(baseEnv, "FN_FORCE_URL="+v)
+	}
 
 	// 5. Initialize Process Manager
 	pm := NewManager()

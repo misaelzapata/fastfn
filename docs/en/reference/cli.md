@@ -50,10 +50,14 @@ fastfn dev [directory]
 
 **Flags:**
 - `--dry-run`: Print the generated docker-compose configuration without running it.
+- `--force-url`: Allow config/policy routes to override already-mapped URLs (unsafe; prefer fixing route conflicts).
 
 **Behavior:**
-1. Scans the target directory for subdirectories containing `fn.config.json`.
-2. Generates a temporary Docker Compose configuration that mounts these directories into the container's function root.
+1. Scans the target directory using the same discovery rules as the runtime.
+2. Uses a dual/hybrid mount strategy:
+   - file-based routes: mounts the project root to `/app/srv/fn/functions`
+   - `fn.config.json` functions: mounts each function dir to `/app/srv/fn/functions/<runtime>/<name>`
+   - mixed projects include both mount styles
 3. Starts the stack and tails the logs.
 
 ---

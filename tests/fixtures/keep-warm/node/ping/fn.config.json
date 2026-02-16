@@ -1,0 +1,13 @@
+{
+  "group": "tests",
+  "keep_warm": {
+    "enabled": true,
+    "min_warm": 1,
+    "ping_every_seconds": 1,
+    "idle_ttl_seconds": 300
+  },
+  "invoke": {
+    "methods": ["GET"]
+  }
+}
+

@@ -1,6 +1,6 @@
 # Telegram Loop Mode (Self-Contained)
 
-This article explains how `telegram_ai_reply` can run a full E2E loop **inside a single endpoint**. The same URL can:
+This article explains how `telegram-ai-reply` can run a full E2E loop **inside a single endpoint**. The same URL can:
 
 - send a prompt to your chat,
 - wait for your reply using `getUpdates`,
@@ -11,13 +11,13 @@ This article explains how `telegram_ai_reply` can run a full E2E loop **inside a
 
 We want to demonstrate that fastfn can handle a multi-step integration flow without any external worker or script. Everything happens inside:
 
-`/fn/telegram_ai_reply`
+`/fn/telegram-ai-reply`
 
 ## One command (loop mode)
 
 ```bash
 curl -sS -X POST \
-"http://127.0.0.1:8080/fn/telegram_ai_reply?mode=loop&dry_run=false&chat_id=YOUR_CHAT_ID&prompt=fastfn%20loop%20demo&wait_secs=120&max_replies=5&force_clear_webhook=true"
+"http://127.0.0.1:8080/fn/telegram-ai-reply?mode=loop&dry_run=false&chat_id=YOUR_CHAT_ID&prompt=fastfn%20loop%20demo&wait_secs=120&max_replies=5&force_clear_webhook=true"
 ```
 
 What happens:
@@ -36,7 +36,7 @@ To force a single reply (no loop), use:
 
 ```bash
 curl -sS -X POST \
-"http://127.0.0.1:8080/fn/telegram_ai_reply?mode=reply&dry_run=false&chat_id=YOUR_CHAT_ID&text=Hola"
+"http://127.0.0.1:8080/fn/telegram-ai-reply?mode=reply&dry_run=false&chat_id=YOUR_CHAT_ID&text=Hola"
 ```
 
 ## Parameters
@@ -69,7 +69,7 @@ The endpoint uses:
 - `TELEGRAM_BOT_TOKEN`
 - `OPENAI_API_KEY`
 
-These can be provided in `fn.env.json` for `telegram_ai_reply`, or via container environment.
+These can be provided in `fn.env.json` for `telegram-ai-reply`, or via container environment.
 
-Memory is stored locally in `srv/fn/functions/node/telegram_ai_reply/.memory.json`.
-Loop offset state is stored in `srv/fn/functions/node/telegram_ai_reply/.loop_state.json`.
+Memory is stored locally in `srv/fn/functions/node/telegram-ai-reply/.memory.json`.
+Loop offset state is stored in `srv/fn/functions/node/telegram-ai-reply/.loop_state.json`.

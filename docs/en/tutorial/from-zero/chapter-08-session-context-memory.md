@@ -8,7 +8,7 @@ Goal: pass user context and keep minimal conversational memory.
 curl -sS 'http://127.0.0.1:8080/_fn/invoke' \
   -X POST -H 'content-type: application/json' \
   --data '{
-    "name":"request_inspector",
+    "name":"request-inspector",
     "method":"GET",
     "context":{"trace_id":"abc-123","tenant":"demo"}
   }' | jq .
@@ -22,4 +22,4 @@ The function receives this in `event.context.user`.
 - Store last N turns
 - Apply TTL (for example 24h)
 
-This pattern is already used by `telegram_ai_reply`.
+This pattern is already used by `telegram-ai-reply`.

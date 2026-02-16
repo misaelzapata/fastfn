@@ -1,7 +1,0 @@
-{
-  "invoke": {
-    "summary": "Python demo with custom invoke.handler",
-    "methods": ["GET"],
-    "handler": "main"
-  }
-}

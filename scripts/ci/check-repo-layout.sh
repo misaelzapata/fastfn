@@ -25,6 +25,11 @@ require_dir "examples"
 require_dir "tests"
 require_dir "docs/overrides"
 require_dir "tests/results"
+require_dir "tests/fixtures"
+require_dir "tests/fixtures/nextstyle-clean"
+require_dir "tests/fixtures/scheduler-nonblocking"
+require_dir "tests/fixtures/keep-warm"
+require_dir "tests/fixtures/worker-pool"
 
 forbid_path "test"
 forbid_path "test-integration"
@@ -47,6 +52,34 @@ if [ -n "$runtime_underscores" ]; then
   echo "$runtime_underscores" >&2
   fail=1
 fi
+
+check_start_script_runtime_refs() {
+  script_path="$1"
+  runtime_dir="$2"
+  refs="$(grep -oE '/app/srv/fn/runtimes/[A-Za-z0-9._-]+' "$script_path" 2>/dev/null | sed 's#.*/##' | sort -u || true)"
+
+  if [ -z "$refs" ]; then
+    echo "[layout] start script has no runtime daemon references: ${script_path#$ROOT_DIR/}" >&2
+    fail=1
+    return
+  fi
+
+  for ref in $refs; do
+    if [ ! -f "$runtime_dir/$ref" ]; then
+      echo "[layout] start script references missing runtime file: ${script_path#$ROOT_DIR/} -> $ref" >&2
+      fail=1
+    fi
+    case "$ref" in
+      *_daemon.*)
+        echo "[layout] start script must use kebab-case runtime filenames: ${script_path#$ROOT_DIR/} -> $ref" >&2
+        fail=1
+        ;;
+    esac
+  done
+}
+
+check_start_script_runtime_refs "$ROOT_DIR/docker/openresty/start.sh" "$ROOT_DIR/srv/fn/runtimes"
+check_start_script_runtime_refs "$ROOT_DIR/cli/embed/runtime/docker/openresty/start.sh" "$ROOT_DIR/cli/embed/runtime/srv/fn/runtimes"
 
 if git -C "$ROOT_DIR" ls-files --error-unmatch bin/fastfn >/dev/null 2>&1; then
   echo "[layout] bin/fastfn must not be tracked (build artifact)" >&2

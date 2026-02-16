@@ -31,7 +31,7 @@ event: Request = {
 
 resp: ResponseDict = Response.json({"ok": True})
 txt: ResponseDict = Response.text("hello", status=201)
-pxy: ResponseDict = Response.proxy("/_fn/health", "post", {"X-Trace": "abc"})
+pxy: ResponseDict = Response.proxy("/request-inspector", "post", {"X-Trace": "abc"})
 
 assert event["id"] == "req-sdk-1"
 assert resp["status"] == 200
@@ -39,7 +39,7 @@ assert resp["headers"]["Content-Type"] == "application/json"
 assert txt["status"] == 201
 assert txt["headers"]["Content-Type"].startswith("text/plain")
 assert txt["body"] == "hello"
-assert pxy["proxy"]["path"] == "/_fn/health"
+assert pxy["proxy"]["path"] == "/request-inspector"
 assert pxy["proxy"]["method"] == "POST"
 assert pxy["proxy"]["headers"]["X-Trace"] == "abc"
 print("Python SDK: OK")
@@ -105,8 +105,8 @@ if (($textResp['body'] ?? '') !== 'hello') {
     exit(1);
 }
 
-$proxyResp = FastFn\Response::proxy('/_fn/health', 'GET', ['X-Trace' => 'abc']);
-if (($proxyResp['proxy']['path'] ?? '') !== '/_fn/health') {
+$proxyResp = FastFn\Response::proxy('/request-inspector', 'GET', ['X-Trace' => 'abc']);
+if (($proxyResp['proxy']['path'] ?? '') !== '/request-inspector') {
     fwrite(STDERR, "FastFn\\Response::proxy path mismatch\n");
     exit(1);
 }

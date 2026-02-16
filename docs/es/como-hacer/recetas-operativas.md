@@ -57,8 +57,8 @@ Uso: rollout progresivo sin romper version default.
 ## Receta 4b: probar PHP y Rust
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/php_profile?name=PHP'
-curl -sS 'http://127.0.0.1:8080/fn/rust_profile?name=Rust'
+curl -sS 'http://127.0.0.1:8080/fn/php-profile?name=PHP'
+curl -sS 'http://127.0.0.1:8080/fn/rust-profile?name=Rust'
 ```
 
 ## Receta 4c: probar rutas (patrón Python + Node + PHP + Lua)
@@ -79,7 +79,7 @@ Esperado: `405`.
 ## Receta 6: actualizar metodos permitidos en caliente
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/_fn/function-config?runtime=node&name=node_echo' \
+curl -sS 'http://127.0.0.1:8080/_fn/function-config?runtime=node&name=node-echo' \
   -X PUT -H 'Content-Type: application/json' \
   --data '{"invoke":{"methods":["GET","POST","PUT","DELETE"]}}'
 ```
@@ -87,7 +87,7 @@ curl -sS 'http://127.0.0.1:8080/_fn/function-config?runtime=node&name=node_echo'
 Verificar:
 
 ```bash
-curl -sS -o /dev/null -w '%{http_code}\n' -X PUT 'http://127.0.0.1:8080/fn/node_echo?name=x'
+curl -sS -o /dev/null -w '%{http_code}\n' -X PUT 'http://127.0.0.1:8080/fn/node-echo?name=x'
 ```
 
 ## Receta 7: inyectar `context` desde `/_fn/invoke`
@@ -108,7 +108,7 @@ Esperado: el handler recibe `event.context.user.trace_id`.
 ## Receta 8: crear funcion por API
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/_fn/function?runtime=node&name=demo_recipe' \
+curl -sS 'http://127.0.0.1:8080/_fn/function?runtime=node&name=demo-recipe' \
   -X POST -H 'Content-Type: application/json' \
   --data '{"methods":["GET"],"summary":"Demo recipe"}'
 ```
@@ -116,7 +116,7 @@ curl -sS 'http://127.0.0.1:8080/_fn/function?runtime=node&name=demo_recipe' \
 ## Receta 9: editar codigo por API
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/_fn/function-code?runtime=node&name=demo_recipe' \
+curl -sS 'http://127.0.0.1:8080/_fn/function-code?runtime=node&name=demo-recipe' \
   -X PUT -H 'Content-Type: application/json' \
   --data '{"code":"exports.handler = async (event) => ({ status: 200, headers: { \"Content-Type\": \"application/json\" }, body: JSON.stringify({ ok: true, query: event.query || {} }) });\n"}'
 ```
@@ -124,15 +124,15 @@ curl -sS 'http://127.0.0.1:8080/_fn/function-code?runtime=node&name=demo_recipe'
 Validar:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/demo_recipe?name=RecipeOK'
+curl -sS 'http://127.0.0.1:8080/fn/demo-recipe?name=RecipeOK'
 ```
 
 ## Receta 10: respuestas HTML/CSV/PNG
 
 ```bash
-curl -i -sS 'http://127.0.0.1:8080/fn/html_demo?name=Web' | head -n 10
-curl -i -sS 'http://127.0.0.1:8080/fn/csv_demo?name=Alice' | head -n 12
-curl -sS 'http://127.0.0.1:8080/fn/png_demo' --output out.png
+curl -i -sS 'http://127.0.0.1:8080/fn/html-demo?name=Web' | head -n 10
+curl -i -sS 'http://127.0.0.1:8080/fn/csv-demo?name=Alice' | head -n 12
+curl -sS 'http://127.0.0.1:8080/fn/png-demo' --output out.png
 file out.png
 ```
 
@@ -147,7 +147,7 @@ Uso: despues de crear/borrar funciones manualmente en filesystem.
 ## Receta 12: limpieza de demos
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/_fn/function?runtime=node&name=demo_recipe' -X DELETE
+curl -sS 'http://127.0.0.1:8080/_fn/function?runtime=node&name=demo-recipe' -X DELETE
 ```
 
 ## Diagnostico express

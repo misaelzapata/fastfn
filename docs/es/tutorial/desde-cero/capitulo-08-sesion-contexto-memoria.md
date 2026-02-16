@@ -8,7 +8,7 @@ Objetivo: agregar contexto de usuario y memoria minima por chat/usuario.
 
 ```json
 {
-  "name": "request_inspector",
+  "name": "request-inspector",
   "method": "GET",
   "context": { "trace_id": "abc-123", "tenant": "demo" }
 }
@@ -24,4 +24,4 @@ Patron simple:
 - guardar ultimos N turnos
 - TTL de memoria configurable (`memory_ttl_secs`)
 
-Ejemplo real: `telegram_ai_reply`.
+Ejemplo real: `telegram-ai-reply`.

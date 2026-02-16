@@ -145,6 +145,15 @@ Main fields:
 - `keep_warm`: (Optional) Periodic ping settings to keep the function hot.
 - `worker_pool`: (Optional) Advanced runtime worker pool settings.
 - `response.include_debug_headers`: Whether to include `X-Fn-Runtime` headers.
+- `invoke.routes`: (Optional) Public URLs for the function (array). Defaults to `/<name>` and `/<name>/*`.
+- `invoke.allow_hosts`: (Optional) Host allowlist for those routes (array).
+- `invoke.force-url`: (Optional) If `true`, this function is allowed to override an already-mapped URL.
+
+Notes:
+- By default, FastFN does not silently override an existing URL mapping.
+- Use `invoke.force-url: true` only when you intentionally want this function to take a route from another function (for example during a migration).
+- Version-scoped configs (for example `node/my-fn/v2/fn.config.json`) never take over an existing URL by themselves; use `FN_FORCE_URL=1` if you need a version route to win.
+- Global override: set `FN_FORCE_URL=1` (or `fastfn dev --force-url`) to treat all config/policy routes as forced.
 
 Example with advanced fields:
 
@@ -156,7 +165,10 @@ Example with advanced fields:
   "max_body_bytes": 1048576,
   "entrypoint": "src/api.py",
   "invoke": {
-    "handler": "main"
+    "handler": "main",
+    "force-url": false,
+    "routes": ["/my-api", "/my-api/*"],
+    "allow_hosts": ["api.example.com"]
   },
   "keep_warm": {
     "enabled": true,
@@ -213,19 +225,81 @@ If you want Cloudflare-Workers-style behavior (handler returns a `proxy` directi
 
 Then your handler can return `{ "proxy": { "path": "/foo" } }`.
 
-## Schedule (interval cron)
+## Schedule (cron or interval)
 
-You can attach a simple interval schedule to a function:
+You can attach a schedule to a function using either:
+
+- `every_seconds` (simple interval)
+- `cron` (cron expression)
+
+### Interval schedule (`every_seconds`)
 
 ```json
 {
   "schedule": {
     "enabled": true,
     "every_seconds": 60,
-    "method": "GET"
+    "method": "GET",
+    "query": {},
+    "headers": {},
+    "body": "",
+    "context": {}
   }
 }
 ```
+
+### Cron schedule (`cron`)
+
+Cron supports:
+
+- 5 fields: `min hour dom mon dow`
+- 6 fields: `sec min hour dom mon dow`
+- macros: `@hourly`, `@daily`, `@weekly`, `@monthly`, `@yearly`
+
+```json
+{
+  "schedule": {
+    "enabled": true,
+    "cron": "*/5 * * * *",
+    "timezone": "UTC",
+    "method": "GET",
+    "query": {},
+    "headers": {},
+    "body": "",
+    "context": {}
+  }
+}
+```
+
+Timezone values:
+
+- `UTC`, `Z`
+- `local` (default if omitted)
+- fixed offsets like `+02:00` or `-05:00`
+
+Notes:
+
+- This runs inside OpenResty (worker 0) and calls your function through the same gateway/runtime policy as normal traffic.
+- To run a function every **X minutes**, set `every_seconds = X * 60` (example: every 15 minutes => `900`).
+- Scheduler state is visible at `GET /_fn/schedules` (`next`, `last`, `last_status`, `last_error`).
+- Schedules are stored in `fn.config.json` (so schedule definitions persist across restarts).
+- Scheduler state is persisted to `<FN_FUNCTIONS_ROOT>/.fastfn/scheduler-state.json` by default (so `last/next/status/error` survives restarts).
+- Common failure modes (`last_status` / `last_error`):
+  - `405`: schedule `method` not allowed by function policy.
+  - `413`: schedule `body` exceeded `max_body_bytes`.
+  - `429`: function was busy (concurrency gate).
+  - `503`: runtime down/unhealthy.
+- Retry/backoff (optional):
+  - Set `schedule.retry=true` for defaults, or provide an object:
+  - `max_attempts` (default `3`), `base_delay_seconds` (default `1`), `max_delay_seconds` (default `30`), `jitter` (default `0.2`).
+  - Retries apply to status `0`, `429`, `503`, and `>=500`. The scheduler updates `last_error` with a `retrying ...` message.
+- Console UI: `GET /console/scheduler` shows schedules + keep_warm (requires `FN_UI_ENABLED=1`).
+- Global toggles:
+  - `FN_SCHEDULER_ENABLED=0` disables the scheduler entirely.
+  - `FN_SCHEDULER_INTERVAL` controls the scheduler tick loop (default `1` second).
+  - `FN_SCHEDULER_PERSIST_ENABLED=0` disables scheduler state persistence.
+  - `FN_SCHEDULER_PERSIST_INTERVAL` controls how often scheduler state is flushed (seconds).
+  - `FN_SCHEDULER_STATE_PATH` overrides the state file path.
 
 ## Function env and secrets
 

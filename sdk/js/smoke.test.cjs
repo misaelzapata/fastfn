@@ -14,8 +14,8 @@ assert.strictEqual(txt.headers['Content-Type'], 'text/plain; charset=utf-8');
 assert.strictEqual(txt.headers['X-Test'], '1');
 assert.strictEqual(txt.body, 'hello');
 
-const pxy = Response.proxy('/_fn/health', 'post', { 'X-Trace': 'abc' });
-assert.strictEqual(pxy.proxy.path, '/_fn/health');
+const pxy = Response.proxy('/request-inspector', 'post', { 'X-Trace': 'abc' });
+assert.strictEqual(pxy.proxy.path, '/request-inspector');
 assert.strictEqual(pxy.proxy.method, 'POST');
 assert.strictEqual(pxy.proxy.headers['X-Trace'], 'abc');
 

@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 $root = dirname(__DIR__, 2);
-$handlerPath = $root . '/examples/functions/php/php_profile/app.php';
+$handlerPath = $root . '/examples/functions/php/php-profile/app.php';
 
 function fail_test(string $msg): void
 {
@@ -52,7 +52,7 @@ $resp = handler([
 ]);
 $body = assert_response_contract($resp);
 assert_same($body['runtime'] ?? null, 'php', 'runtime mismatch');
-assert_same($body['function'] ?? null, 'php_profile', 'function mismatch');
+assert_same($body['function'] ?? null, 'php-profile', 'function mismatch');
 assert_same($body['hello'] ?? null, 'php-UnitPHP', 'hello mismatch custom name');
 
 $respDefault = handler([]);

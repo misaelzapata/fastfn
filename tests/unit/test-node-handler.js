@@ -4,17 +4,17 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..", "..");
 const handler = require(path.join(root, "examples/functions/node/hello/v2/app.js")).handler;
-const nodeEchoHandler = require(path.join(root, "examples/functions/node/node_echo/app.js")).handler;
+const nodeEchoHandler = require(path.join(root, "examples/functions/node/node-echo/app.js")).handler;
 const nodeSimpleEchoHandler = require(path.join(root, "examples/functions/node/echo/handler.js")).handler;
-const telegramSendHandler = require(path.join(root, "examples/functions/node/telegram_send/app.js")).handler;
-const edgeProxyHandler = require(path.join(root, "examples/functions/node/edge_proxy/app.js")).handler;
-const edgeFilterHandler = require(path.join(root, "examples/functions/node/edge_filter/app.js")).handler;
-const requestInspectorHandler = require(path.join(root, "examples/functions/node/request_inspector/app.js")).handler;
-const edgeAuthGatewayHandler = require(path.join(root, "examples/functions/node/edge_auth_gateway/app.js")).handler;
-const githubWebhookGuardHandler = require(path.join(root, "examples/functions/node/github_webhook_guard/app.js")).handler;
+const telegramSendHandler = require(path.join(root, "examples/functions/node/telegram-send/app.js")).handler;
+const edgeProxyHandler = require(path.join(root, "examples/functions/node/edge-proxy/app.js")).handler;
+const edgeFilterHandler = require(path.join(root, "examples/functions/node/edge-filter/app.js")).handler;
+const requestInspectorHandler = require(path.join(root, "examples/functions/node/request-inspector/app.js")).handler;
+const edgeAuthGatewayHandler = require(path.join(root, "examples/functions/node/edge-auth-gateway/app.js")).handler;
+const githubWebhookGuardHandler = require(path.join(root, "examples/functions/node/github-webhook-guard/app.js")).handler;
 const edgeHeaderInjectHandler = require(path.join(root, "examples/functions/node/edge-header-inject/app.js")).handler;
-const telegramAiReplyHandler = require(path.join(root, "examples/functions/node/telegram_ai_reply/app.js")).handler;
-const telegramAiDigestHandler = require(path.join(root, "examples/functions/node/telegram_ai_digest/app.js")).handler;
+const telegramAiReplyHandler = require(path.join(root, "examples/functions/node/telegram-ai-reply/app.js")).handler;
+const telegramAiDigestHandler = require(path.join(root, "examples/functions/node/telegram-ai-digest/app.js")).handler;
 const whatsappHandler = require(path.join(root, "examples/functions/node/whatsapp/app.js")).handler;
 const ipIntelRemoteHandler = require(path.join(root, "examples/functions/ip-intel/get.remote.js")).handler;
 
@@ -124,7 +124,7 @@ async function testNodeEcho() {
   assert.equal(resp.status, 200);
   const body = JSON.parse(resp.body);
   assert.equal(body.runtime, "node");
-  assert.equal(body.function, "node_echo");
+  assert.equal(body.function, "node-echo");
   assert.equal(body.hello, "NodeOnly");
 }
 
@@ -321,7 +321,7 @@ async function testEdgeProxyDirectiveShape() {
   const resp = await edgeProxyHandler({ method: "GET", body: "", context: { request_id: "req-x", timeout_ms: 1234 } });
   assert.equal(resp.status, 200);
   assert.equal(typeof resp.proxy, "object");
-  assert.equal(resp.proxy.path, "/_fn/health");
+  assert.ok(String(resp.proxy.path || "").startsWith("/request-inspector"), "proxy path should target public endpoint");
   assert.equal(resp.proxy.timeout_ms, 1234);
 }
 
@@ -347,7 +347,7 @@ async function testEdgeFilterAuthAndRewrite() {
   assert.equal(typeof ok.proxy, "object");
   assert.equal(ok.proxy.method, "GET");
   const rewritten = new URL(String(ok.proxy.path), "http://fastfn.local");
-  assert.equal(rewritten.pathname, "/_fn/openapi.json");
+  assert.equal(rewritten.pathname, "/request-inspector");
   const rewrittenUserId = rewritten.searchParams.get("edge_user_id") || rewritten.searchParams.get("edge-user-id");
   assert.equal(rewrittenUserId, "123");
   assert.equal(ok.proxy.timeout_ms, 10000);
@@ -364,7 +364,7 @@ async function testEdgeFilterAuthAndRewrite() {
 async function testRequestInspector() {
   const resp = await requestInspectorHandler({
     method: "POST",
-    path: "/fn/request_inspector",
+    path: "/fn/request-inspector",
     query: { key: "v" },
     headers: { "x-test": "1", "Content-Type": "text/plain" },
     body: "hello",
@@ -397,7 +397,9 @@ async function testEdgeAuthGateway() {
     body: "",
   });
   assert.equal(typeof ok.proxy, "object");
-  assert.equal(ok.proxy.path, "/_fn/health");
+  const okUrl = new URL(String(ok.proxy.path), "http://fastfn.local");
+  assert.equal(okUrl.pathname, "/request-inspector");
+  assert.equal(okUrl.searchParams.get("target"), "health");
   assert.equal(ok.proxy.timeout_ms, 111);
 
   const badTarget = await edgeAuthGatewayHandler({
@@ -417,7 +419,9 @@ async function testEdgeAuthGateway() {
     body: "payload",
   });
   assert.equal(typeof openapi.proxy, "object");
-  assert.equal(openapi.proxy.path, "/_fn/openapi.json");
+  const openapiUrl = new URL(String(openapi.proxy.path), "http://fastfn.local");
+  assert.equal(openapiUrl.pathname, "/request-inspector");
+  assert.equal(openapiUrl.searchParams.get("target"), "openapi");
   assert.equal(openapi.proxy.method, "POST");
 }
 
@@ -877,7 +881,7 @@ async function testTelegramAiReplyToolsContext() {
 
   global.fetch = async (url, opts = {}) => {
     const u = String(url);
-    if (u.includes("/fn/request_inspector")) {
+    if (u.includes("/fn/request-inspector")) {
       return {
         ok: true,
         status: 200,
@@ -916,9 +920,9 @@ async function testTelegramAiReplyToolsContext() {
         mode: "reply",
         dry_run: "false",
         chat_id: "123",
-        text: "Use [[fn:request_inspector?key=unit|GET]] and [[http:https://api.ipify.org?format=json]]",
+        text: "Use [[fn:request-inspector?key=unit|GET]] and [[http:https://api.ipify.org?format=json]]",
         tools: "true",
-        tool_allow_fn: "request_inspector",
+        tool_allow_fn: "request-inspector",
         tool_allow_hosts: "api.ipify.org",
       },
       body: "",
@@ -1167,10 +1171,10 @@ async function testTelegramAiReplyToolsFailureAndCapabilityBranches() {
   const openaiPayloads = [];
   global.fetch = async (url, opts = {}) => {
     const u = String(url);
-    if (u.includes("/fn/request_inspector")) {
+    if (u.includes("/fn/request-inspector")) {
       throw new Error("fetch failed tool fn");
     }
-    if (u.includes("/fn/telegram_ai_digest")) {
+    if (u.includes("/fn/telegram-ai-digest")) {
       return {
         ok: true,
         status: 200,
@@ -1226,9 +1230,9 @@ async function testTelegramAiReplyToolsFailureAndCapabilityBranches() {
         mode: "reply",
         dry_run: "false",
         chat_id: "123",
-        text: "[[fn:not_allowed|GET]] [[fn:request_inspector|TRACE]] [[http:https://api.ipify.org?format=json]] [[fn:request_inspector?key=boom|GET]]",
+        text: "[[fn:not_allowed|GET]] [[fn:request-inspector|TRACE]] [[http:https://api.ipify.org?format=json]] [[fn:request-inspector?key=boom|GET]]",
         tools: "true",
-        tool_allow_fn: "request_inspector",
+        tool_allow_fn: "request-inspector",
         tool_allow_hosts: "wttr.in",
       },
       body: "",
@@ -1253,7 +1257,7 @@ async function testTelegramAiReplyToolsFailureAndCapabilityBranches() {
         text: "dame news digest",
         tools: "true",
         auto_tools: "true",
-        tool_allow_fn: "telegram_ai_digest",
+        tool_allow_fn: "telegram-ai-digest",
       },
       body: "",
       env: baseEnv,
@@ -1261,7 +1265,7 @@ async function testTelegramAiReplyToolsFailureAndCapabilityBranches() {
     });
     assert.equal(autoNews.status, 200);
     const autoUser = (((openaiPayloads[2] || {}).messages || []).slice(-1)[0] || {}).content || "";
-    assert.ok(String(autoUser).includes("telegram_ai_digest"));
+    assert.ok(String(autoUser).includes("telegram-ai-digest"));
   } finally {
     global.fetch = prevFetch;
   }
@@ -1948,7 +1952,7 @@ async function testWhatsappChatToolsContext() {
 
   global.fetch = async (url, opts = {}) => {
     const u = String(url);
-    if (u.includes("/fn/request_inspector")) {
+    if (u.includes("/fn/request-inspector")) {
       return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, source: "wa-fn" }) };
     }
     if (u.includes("api.ipify.org")) {
@@ -1966,13 +1970,13 @@ async function testWhatsappChatToolsContext() {
       method: "POST",
       query: { action: "chat" },
       body: JSON.stringify({
-        text: "Usa [[fn:request_inspector?key=wa|GET]] y [[http:https://api.ipify.org?format=json]]",
+        text: "Usa [[fn:request-inspector?key=wa|GET]] y [[http:https://api.ipify.org?format=json]]",
       }),
       env: {
         OPENAI_API_KEY: "test-key",
         OPENAI_BASE_URL: "https://api.openai.com/v1",
         WHATSAPP_TOOLS_ENABLED: "true",
-        WHATSAPP_TOOL_ALLOW_FN: "request_inspector",
+        WHATSAPP_TOOL_ALLOW_FN: "request-inspector",
         WHATSAPP_TOOL_ALLOW_HTTP_HOSTS: "api.ipify.org",
       },
     });
@@ -2230,10 +2234,10 @@ async function testWhatsappToolDirectiveFailureAndAutoNewsBranches() {
 
   global.fetch = async (url, opts = {}) => {
     const u = String(url);
-    if (u.includes("/fn/request_inspector")) {
+    if (u.includes("/fn/request-inspector")) {
       throw new Error("tool fn boom");
     }
-    if (u.includes("/fn/telegram_ai_digest")) {
+    if (u.includes("/fn/telegram-ai-digest")) {
       return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, digest: "ok" }) };
     }
     if (u.includes("api.ipify.org")) {
@@ -2254,16 +2258,16 @@ async function testWhatsappToolDirectiveFailureAndAutoNewsBranches() {
       OPENAI_API_KEY: "test-key",
       OPENAI_BASE_URL: "https://api.openai.com/v1",
       WHATSAPP_TOOLS_ENABLED: "true",
-      WHATSAPP_TOOL_ALLOW_FN: "request_inspector,telegram_ai_digest",
+      WHATSAPP_TOOL_ALLOW_FN: "request-inspector,telegram-ai-digest",
       WHATSAPP_TOOL_ALLOW_HTTP_HOSTS: "api.ipify.org,wttr.in",
       WHATSAPP_AUTO_TOOLS: "true",
     };
 
     const failingTools = await whatsappHandler({
       method: "POST",
-      query: { action: "chat", tool_allow_hosts: "wttr.in", tool_allow_fn: "request_inspector" },
+      query: { action: "chat", tool_allow_hosts: "wttr.in", tool_allow_fn: "request-inspector" },
       body: JSON.stringify({
-        text: "[[fn:not_allowed|GET]] [[fn:request_inspector|TRACE]] [[http:https://api.ipify.org?format=json]] [[http:https://[bad]] [[fn:request_inspector?key=1|GET]]",
+        text: "[[fn:not_allowed|GET]] [[fn:request-inspector|TRACE]] [[http:https://api.ipify.org?format=json]] [[http:https://[bad]] [[fn:request-inspector?key=1|GET]]",
       }),
       env,
     });
@@ -2284,7 +2288,7 @@ async function testWhatsappToolDirectiveFailureAndAutoNewsBranches() {
     assert.equal(autoNews.status, 200);
     const autoUser = (((responsePayloads[1] || {}).input || []).find((item) => item && item.role === "user") || {}).content || "";
     assert.ok(String(autoUser).includes("api.ipify.org"));
-    assert.ok(String(autoUser).includes("telegram_ai_digest"));
+    assert.ok(String(autoUser).includes("telegram-ai-digest"));
   } finally {
     global.fetch = prevFetch;
   }

@@ -11,7 +11,7 @@ set -euo pipefail
 # Requirements:
 # - docker compose is running (service: openresty)
 # - TELEGRAM_BOT_TOKEN must be available to the container:
-#   - either in srv/fn/functions/node/telegram_send/fn.env.json (recommended for non-dev)
+#   - either in srv/fn/functions/node/telegram-send/fn.env.json (recommended for non-dev)
 #   - or via docker compose env var TELEGRAM_BOT_TOKEN (dev)
 
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -31,7 +31,7 @@ print(urllib.parse.quote(os.environ.get("TEXT","")))
 PY
 )"
 
-url="${BASE_URL_IN_CONTAINER}/fn/telegram_send?chat_id=${CHAT_ID}&text=${encoded_text}&dry_run=false"
+url="${BASE_URL_IN_CONTAINER}/fn/telegram-send?chat_id=${CHAT_ID}&text=${encoded_text}&dry_run=false"
 
 echo "Sending Telegram message via fastfn (inside container)..."
 resp="$(
@@ -61,7 +61,7 @@ if obj.get("sent") is not True:
     print(json.dumps(obj, indent=2), file=sys.stderr)
     sys.exit(1)
 
-print("OK: telegram_send reports sent=true")
+print("OK: telegram-send reports sent=true")
 print(json.dumps(obj, indent=2))
 PY
 

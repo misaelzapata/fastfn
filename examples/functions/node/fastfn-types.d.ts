@@ -1,5 +1,5 @@
 /**
- * FastFn Runtime Types
+ * FastFN Runtime Types
  * Copy this file or reference it to get intellisense in your handlers.
  */
 
@@ -21,7 +21,7 @@ export interface Request<TBody = any, TQuery = Record<string, string>> {
 }
 
 export interface ProxyDirective {
-  /** Target path (e.g., "/_fn/health") or full URL */
+  /** Target path (e.g., "/hello") or full URL */
   path: string;
   /** HTTP method for the upstream request */
   method?: string;

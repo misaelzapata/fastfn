@@ -10,10 +10,16 @@ WAIT_SECS="${WAIT_SECS:-120}"
 KEEP_UP="${KEEP_UP:-0}"
 FN_ADMIN_TOKEN="${FN_ADMIN_TOKEN:-test-admin-token}"
 TEST_SUFFIX="${TEST_SUFFIX:-$$}"
+COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-fastfn-openapi-system-${TEST_SUFFIX}}"
 
 STACK_PID=""
 STACK_LOG=""
 STACK_EXIT_FILE=""
+WORK_DIR="$(mktemp -d "$ROOT_DIR/tests/results/openapi-system.${TEST_SUFFIX}.XXXXXX")"
+FIXTURES_DIR="$WORK_DIR/nextstyle-clean"
+
+# Never mutate the repo fixtures in-place; tests create/delete functions via the admin API.
+cp -R "$ROOT_DIR/tests/fixtures/nextstyle-clean" "$FIXTURES_DIR"
 
 cleanup() {
   if [[ -n "$STACK_PID" ]] && kill -0 "$STACK_PID" >/dev/null 2>&1; then
@@ -24,8 +30,9 @@ cleanup() {
     rm -f "$STACK_EXIT_FILE" >/dev/null 2>&1 || true
   fi
   if [[ "$KEEP_UP" != "1" ]]; then
-    (cd "$ROOT_DIR" && docker compose down --remove-orphans >/dev/null 2>&1) || true
+    (cd "$ROOT_DIR" && COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT_NAME" docker compose down --remove-orphans >/dev/null 2>&1) || true
   fi
+  rm -rf "$WORK_DIR" >/dev/null 2>&1 || true
 }
 
 trap cleanup EXIT
@@ -132,15 +139,15 @@ assert_no_wizard_temp_artifacts
 
 start_stack() {
   local cmd
-  (cd "$ROOT_DIR" && docker compose down --remove-orphans >/dev/null 2>&1) || true
+  (cd "$ROOT_DIR" && COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT_NAME" docker compose down --remove-orphans >/dev/null 2>&1) || true
 
   STACK_LOG="$(mktemp -t fastfn-openapi-system.XXXXXX.log)"
   STACK_EXIT_FILE="$(mktemp -t fastfn-openapi-system.exit.XXXXXX)"
-  cmd=(env FN_ADMIN_TOKEN="$FN_ADMIN_TOKEN" FN_UI_ENABLED=0 FN_OPENAPI_INCLUDE_INTERNAL=0)
+  cmd=(env COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT_NAME" FN_ADMIN_TOKEN="$FN_ADMIN_TOKEN" FN_UI_ENABLED=0 FN_OPENAPI_INCLUDE_INTERNAL=0)
   if [[ "$#" -gt 0 ]]; then
     cmd+=("$@")
   fi
-  cmd+=(./bin/fastfn dev tests/fixtures/nextstyle-clean)
+  cmd+=(./bin/fastfn dev "$FIXTURES_DIR")
   (
     cd "$ROOT_DIR"
     "${cmd[@]}" >"$STACK_LOG" 2>&1
@@ -155,11 +162,11 @@ start_stack_with_config() {
   shift || true
 
   local cmd
-  (cd "$ROOT_DIR" && docker compose down --remove-orphans >/dev/null 2>&1) || true
+  (cd "$ROOT_DIR" && COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT_NAME" docker compose down --remove-orphans >/dev/null 2>&1) || true
 
   STACK_LOG="$(mktemp -t fastfn-openapi-system.XXXXXX.log)"
   STACK_EXIT_FILE="$(mktemp -t fastfn-openapi-system.exit.XXXXXX)"
-  cmd=(env -u FN_OPENAPI_INCLUDE_INTERNAL FN_ADMIN_TOKEN="$FN_ADMIN_TOKEN" FN_UI_ENABLED=0)
+  cmd=(env -u FN_OPENAPI_INCLUDE_INTERNAL COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT_NAME" FN_ADMIN_TOKEN="$FN_ADMIN_TOKEN" FN_UI_ENABLED=0)
   if [[ "$#" -gt 0 ]]; then
     cmd+=("$@")
   fi
@@ -183,7 +190,7 @@ stop_stack() {
     rm -f "$STACK_EXIT_FILE" >/dev/null 2>&1 || true
     STACK_EXIT_FILE=""
   fi
-  (cd "$ROOT_DIR" && docker compose down --remove-orphans >/dev/null 2>&1) || true
+  (cd "$ROOT_DIR" && COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT_NAME" docker compose down --remove-orphans >/dev/null 2>&1) || true
 }
 
 assert_config_files_hidden() {
@@ -554,6 +561,177 @@ assert os.environ["OPENAPI_CATCHALL"] not in paths, "deleted ad-hoc catch-all ro
 PY
 }
 
+assert_edge-proxy_denies_control_plane_paths() {
+  local fn_name route
+  fn_name="edge_ssrf_${TEST_SUFFIX}"
+  route="/edge-ssrf-${TEST_SUFFIX}"
+
+  local create_code cfg_code code_code reload_code call_code delete_code
+
+  create_code="$(curl -sS -o /tmp/openapi-system-edge-ssrf-create.out -w '%{http_code}' -X POST \
+    "http://127.0.0.1:8080/_fn/function?runtime=node&name=${fn_name}" \
+    -H "x-fn-admin-token: $FN_ADMIN_TOKEN" \
+    -H 'Content-Type: application/json' \
+    --data '{"methods":["GET"],"summary":"Edge SSRF control-plane probe"}')"
+  if [[ "$create_code" != "201" ]]; then
+    echo "FAIL create edge ssrf function expected=201 got=$create_code"
+    cat /tmp/openapi-system-edge-ssrf-create.out || true
+    exit 1
+  fi
+
+  cfg_code="$(curl -sS -o /tmp/openapi-system-edge-ssrf-cfg.out -w '%{http_code}' -X PUT \
+    "http://127.0.0.1:8080/_fn/function-config?runtime=node&name=${fn_name}" \
+    -H "x-fn-admin-token: $FN_ADMIN_TOKEN" \
+    -H 'Content-Type: application/json' \
+    --data "{\"invoke\":{\"methods\":[\"GET\"],\"routes\":[\"${route}\"]},\"edge\":{\"base_url\":\"http://127.0.0.1:8080\",\"allow_hosts\":[\"127.0.0.1:8080\"],\"allow_private\":true}}")"
+  if [[ "$cfg_code" != "200" ]]; then
+    echo "FAIL configure edge ssrf function expected=200 got=$cfg_code"
+    cat /tmp/openapi-system-edge-ssrf-cfg.out || true
+    exit 1
+  fi
+
+  code_code="$(curl -sS -o /tmp/openapi-system-edge-ssrf-code.out -w '%{http_code}' -X PUT \
+    "http://127.0.0.1:8080/_fn/function-code?runtime=node&name=${fn_name}" \
+    -H "x-fn-admin-token: $FN_ADMIN_TOKEN" \
+    -H 'Content-Type: application/json' \
+    --data '{"code":"exports.handler = async () => ({ proxy: { path: \"/_fn/health\", method: \"GET\", headers: { \"x-edge\": \"1\" } } });\n"}')"
+  if [[ "$code_code" != "200" ]]; then
+    echo "FAIL write edge ssrf function code expected=200 got=$code_code"
+    cat /tmp/openapi-system-edge-ssrf-code.out || true
+    exit 1
+  fi
+
+  reload_code="$(curl -sS -o /tmp/openapi-system-edge-ssrf-reload.out -w '%{http_code}' -X POST \
+    'http://127.0.0.1:8080/_fn/reload' \
+    -H "x-fn-admin-token: $FN_ADMIN_TOKEN")"
+  if [[ "$reload_code" != "200" ]]; then
+    echo "FAIL reload after edge ssrf update expected=200 got=$reload_code"
+    cat /tmp/openapi-system-edge-ssrf-reload.out || true
+    exit 1
+  fi
+
+  call_code="$(curl -sS -o /tmp/openapi-system-edge-ssrf-call.out -w '%{http_code}' \
+    "http://127.0.0.1:8080${route}")"
+  if [[ "$call_code" != "502" ]]; then
+    echo "FAIL edge ssrf call expected=502 got=$call_code"
+    cat /tmp/openapi-system-edge-ssrf-call.out || true
+    exit 1
+  fi
+  if ! grep -q "control-plane path not allowed" /tmp/openapi-system-edge-ssrf-call.out; then
+    echo "FAIL edge ssrf denial missing control-plane reason"
+    cat /tmp/openapi-system-edge-ssrf-call.out || true
+    exit 1
+  fi
+
+  delete_code="$(curl -sS -o /tmp/openapi-system-edge-ssrf-delete.out -w '%{http_code}' -X DELETE \
+    "http://127.0.0.1:8080/_fn/function?runtime=node&name=${fn_name}" \
+    -H "x-fn-admin-token: $FN_ADMIN_TOKEN")"
+  if [[ "$delete_code" != "200" ]]; then
+    echo "FAIL delete edge ssrf function expected=200 got=$delete_code"
+    cat /tmp/openapi-system-edge-ssrf-delete.out || true
+    exit 1
+  fi
+
+  reload_code="$(curl -sS -o /tmp/openapi-system-edge-ssrf-reload-delete.out -w '%{http_code}' -X POST \
+    'http://127.0.0.1:8080/_fn/reload' \
+    -H "x-fn-admin-token: $FN_ADMIN_TOKEN")"
+  if [[ "$reload_code" != "200" ]]; then
+    echo "FAIL reload after edge ssrf delete expected=200 got=$reload_code"
+    cat /tmp/openapi-system-edge-ssrf-reload-delete.out || true
+    exit 1
+  fi
+}
+
+assert_force_url_global_controls_policy_override() {
+  local fn_name route create_code cfg_code code_code reload_code call_code delete_code
+  fn_name="conflict_policy_${TEST_SUFFIX}"
+  route="/conflict-route"
+
+  create_code="$(curl -sS -o /tmp/openapi-system-force-url-create.out -w '%{http_code}' -X POST \
+    "http://127.0.0.1:8080/_fn/function?runtime=node&name=${fn_name}" \
+    -H "x-fn-admin-token: $FN_ADMIN_TOKEN" \
+    -H 'Content-Type: application/json' \
+    --data '{"methods":["GET"],"summary":"force-url policy override probe"}')"
+  if [[ "$create_code" != "201" ]]; then
+    echo "FAIL create force-url function expected=201 got=$create_code"
+    cat /tmp/openapi-system-force-url-create.out || true
+    exit 1
+  fi
+
+  cfg_code="$(curl -sS -o /tmp/openapi-system-force-url-cfg.out -w '%{http_code}' -X PUT \
+    "http://127.0.0.1:8080/_fn/function-config?runtime=node&name=${fn_name}" \
+    -H "x-fn-admin-token: $FN_ADMIN_TOKEN" \
+    -H 'Content-Type: application/json' \
+    --data "{\"invoke\":{\"methods\":[\"GET\"],\"routes\":[\"${route}\"]}}")"
+  if [[ "$cfg_code" != "200" ]]; then
+    echo "FAIL configure force-url function expected=200 got=$cfg_code"
+    cat /tmp/openapi-system-force-url-cfg.out || true
+    exit 1
+  fi
+
+  code_code="$(curl -sS -o /tmp/openapi-system-force-url-code.out -w '%{http_code}' -X PUT \
+    "http://127.0.0.1:8080/_fn/function-code?runtime=node&name=${fn_name}" \
+    -H "x-fn-admin-token: $FN_ADMIN_TOKEN" \
+    -H 'Content-Type: application/json' \
+    --data '{"code":"exports.handler = async () => ({ status: 200, headers: { \"Content-Type\": \"application/json\" }, body: JSON.stringify({ ok: true, source: \"policy\" }) });\n"}')"
+  if [[ "$code_code" != "200" ]]; then
+    echo "FAIL write force-url function code expected=200 got=$code_code"
+    cat /tmp/openapi-system-force-url-code.out || true
+    exit 1
+  fi
+
+  reload_code="$(curl -sS -o /tmp/openapi-system-force-url-reload.out -w '%{http_code}' -X POST \
+    'http://127.0.0.1:8080/_fn/reload' \
+    -H "x-fn-admin-token: $FN_ADMIN_TOKEN")"
+  if [[ "$reload_code" != "200" ]]; then
+    echo "FAIL reload after force-url update expected=200 got=$reload_code"
+    cat /tmp/openapi-system-force-url-reload.out || true
+    exit 1
+  fi
+
+  call_code="$(curl -sS -o /tmp/openapi-system-force-url-call.out -w '%{http_code}' \
+    "http://127.0.0.1:8080${route}")"
+  if [[ "$call_code" != "200" ]]; then
+    echo "FAIL force-url call expected=200 got=$call_code"
+    cat /tmp/openapi-system-force-url-call.out || true
+    exit 1
+  fi
+
+  local expected_source
+  expected_source="${1:-}"
+  if [[ "$expected_source" == "policy" ]]; then
+    if ! grep -q '\"source\":\"policy\"' /tmp/openapi-system-force-url-call.out; then
+      echo "FAIL force-url expected policy source"
+      cat /tmp/openapi-system-force-url-call.out || true
+      exit 1
+    fi
+  else
+    if ! grep -q '\"source\":\"file\"' /tmp/openapi-system-force-url-call.out; then
+      echo "FAIL force-url expected file source"
+      cat /tmp/openapi-system-force-url-call.out || true
+      exit 1
+    fi
+  fi
+
+  delete_code="$(curl -sS -o /tmp/openapi-system-force-url-delete.out -w '%{http_code}' -X DELETE \
+    "http://127.0.0.1:8080/_fn/function?runtime=node&name=${fn_name}" \
+    -H "x-fn-admin-token: $FN_ADMIN_TOKEN")"
+  if [[ "$delete_code" != "200" ]]; then
+    echo "FAIL delete force-url function expected=200 got=$delete_code"
+    cat /tmp/openapi-system-force-url-delete.out || true
+    exit 1
+  fi
+
+  reload_code="$(curl -sS -o /tmp/openapi-system-force-url-reload-delete.out -w '%{http_code}' -X POST \
+    'http://127.0.0.1:8080/_fn/reload' \
+    -H "x-fn-admin-token: $FN_ADMIN_TOKEN")"
+  if [[ "$reload_code" != "200" ]]; then
+    echo "FAIL reload after force-url delete expected=200 got=$reload_code"
+    cat /tmp/openapi-system-force-url-reload-delete.out || true
+    exit 1
+  fi
+}
+
 assert_go_runtime_ad_hoc_route_exported() {
   local fn_name route openapi_route
   fn_name="go_probe_${TEST_SUFFIX}"
@@ -803,7 +981,7 @@ assert_shared_deps_node_pack_runtime() {
   fn_name="node_shared_pack_${TEST_SUFFIX}"
   route="/node-shared-pack-${TEST_SUFFIX}"
   pack_name="ci_shared_pack_${TEST_SUFFIX}"
-  pack_root="$ROOT_DIR/tests/fixtures/nextstyle-clean/.fastfn/packs/node/${pack_name}"
+  pack_root="$FIXTURES_DIR/.fastfn/packs/node/${pack_name}"
 
   mkdir -p "${pack_root}/node_modules/${pack_name}"
   cat >"${pack_root}/node_modules/${pack_name}/index.js" <<'JS'
@@ -1102,8 +1280,15 @@ assert_home_quick_invoke_is_live_openapi_based
 assert_openapi_functions_only_default_and_admin_functional
 assert_openapi_server_url_resolution
 assert_ad_hoc_route_exported
+assert_edge-proxy_denies_control_plane_paths
+assert_force_url_global_controls_policy_override "file"
 assert_shared_deps_node_pack_runtime
 assert_virtual_host_route_routing
+stop_stack
+
+echo "== force-url global override (FN_FORCE_URL=1) =="
+start_stack FN_FORCE_URL=1
+assert_force_url_global_controls_policy_override "policy"
 stop_stack
 
 echo "== openapi go runtime opt-in =="
@@ -1126,10 +1311,12 @@ CONFIG_DIR="$(mktemp -d -t fastfn-openapi-config.XXXXXX)"
 CONFIG_INCLUDE_INTERNAL="$CONFIG_DIR/fastfn-openapi-config.json"
 cat >"$CONFIG_INCLUDE_INTERNAL" <<'JSON'
 {
-  "functions-dir": "tests/fixtures/nextstyle-clean",
+  "functions-dir": "__FIXTURES_DIR__",
   "openapi-include-internal": true
 }
 JSON
+sed -i.bak "s|__FIXTURES_DIR__|$FIXTURES_DIR|g" "$CONFIG_INCLUDE_INTERNAL"
+rm -f "$CONFIG_INCLUDE_INTERNAL.bak" >/dev/null 2>&1 || true
 start_stack_with_config "$CONFIG_INCLUDE_INTERNAL"
 assert_openapi_internal_contract
 stop_stack

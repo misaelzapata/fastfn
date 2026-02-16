@@ -71,7 +71,7 @@ curl -sS 'http://127.0.0.1:8080/users/123'
 ## Recipe 5: change method policy live
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/_fn/function-config?runtime=node&name=node_echo' \
+curl -sS 'http://127.0.0.1:8080/_fn/function-config?runtime=node&name=node-echo' \
   -X PUT -H 'Content-Type: application/json' \
   --data '{"invoke":{"methods":["PUT","DELETE"]}}'
 ```
@@ -79,8 +79,8 @@ curl -sS 'http://127.0.0.1:8080/_fn/function-config?runtime=node&name=node_echo'
 Validate:
 
 ```bash
-curl -sS -o /dev/null -w '%{http_code}\n' 'http://127.0.0.1:8080/node_echo?name=x'         # expect 405
-curl -sS -o /dev/null -w '%{http_code}\n' -X PUT 'http://127.0.0.1:8080/node_echo?name=x' # expect 200
+curl -sS -o /dev/null -w '%{http_code}\n' 'http://127.0.0.1:8080/node-echo?name=x'         # expect 405
+curl -sS -o /dev/null -w '%{http_code}\n' -X PUT 'http://127.0.0.1:8080/node-echo?name=x' # expect 200
 ```
 
 ## Recipe 6: update function env
@@ -112,7 +112,7 @@ Expected: `trace_id` available to handler under `event.context.user`.
 ## Recipe 8: create function via API
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/_fn/function?runtime=python&name=demo_recipe' \
+curl -sS 'http://127.0.0.1:8080/_fn/function?runtime=python&name=demo-recipe' \
   -X POST -H 'Content-Type: application/json' \
   --data '{"methods":["GET"],"summary":"API-created demo"}'
 ```
@@ -122,7 +122,7 @@ Expected: function directory, code file, and config created.
 ## Recipe 9: edit function code via API
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/_fn/function-code?runtime=python&name=demo_recipe' \
+curl -sS 'http://127.0.0.1:8080/_fn/function-code?runtime=python&name=demo-recipe' \
   -X PUT -H 'Content-Type: application/json' \
   --data '{"code":"import json\n\ndef handler(event):\n    q = event.get(\"query\") or {}\n    return {\"status\":200,\"headers\":{\"Content-Type\":\"application/json\"},\"body\":json.dumps({\"demo\":q.get(\"name\",\"ok\")})}\n"}'
 ```
@@ -130,25 +130,25 @@ curl -sS 'http://127.0.0.1:8080/_fn/function-code?runtime=python&name=demo_recip
 Validate:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/demo_recipe?name=RecipeOK'
+curl -sS 'http://127.0.0.1:8080/demo-recipe?name=RecipeOK'
 ```
 
 ## Recipe 10: return non-JSON payloads
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/html_demo?name=Web'
-curl -sS 'http://127.0.0.1:8080/csv_demo?name=Alice'
-curl -sS 'http://127.0.0.1:8080/png_demo' --output out.png
+curl -sS 'http://127.0.0.1:8080/html-demo?name=Web'
+curl -sS 'http://127.0.0.1:8080/csv-demo?name=Alice'
+curl -sS 'http://127.0.0.1:8080/png-demo' --output out.png
 ```
 
 Expected:
 
-- `html_demo` -> `text/html`
-- `csv_demo` -> `text/csv`
-- `png_demo` -> valid PNG signature
+- `html-demo` -> `text/html`
+- `csv-demo` -> `text/csv`
+- `png-demo` -> valid PNG signature
 
 ## Cleanup after demo runs
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/_fn/function?runtime=python&name=demo_recipe' -X DELETE
+curl -sS 'http://127.0.0.1:8080/_fn/function?runtime=python&name=demo-recipe' -X DELETE
 ```

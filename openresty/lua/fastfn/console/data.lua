@@ -1167,6 +1167,121 @@ local function normalize_config_payload(payload)
         end
         sched.every_seconds = math.floor(v)
       end
+      if payload.schedule.cron ~= nil then
+        if payload.schedule.cron == cjson.null then
+          sched.cron = cjson.null
+        elseif type(payload.schedule.cron) ~= "string" then
+          return nil, "schedule.cron must be a string or null"
+        else
+          local expr = payload.schedule.cron:gsub("^%s+", ""):gsub("%s+$", "")
+          if expr == "" then
+            return nil, "schedule.cron must be a non-empty string"
+          end
+          if expr:sub(1, 1) == "@" then
+            local macro = expr:lower()
+            local allowed = {
+              ["@yearly"] = true,
+              ["@annually"] = true,
+              ["@monthly"] = true,
+              ["@weekly"] = true,
+              ["@daily"] = true,
+              ["@midnight"] = true,
+              ["@hourly"] = true,
+            }
+            if not allowed[macro] then
+              return nil, "schedule.cron must be 5/6-field cron or a supported @macro"
+            end
+          else
+            local fields = 0
+            for _ in expr:gmatch("%S+") do
+              fields = fields + 1
+            end
+            if fields ~= 5 and fields ~= 6 then
+              return nil, "schedule.cron must have 5 or 6 fields"
+            end
+          end
+          sched.cron = expr
+        end
+      end
+      if payload.schedule.timezone ~= nil then
+        if payload.schedule.timezone == cjson.null then
+          sched.timezone = cjson.null
+        elseif type(payload.schedule.timezone) ~= "string" then
+          return nil, "schedule.timezone must be a string or null"
+        else
+          local tz = payload.schedule.timezone:gsub("^%s+", ""):gsub("%s+$", "")
+          if tz == "" then
+            return nil, "schedule.timezone must be non-empty when set"
+          end
+          local lower = tz:lower()
+          if not (lower == "utc" or lower == "local" or tz == "Z" or tz:match("^[+-]%d%d:?%d%d$")) then
+            return nil, "schedule.timezone must be UTC, local, Z, or a fixed offset (+HH:MM)"
+          end
+          sched.timezone = tz
+        end
+      end
+      if payload.schedule.retry ~= nil then
+        if payload.schedule.retry == cjson.null then
+          sched.retry = cjson.null
+        elseif type(payload.schedule.retry) == "boolean" then
+          sched.retry = payload.schedule.retry == true
+        elseif type(payload.schedule.retry) ~= "table" then
+          return nil, "schedule.retry must be a boolean, object, or null"
+        else
+          local r = {}
+          if payload.schedule.retry.enabled ~= nil then
+            r.enabled = payload.schedule.retry.enabled == true
+          end
+          if payload.schedule.retry.max_attempts ~= nil then
+            local v = tonumber(payload.schedule.retry.max_attempts)
+            if not v or v < 1 then
+              return nil, "schedule.retry.max_attempts must be >= 1"
+            end
+            v = math.floor(v)
+            if v > 10 then
+              v = 10
+            end
+            r.max_attempts = v
+          end
+          if payload.schedule.retry.base_delay_seconds ~= nil then
+            local v = tonumber(payload.schedule.retry.base_delay_seconds)
+            if v == nil or v < 0 then
+              return nil, "schedule.retry.base_delay_seconds must be >= 0"
+            end
+            if v > 3600 then
+              v = 3600
+            end
+            r.base_delay_seconds = v
+          end
+          if payload.schedule.retry.max_delay_seconds ~= nil then
+            local v = tonumber(payload.schedule.retry.max_delay_seconds)
+            if v == nil or v < 0 then
+              return nil, "schedule.retry.max_delay_seconds must be >= 0"
+            end
+            if v > 3600 then
+              v = 3600
+            end
+            r.max_delay_seconds = v
+          end
+          if payload.schedule.retry.jitter ~= nil then
+            local v = tonumber(payload.schedule.retry.jitter)
+            if v == nil or v < 0 then
+              return nil, "schedule.retry.jitter must be >= 0"
+            end
+            if v > 0.5 then
+              v = 0.5
+            end
+            r.jitter = v
+          end
+          if r.base_delay_seconds ~= nil and r.max_delay_seconds ~= nil and r.max_delay_seconds < r.base_delay_seconds then
+            return nil, "schedule.retry.max_delay_seconds must be >= base_delay_seconds"
+          end
+          if next(r) == nil then
+            return nil, "schedule.retry must include at least one field"
+          end
+          sched.retry = r
+        end
+      end
       if payload.schedule.method ~= nil then
         local m = tostring(payload.schedule.method):upper()
         if not invoke_rules.ALLOWED_METHODS[m] then

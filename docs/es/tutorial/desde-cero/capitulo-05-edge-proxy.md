@@ -21,7 +21,9 @@ Objetivo: devolver `proxy` desde la funcion y que el gateway haga la llamada sal
 exports.handler = async () => ({
   status: 200,
   proxy: {
-    path: "/_fn/health",
+    // Nota: los paths del control-plane (`/_fn/*` y `/console/*`) están bloqueados para edge proxy.
+    // Proxeá a un endpoint público (en este tutorial: `/hello`).
+    path: "/hello?name=edge",
     method: "GET",
     headers: { "x-fastfn-edge": "1" }
   }
@@ -31,5 +33,5 @@ exports.handler = async () => ({
 ## Prueba
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/hello_world' | jq .
+curl -sS 'http://127.0.0.1:8080/mi-proxy' | jq .
 ```

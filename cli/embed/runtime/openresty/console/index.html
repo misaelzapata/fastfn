@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FastFn Console</title>
+    <title>FastFN Console</title>
     <link rel="stylesheet" href="/console/assets/style.css?v=3.2">
     <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
     <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
@@ -45,6 +45,7 @@
                     <ul>
                         <li class="active" id="navFunctions"><a href="#" onclick="app.showFunctionList()"><ion-icon name="cube-outline"></ion-icon> Functions</a></li>
                         <li id="navGateway"><a href="#" onclick="app.showGateway()"><ion-icon name="git-branch-outline"></ion-icon> Gateway</a></li>
+                        <li id="navScheduler"><a href="#" onclick="app.showScheduler()"><ion-icon name="time-outline"></ion-icon> Scheduler</a></li>
                         <li id="navWizard"><a href="#" onclick="app.showWizard()"><ion-icon name="build-outline"></ion-icon> Wizard</a></li>
                         <li id="navDashboard"><a href="#" onclick="app.switchTab('monitor')"><ion-icon name="speedometer-outline"></ion-icon> Dashboard</a></li>
                     </ul>
@@ -121,6 +122,55 @@
                     </div>
                 </div>
 
+                <div id="schedulerView" class="view-panel" style="display:none;">
+                    <div class="page-header">
+                        <h1>Scheduler</h1>
+                        <div class="actions">
+                            <button class="btn btn-secondary" onclick="app.refreshScheduler()"><ion-icon name="refresh"></ion-icon></button>
+                        </div>
+                    </div>
+                    <div class="filter-bar">
+                        <input type="text" id="scheduleSearch" placeholder="Filter schedules by function, runtime, status">
+                    </div>
+                    <div class="code-block" id="scheduleSummary" style="margin-bottom:12px;">Active schedules: 0 | keep_warm: 0</div>
+
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Function</th>
+                                    <th>Schedule</th>
+                                    <th>Method</th>
+                                    <th>Next</th>
+                                    <th>Last</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="scheduleTableBody"></tbody>
+                        </table>
+                    </div>
+
+                    <div class="config-card" style="max-width:none; margin-top:16px;">
+                        <h3>Keep Warm</h3>
+                        <div class="table-container">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Function</th>
+                                        <th>State</th>
+                                        <th>Next</th>
+                                        <th>Last</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="keepWarmTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
                 <div id="wizardView" class="view-panel" style="display: none;">
                     <div class="page-header">
                         <h1>Function Wizard</h1>
@@ -144,7 +194,7 @@
                                 </div>
                                 <div class="form-group">
                                     <label>Name</label>
-                                    <input id="wizName" type="text" placeholder="my_fn" />
+                                    <input id="wizName" type="text" placeholder="my-fn" />
                                 </div>
                                 <div class="form-group">
                                     <label>Version (optional)</label>
@@ -155,17 +205,17 @@
                                 <div class="form-group">
                                     <label>Template</label>
                                     <select id="wizTemplate">
-                                        <option value="hello_json">hello_json</option>
+                                        <option value="hello-json">hello-json</option>
                                         <option value="echo">echo</option>
                                         <option value="html">html</option>
                                         <option value="csv">csv</option>
                                         <option value="png">png</option>
-                                        <option value="edge_proxy">edge_proxy</option>
-                                        <option value="edge_filter">edge_filter</option>
-                                        <option value="edge_auth_gateway">edge_auth_gateway</option>
+                                        <option value="edge-proxy">edge-proxy</option>
+                                        <option value="edge-filter">edge-filter</option>
+                                        <option value="edge-auth-gateway">edge-auth-gateway</option>
                                         <option value="edge-header-inject">edge-header-inject</option>
-                                        <option value="github_webhook_guard">github_webhook_guard</option>
-                                        <option value="hello_ts">hello_ts</option>
+                                        <option value="github-webhook-guard">github-webhook-guard</option>
+                                        <option value="hello-ts">hello-ts</option>
                                     </select>
                                 </div>
                             </div>
@@ -271,7 +321,7 @@
                             </div>
                             <div class="ai-panel">
                                 <div class="ai-header">
-                                    <span><ion-icon name="sparkles"></ion-icon> FastFn AI</span>
+                                    <span><ion-icon name="sparkles"></ion-icon> FastFN AI</span>
                                     <div class="ai-mode-switch" role="group" aria-label="AI mode">
                                         <button id="aiModeAuto" type="button" class="btn btn-xs btn-secondary active">Auto</button>
                                         <button id="aiModeChat" type="button" class="btn btn-xs btn-secondary">Chat</button>

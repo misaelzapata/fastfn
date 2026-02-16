@@ -5,8 +5,8 @@ import shutil
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-SRC = ROOT / "examples/functions/rust/rust_profile/app.rs"
-CFG = ROOT / "examples/functions/rust/rust_profile/fn.config.json"
+SRC = ROOT / "examples/functions/rust/rust-profile/app.rs"
+CFG = ROOT / "examples/functions/rust/rust-profile/fn.config.json"
 RUNTIME_DIR = ROOT / "srv/fn/runtimes"
 RUST_DAEMON_PATH = RUNTIME_DIR / "rust-daemon.py"
 
@@ -44,7 +44,7 @@ def test_source_contract() -> None:
 def test_runtime_handler_execution() -> None:
     resp = rust_daemon._handle_request_direct(
         {
-            "fn": "rust_profile",
+            "fn": "rust-profile",
             "event": {
                 "query": {"name": "UnitRust"},
             },
@@ -56,13 +56,13 @@ def test_runtime_handler_execution() -> None:
 
     body = json.loads(resp.get("body") or "{}")
     assert body.get("runtime") == "rust", body
-    assert body.get("function") == "rust_profile", body
+    assert body.get("function") == "rust-profile", body
     assert body.get("hello") == "rust-UnitRust", body
 
 
 def test_runtime_not_found() -> None:
     try:
-        rust_daemon._handle_request_direct({"fn": "missing_rust_profile", "event": {}})
+        rust_daemon._handle_request_direct({"fn": "missing_rust-profile", "event": {}})
     except FileNotFoundError:
         return
     raise AssertionError("missing rust function should raise FileNotFoundError")

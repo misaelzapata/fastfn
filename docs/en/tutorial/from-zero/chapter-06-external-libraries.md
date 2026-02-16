@@ -6,11 +6,11 @@ Goal: install dependencies per function.
 
 1. Create `package.json` in your function folder:
 
-`srv/fn/functions/node/hello_world/package.json`
+`srv/fn/functions/node/hello-world/package.json`
 
 ```json
 {
-  "name": "hello_world",
+  "name": "hello-world",
   "private": true,
   "dependencies": {
     "dayjs": "^1.11.13"
@@ -33,7 +33,7 @@ exports.handler = async () => ({
 3. Invoke:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/hello_world' | jq .
+curl -sS 'http://127.0.0.1:8080/fn/hello-world' | jq .
 ```
 
 ## Python equivalent

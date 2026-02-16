@@ -20,7 +20,7 @@ If you are new, this is the shortest path to a bot that feels "alive" instead of
 - Full request lifecycle: [Invocation Flow](../explanation/invocation-flow.md)
 
 ## What you will build
-A `telegram_ai_reply` function that:
+A `telegram-ai-reply` function that:
 - polls Telegram on schedule,
 - reads new updates,
 - calls OpenAI,
@@ -32,7 +32,7 @@ A `telegram_ai_reply` function that:
 ```text
 Telegram user
   -> Telegram Bot API (getUpdates)
-  -> fastfn scheduler -> /fn/telegram_ai_reply
+  -> fastfn scheduler -> /fn/telegram-ai-reply
   -> OpenAI
   -> Telegram Bot API (sendMessage)
   -> Telegram user
@@ -61,7 +61,7 @@ Expected:
 - `node` and `python` runtimes reported as up.
 
 ## Step 2: Configure function secrets and runtime options
-Edit `srv/fn/functions/node/telegram_ai_reply/fn.env.json`:
+Edit `srv/fn/functions/node/telegram-ai-reply/fn.env.json`:
 
 ```json
 {
@@ -77,7 +77,7 @@ Notes:
 - Function env values are exposed at runtime as `event.env`.
 
 ## Step 3: Enable scheduler loop in function config
-Edit `srv/fn/functions/node/telegram_ai_reply/fn.config.json`:
+Edit `srv/fn/functions/node/telegram-ai-reply/fn.config.json`:
 
 ```json
 {
@@ -116,7 +116,7 @@ You usually do not need a container restart for function code/config/env edits.
 curl -sS http://127.0.0.1:8080/_fn/schedules
 ```
 
-Check the `telegram_ai_reply` entry:
+Check the `telegram-ai-reply` entry:
 - `schedule.enabled=true`
 - `state.last_status=200` after at least one cycle
 
@@ -125,7 +125,7 @@ Dry run:
 
 ```bash
 curl -sS -X POST \
-'http://127.0.0.1:8080/fn/telegram_ai_reply?mode=loop&dry_run=true&wait_secs=10'
+'http://127.0.0.1:8080/fn/telegram-ai-reply?mode=loop&dry_run=true&wait_secs=10'
 ```
 
 Live mode:
@@ -137,7 +137,7 @@ Manual one-shot reply test:
 
 ```bash
 curl -sS -X POST \
-'http://127.0.0.1:8080/fn/telegram_ai_reply?mode=reply&dry_run=false&chat_id=<CHAT_ID>&text=Hello'
+'http://127.0.0.1:8080/fn/telegram-ai-reply?mode=reply&dry_run=false&chat_id=<CHAT_ID>&text=Hello'
 ```
 
 ## Memory and offset behavior
@@ -147,10 +147,10 @@ Memory settings (query params):
 - `memory_ttl_secs` (default 3600)
 
 Offset persistence:
-- `srv/fn/functions/node/telegram_ai_reply/.loop_state.json`
+- `srv/fn/functions/node/telegram-ai-reply/.loop_state.json`
 
 Memory file:
-- `srv/fn/functions/node/telegram_ai_reply/.memory.json`
+- `srv/fn/functions/node/telegram-ai-reply/.memory.json`
 
 This combination is what makes cron mode stable after restarts.
 

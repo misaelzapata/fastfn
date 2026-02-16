@@ -200,7 +200,7 @@ def _telegram_token(env):
     return _pick_secret(env.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_BOT_TOKEN"))
 
 
-def _telegram_send(env, chat_id, text, reply_to_message_id=None):
+def _telegram-send(env, chat_id, text, reply_to_message_id=None):
     token = _telegram_token(env)
     if not token:
         raise RuntimeError("TELEGRAM_BOT_TOKEN not configured")
@@ -335,7 +335,7 @@ def _resolve_tools(text, env, query):
             query.get("tool_allow_fn")
             or env.get("TELEGRAM_TOOL_ALLOW_FN")
             or os.environ.get("TELEGRAM_TOOL_ALLOW_FN")
-            or "request_inspector"
+            or "request-inspector"
         )
     )
     allow_hosts = _parse_csv(
@@ -610,7 +610,7 @@ def _generate_reply_and_send(env, query, chat_id, text, message_id):
         tool_summary=tools.get("summary_text", ""),
         timeout_ms=openai_timeout,
     )
-    sent = _telegram_send(env, chat_id, reply, message_id)
+    sent = _telegram-send(env, chat_id, reply, message_id)
     now_ms = int(time.time() * 1000)
     if mem_cfg.get("enabled"):
         history.append({"role": "user", "text": str(text), "ts": now_ms})
@@ -672,7 +672,7 @@ def _handle_loop(event, env, query, is_scheduled):
             _telegram_delete_webhook(env)
 
         if not all_chats_mode and send_prompt and prompt:
-            _telegram_send(env, chat_id, prompt)
+            _telegram-send(env, chat_id, prompt)
 
         last_id = _load_loop_state(env)
         if last_id < 0:

@@ -1,0 +1,13 @@
+{
+  "invoke": {
+    "summary": "Fixed offset time demo (cron + timezone -05:00)",
+    "methods": ["GET"]
+  },
+  "schedule": {
+    "enabled": true,
+    "cron": "0 9 * * *",
+    "timezone": "-05:00",
+    "method": "GET"
+  }
+}
+

@@ -10,12 +10,24 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/misaelzapata/fastfn/cli/internal/discovery"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
 
 var dryRun bool
+var devForceURL bool
+var devBuild bool
 
+func resolveDevTargetDir(args []string) string {
+	if len(args) > 0 {
+		return args[0]
+	}
+	if path := configuredFunctionsDir(); path != "" {
+		return path
+	}
+	return "."
+}
 
 func checkSystemRequirements() {
 	// 1. Check for docker binary
@@ -54,20 +66,28 @@ var devCmd = &cobra.Command{
 		// 0. Pre-flight checks
 		checkSystemRequirements()
 
-		// 1. Resolve absolute path
-		targetDir := "."
-		if len(args) > 0 {
-			targetDir = args[0]
+		applyConfiguredOpenAPIIncludeInternal(func(includeInternal bool) {
+			fmt.Printf("Using openapi-include-internal from config: %t\n", includeInternal)
+		})
+		applyConfiguredForceURL(func(forceURL bool) {
+			fmt.Printf("Using force-url from config: %t\n", forceURL)
+		})
+		if devForceURL {
+			_ = os.Setenv("FN_FORCE_URL", "1")
+			fmt.Println("force-url enabled (will allow config/policy routes to override existing URLs)")
 		}
+
+		// 1. Resolve absolute path
+		targetDir := resolveDevTargetDir(args)
 		absPath, err := filepath.Abs(targetDir)
 		if err != nil {
 			log.Fatalf("Failed to resolve absolute path: %v", err)
 		}
 
-		// 2. Scan for functions to determine volume mounts
+		// 2. Resolve volume mounts
 		mounts := scanForMounts(absPath)
 		if len(mounts) == 0 {
-			log.Printf("Warning: No 'fn.config.json' found in %s or subdirectories.\n", absPath)
+			log.Fatalf("Invalid functions directory: %s", absPath)
 		}
 
 		// 3. Find docker-compose.yml (recursively up)
@@ -145,6 +165,17 @@ var devCmd = &cobra.Command{
 			fmt.Printf("Mounting '%s' -> '%s'\n", strings.Split(m, ":")[0], strings.Split(m, ":")[1])
 		}
 		openresty["volumes"] = newVolumes
+
+		// Apply optional env toggles.
+		if strings.TrimSpace(os.Getenv("FN_FORCE_URL")) != "" {
+			envRaw := openresty["environment"]
+			envMap, ok := envRaw.(map[string]interface{})
+			if !ok || envMap == nil {
+				envMap = map[string]interface{}{}
+			}
+			envMap["FN_FORCE_URL"] = os.Getenv("FN_FORCE_URL")
+			openresty["environment"] = envMap
+		}
 		
 		// Encode back to YAML
 		modifiedYAML, err := yaml.Marshal(compose)
@@ -159,7 +190,11 @@ var devCmd = &cobra.Command{
 		}
 
 		// 6. Run docker compose
-		dockerCmd := exec.Command("docker", "compose", "-f", "-", "up")
+		dockerArgs := []string{"compose", "-f", "-", "up"}
+		if devBuild {
+			dockerArgs = append(dockerArgs, "--build")
+		}
+		dockerCmd := exec.Command("docker", dockerArgs...)
 		dockerCmd.Stdin = bytes.NewReader(modifiedYAML)
 		dockerCmd.Stdout = os.Stdout
 		dockerCmd.Stderr = os.Stderr
@@ -179,43 +214,73 @@ type FnConfig struct {
 	Name    string `json:"name"`
 }
 
-// scanForMounts returns a list of "hostPath:containerPath" strings
+func mountProjectRoot(rootPath string) []string {
+	return []string{fmt.Sprintf("%s:/app/srv/fn/functions", rootPath)}
+}
+
+// scanForMounts returns a list of "hostPath:containerPath" strings.
+// Dual/hybrid behavior:
+// - file-based routes: mount root to preserve route discovery.
+// - fn.config functions: mount per runtime+function path.
+// - mixed projects: include both mount styles.
 func scanForMounts(rootPath string) []string {
-	var mounts []string
-
-	// Check if root is a function
-	if isFunction(rootPath) {
-		rt, name := getFunctionDetails(rootPath)
-		mounts = append(mounts, fmt.Sprintf("%s:/app/srv/fn/functions/%s/%s", rootPath, rt, name))
-		return mounts
-	}
-
-	// Check subdirectories
-	entries, err := os.ReadDir(rootPath)
-	if err != nil {
-		log.Printf("Warning: cannot read dir %s: %v", rootPath, err)
+	info, err := os.Stat(rootPath)
+	if err != nil || !info.IsDir() {
 		return nil
 	}
 
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		fullPath := filepath.Join(rootPath, entry.Name())
-		if isFunction(fullPath) {
-			rt, _ := getFunctionDetails(fullPath)
-			// Use the folder name as the function name
-			mounts = append(mounts, fmt.Sprintf("%s:/app/srv/fn/functions/%s/%s", fullPath, rt, entry.Name()))
+	functions, err := discovery.Scan(rootPath, nil)
+	if err != nil || len(functions) == 0 {
+		return mountProjectRoot(rootPath)
+	}
+
+	hasConfig := false
+	hasNonConfig := false
+	for _, fn := range functions {
+		if fn.HasConfig {
+			hasConfig = true
 		} else {
-			// Check recursively one level down (legacy project/runtime/func structure)
-			subEntries, _ := os.ReadDir(fullPath)
-			for _, sub := range subEntries {
-				if sub.IsDir() && isFunction(filepath.Join(fullPath, sub.Name())) {
-					rt, _ := getFunctionDetails(filepath.Join(fullPath, sub.Name()))
-					mounts = append(mounts, fmt.Sprintf("%s:/app/srv/fn/functions/%s/%s", filepath.Join(fullPath, sub.Name()), rt, sub.Name()))
-				}
-			}
+			hasNonConfig = true
 		}
+	}
+
+	mounts := make([]string, 0, len(functions))
+	seen := map[string]struct{}{}
+
+	if hasNonConfig {
+		rootMount := fmt.Sprintf("%s:/app/srv/fn/functions", rootPath)
+		mounts = append(mounts, rootMount)
+		seen[rootMount] = struct{}{}
+	}
+
+	if hasConfig {
+		for _, fn := range functions {
+			if !fn.HasConfig {
+				continue
+			}
+			rt := strings.TrimSpace(fn.Runtime)
+			if rt == "" {
+				rt = "node"
+			}
+			name := strings.TrimSpace(fn.Name)
+			if name == "" {
+				name = filepath.Base(fn.Path)
+			}
+			hostPath := fn.Path
+			if hostPath == "" {
+				hostPath = rootPath
+			}
+			mount := fmt.Sprintf("%s:/app/srv/fn/functions/%s/%s", hostPath, rt, name)
+			if _, ok := seen[mount]; ok {
+				continue
+			}
+			seen[mount] = struct{}{}
+			mounts = append(mounts, mount)
+		}
+	}
+
+	if len(mounts) == 0 {
+		return mountProjectRoot(rootPath)
 	}
 
 	return mounts
@@ -247,4 +312,6 @@ func getFunctionDetails(path string) (string, string) {
 func init() {
 	rootCmd.AddCommand(devCmd)
 	devCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Print generated docker-compose config without running")
+	devCmd.Flags().BoolVar(&devForceURL, "force-url", false, "Allow config/policy routes to override existing mapped URLs (unsafe; prefer fixing route conflicts)")
+	devCmd.Flags().BoolVar(&devBuild, "build", false, "Build the runtime image before starting the dev server (slower)")
 }

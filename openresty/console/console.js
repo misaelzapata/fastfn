@@ -82,6 +82,53 @@ function formatUnixSeconds(raw) {
   }
 }
 
+function formatIntervalSeconds(raw) {
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) return '';
+  const s = Math.floor(value);
+  if (s % 3600 === 0) return `${s / 3600}h`;
+  if (s % 60 === 0) return `${s / 60}m`;
+  return `${s}s`;
+}
+
+function scheduleRetrySummary(retry) {
+  if (retry === true) return 'retry: enabled (defaults)';
+  if (!retry || typeof retry !== 'object') return '';
+  if (retry.enabled === false) return 'retry: disabled';
+  const maxAttempts = Number(retry.max_attempts);
+  const base = Number(retry.base_delay_seconds);
+  const maxDelay = Number(retry.max_delay_seconds);
+  const jitter = Number(retry.jitter);
+  const parts = [];
+  if (Number.isFinite(maxAttempts) && maxAttempts > 0) parts.push(`max_attempts=${Math.floor(maxAttempts)}`);
+  if (Number.isFinite(base)) parts.push(`base_delay_seconds=${base}`);
+  if (Number.isFinite(maxDelay)) parts.push(`max_delay_seconds=${maxDelay}`);
+  if (Number.isFinite(jitter)) parts.push(`jitter=${jitter}`);
+  if (parts.length === 0) return 'retry: enabled';
+  return `retry: ${parts.join(' ')}`;
+}
+
+function formatScheduleLabel(schedule) {
+  if (!schedule || typeof schedule !== 'object') return '';
+  const cron = typeof schedule.cron === 'string' ? schedule.cron.trim() : '';
+  const tz = typeof schedule.timezone === 'string' ? schedule.timezone.trim() : '';
+  if (cron) {
+    if (tz && tz.toLowerCase() !== 'local') return `cron ${cron} (${tz})`;
+    return `cron ${cron}`;
+  }
+  const every = formatIntervalSeconds(schedule.every_seconds);
+  if (every) return `every ${every}`;
+  return '';
+}
+
+function badgeClassForHttpStatus(raw) {
+  const code = Number(raw);
+  if (!Number.isFinite(code) || code <= 0) return '';
+  if (code >= 200 && code < 300) return 'success';
+  if (code >= 300 && code < 400) return 'warn';
+  return 'danger';
+}
+
 function parseCsvList(raw) {
   return String(raw || '')
     .split(/[\n,]/)
@@ -212,6 +259,7 @@ class ConsoleApp {
     this.envUnsupportedEntries = {};
     this.aiMode = this.loadAiMode();
     this.uiState = null;
+    this.schedulerSnapshot = null;
   }
 
   loadSavedEvents() {
@@ -862,6 +910,7 @@ class ConsoleApp {
       search.addEventListener('input', () => {
         this.filterFunctions();
         this.renderGatewayRoutes();
+        this.renderSchedulerSnapshot();
       });
     }
 
@@ -873,6 +922,11 @@ class ConsoleApp {
     const routeSearch = document.getElementById('routeSearch');
     if (routeSearch) {
       routeSearch.addEventListener('input', () => this.renderGatewayRoutes());
+    }
+
+    const scheduleSearch = document.getElementById('scheduleSearch');
+    if (scheduleSearch) {
+      scheduleSearch.addEventListener('input', () => this.renderSchedulerSnapshot());
     }
 
     const executionFilter = document.getElementById('executionFilter');
@@ -1037,6 +1091,9 @@ class ConsoleApp {
     if (path === '/console/gateway') {
       return { view: 'gateway' };
     }
+    if (path === '/console/scheduler') {
+      return { view: 'scheduler' };
+    }
     if (path === '/console/wizard') {
       return { view: 'wizard' };
     }
@@ -1122,6 +1179,11 @@ class ConsoleApp {
       return;
     }
 
+    if (route.view === 'scheduler') {
+      this.showScheduler(false);
+      return;
+    }
+
     if (route.view === 'wizard') {
       this.showWizard(false);
       return;
@@ -1136,7 +1198,7 @@ class ConsoleApp {
   }
 
   setSidebarActive(navId) {
-    ['navFunctions', 'navGateway', 'navWizard', 'navDashboard'].forEach((id) => {
+    ['navFunctions', 'navGateway', 'navScheduler', 'navWizard', 'navDashboard'].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.classList.remove('active');
     });
@@ -1147,6 +1209,7 @@ class ConsoleApp {
   updateViewVisibility() {
     const list = document.getElementById('functionListView');
     const gateway = document.getElementById('gatewayView');
+    const scheduler = document.getElementById('schedulerView');
     const wizard = document.getElementById('wizardView');
     const detail = document.getElementById('functionDetailView');
     const crumb = document.getElementById('breadcrumbFnName');
@@ -1154,6 +1217,7 @@ class ConsoleApp {
     if (this.currentView === 'functionList') {
       if (list) list.style.display = 'block';
       if (gateway) gateway.style.display = 'none';
+      if (scheduler) scheduler.style.display = 'none';
       if (wizard) wizard.style.display = 'none';
       if (detail) detail.style.display = 'none';
       if (crumb) crumb.style.display = 'none';
@@ -1164,6 +1228,7 @@ class ConsoleApp {
     if (this.currentView === 'gateway') {
       if (list) list.style.display = 'none';
       if (gateway) gateway.style.display = 'block';
+      if (scheduler) scheduler.style.display = 'none';
       if (wizard) wizard.style.display = 'none';
       if (detail) detail.style.display = 'none';
       if (crumb) {
@@ -1174,9 +1239,24 @@ class ConsoleApp {
       return;
     }
 
+    if (this.currentView === 'scheduler') {
+      if (list) list.style.display = 'none';
+      if (gateway) gateway.style.display = 'none';
+      if (scheduler) scheduler.style.display = 'block';
+      if (wizard) wizard.style.display = 'none';
+      if (detail) detail.style.display = 'none';
+      if (crumb) {
+        crumb.style.display = 'inline';
+        crumb.textContent = 'Scheduler';
+      }
+      this.setSidebarActive('navScheduler');
+      return;
+    }
+
     if (this.currentView === 'wizard') {
       if (list) list.style.display = 'none';
       if (gateway) gateway.style.display = 'none';
+      if (scheduler) scheduler.style.display = 'none';
       if (wizard) wizard.style.display = 'block';
       if (detail) detail.style.display = 'none';
       if (crumb) {
@@ -1189,6 +1269,7 @@ class ConsoleApp {
 
     if (list) list.style.display = 'none';
     if (gateway) gateway.style.display = 'none';
+    if (scheduler) scheduler.style.display = 'none';
     if (wizard) wizard.style.display = 'none';
     if (detail) detail.style.display = 'block';
     if (crumb) {
@@ -1210,6 +1291,13 @@ class ConsoleApp {
     this.updateViewVisibility();
     this.renderGatewayRoutes();
     if (pushUrl) history.pushState({}, '', '/console/gateway');
+  }
+
+  showScheduler(pushUrl = true) {
+    this.currentView = 'scheduler';
+    this.updateViewVisibility();
+    this.refreshScheduler().catch((err) => alert(err.message || String(err)));
+    if (pushUrl) history.pushState({}, '', '/console/scheduler');
   }
 
   showWizard(pushUrl = true) {
@@ -1410,6 +1498,224 @@ class ConsoleApp {
       conflictsEl.textContent = 'No conflicts.';
     } else {
       conflictsEl.innerHTML = conflictRoutes.map((route) => `<div><code>${esc(route)}</code></div>`).join('');
+    }
+  }
+
+  async refreshScheduler() {
+    const summaryEl = document.getElementById('scheduleSummary');
+    if (summaryEl) summaryEl.textContent = 'Loading scheduler snapshot...';
+    try {
+      const snapshot = await getJson('/_fn/schedules');
+      this.schedulerSnapshot = snapshot;
+      this.renderSchedulerSnapshot();
+    } catch (err) {
+      if (summaryEl) summaryEl.textContent = `Scheduler snapshot error: ${String(err && err.message ? err.message : err)}`;
+      throw err;
+    }
+  }
+
+  renderSchedulerSnapshot() {
+    const summaryEl = document.getElementById('scheduleSummary');
+    const tbody = document.getElementById('scheduleTableBody');
+    const keepWarmTbody = document.getElementById('keepWarmTableBody');
+    if (!summaryEl || !tbody || !keepWarmTbody) return;
+
+    const snapshot = this.schedulerSnapshot;
+    const schedules = Array.isArray(snapshot?.schedules) ? snapshot.schedules : [];
+    const keepWarm = Array.isArray(snapshot?.keep_warm) ? snapshot.keep_warm : [];
+    const tsIso = snapshot?.ts ? formatUnixSeconds(snapshot.ts) : '';
+
+    const globalQ = String(document.getElementById('globalSearch')?.value || '').trim().toLowerCase();
+    const localQ = String(document.getElementById('scheduleSearch')?.value || '').trim().toLowerCase();
+    const q = `${globalQ} ${localQ}`.trim();
+
+    const matches = (rowText) => {
+      if (!q) return true;
+      return String(rowText || '').toLowerCase().includes(q);
+    };
+
+    const filteredSchedules = schedules
+      .filter((entry) => {
+        const retry = entry?.schedule?.retry;
+        const retryText = (retry && typeof retry === 'object')
+          ? `${retry.enabled} ${retry.max_attempts || ''} ${retry.base_delay_seconds || ''} ${retry.max_delay_seconds || ''} ${retry.jitter || ''}`
+          : String(retry || '');
+        const text = `${entry.runtime} ${entry.name} ${entry.version || ''} ${entry?.schedule?.method || ''} ${entry?.schedule?.every_seconds || ''} ${entry?.schedule?.cron || ''} ${entry?.schedule?.timezone || ''} ${retryText} ${entry?.state?.last_status || ''} ${entry?.state?.last_error || ''}`;
+        return matches(text);
+      })
+      .sort((a, b) => {
+        const ak = `${a.runtime}/${a.name}@${a.version || ''}`;
+        const bk = `${b.runtime}/${b.name}@${b.version || ''}`;
+        return ak.localeCompare(bk);
+      });
+
+    const filteredKeepWarm = keepWarm
+      .filter((entry) => {
+        const text = `${entry.runtime} ${entry.name} ${entry.version || ''} ${entry?.state?.warm_state || ''} ${entry?.state?.last_status || ''} ${entry?.state?.last_error || ''}`;
+        return matches(text);
+      })
+      .sort((a, b) => {
+        const ak = `${a.runtime}/${a.name}@${a.version || ''}`;
+        const bk = `${b.runtime}/${b.name}@${b.version || ''}`;
+        return ak.localeCompare(bk);
+      });
+
+    summaryEl.textContent = [
+      `Active schedules: ${schedules.length} (visible: ${filteredSchedules.length})`,
+      `keep_warm: ${keepWarm.length} (visible: ${filteredKeepWarm.length})`,
+      tsIso ? `snapshot: ${tsIso}` : null,
+    ].filter(Boolean).join(' | ');
+
+    tbody.innerHTML = '';
+    if (snapshot == null) {
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = 7;
+      td.textContent = 'No scheduler snapshot loaded yet. Click refresh.';
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+    } else if (filteredSchedules.length === 0) {
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = 7;
+      td.textContent = schedules.length === 0 ? 'No active schedules.' : 'No schedules match the filter.';
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+    } else {
+      for (const entry of filteredSchedules) {
+        const tr = document.createElement('tr');
+
+        const fnTd = document.createElement('td');
+        const label = `${entry.name}${entry.version ? `@${entry.version}` : ''}`;
+        fnTd.innerHTML = `<span class="badge">${esc(entry.runtime || '')}</span> <code>${esc(label)}</code>`;
+        tr.appendChild(fnTd);
+
+        const scheduleTd = document.createElement('td');
+        const schedLabel = formatScheduleLabel(entry?.schedule);
+        scheduleTd.textContent = schedLabel;
+        const retrySummary = scheduleRetrySummary(entry?.schedule?.retry);
+        const titleBits = [];
+        if (schedLabel) titleBits.push(schedLabel);
+        if (retrySummary) titleBits.push(retrySummary);
+        if (titleBits.length > 0) scheduleTd.title = titleBits.join(' | ');
+        tr.appendChild(scheduleTd);
+
+        const methodTd = document.createElement('td');
+        methodTd.textContent = String(entry?.schedule?.method || 'GET').toUpperCase();
+        tr.appendChild(methodTd);
+
+        const nextTd = document.createElement('td');
+        const nextRaw = entry?.state?.next;
+        nextTd.textContent = formatUnixSeconds(nextRaw) || '';
+        if (nextRaw != null) nextTd.title = String(nextRaw);
+        tr.appendChild(nextTd);
+
+        const lastTd = document.createElement('td');
+        const lastRaw = entry?.state?.last;
+        lastTd.textContent = formatUnixSeconds(lastRaw) || '';
+        if (lastRaw != null) lastTd.title = String(lastRaw);
+        tr.appendChild(lastTd);
+
+        const statusTd = document.createElement('td');
+        const statusRaw = entry?.state?.last_status;
+        const statusText = (statusRaw != null && statusRaw !== '') ? String(statusRaw) : '-';
+        const badgeCls = badgeClassForHttpStatus(statusRaw);
+        statusTd.innerHTML = `<span class="badge${badgeCls ? ` ${badgeCls}` : ''}">${esc(statusText)}</span>`;
+        const errText = entry?.state?.last_error;
+        if (errText != null && String(errText).trim() !== '') statusTd.title = String(errText);
+        tr.appendChild(statusTd);
+
+        const actionsTd = document.createElement('td');
+        const openBtn = document.createElement('button');
+        openBtn.className = 'btn btn-xs btn-secondary';
+        openBtn.textContent = 'Open';
+        openBtn.disabled = !(entry.runtime && entry.name);
+        openBtn.addEventListener('click', () => {
+          this.openFunction(entry.name, entry.runtime, entry.version || null).catch((err) => alert(err.message || String(err)));
+        });
+        actionsTd.appendChild(openBtn);
+        tr.appendChild(actionsTd);
+
+        tbody.appendChild(tr);
+      }
+    }
+
+    keepWarmTbody.innerHTML = '';
+    if (snapshot == null) {
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = 6;
+      td.textContent = 'No keep_warm snapshot loaded yet.';
+      tr.appendChild(td);
+      keepWarmTbody.appendChild(tr);
+      return;
+    }
+
+    if (filteredKeepWarm.length === 0) {
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = 6;
+      td.textContent = keepWarm.length === 0 ? 'No keep_warm entries.' : 'No keep_warm entries match the filter.';
+      tr.appendChild(td);
+      keepWarmTbody.appendChild(tr);
+      return;
+    }
+
+    const warmStateClass = (state) => {
+      const v = String(state || '').toLowerCase();
+      if (v === 'warm') return 'success';
+      if (v === 'stale') return 'warn';
+      if (v === 'cold') return 'danger';
+      return '';
+    };
+
+    for (const entry of filteredKeepWarm) {
+      const tr = document.createElement('tr');
+
+      const fnTd = document.createElement('td');
+      const label = `${entry.name}${entry.version ? `@${entry.version}` : ''}`;
+      fnTd.innerHTML = `<span class="badge">${esc(entry.runtime || '')}</span> <code>${esc(label)}</code>`;
+      tr.appendChild(fnTd);
+
+      const stateTd = document.createElement('td');
+      const warmState = entry?.state?.warm_state || '';
+      const wsCls = warmStateClass(warmState);
+      stateTd.innerHTML = `<span class="badge${wsCls ? ` ${wsCls}` : ''}">${esc(warmState || '-')}</span>`;
+      tr.appendChild(stateTd);
+
+      const nextTd = document.createElement('td');
+      const nextRaw = entry?.state?.next;
+      nextTd.textContent = formatUnixSeconds(nextRaw) || '';
+      if (nextRaw != null) nextTd.title = String(nextRaw);
+      tr.appendChild(nextTd);
+
+      const lastTd = document.createElement('td');
+      const lastRaw = entry?.state?.last;
+      lastTd.textContent = formatUnixSeconds(lastRaw) || '';
+      if (lastRaw != null) lastTd.title = String(lastRaw);
+      tr.appendChild(lastTd);
+
+      const statusTd = document.createElement('td');
+      const statusRaw = entry?.state?.last_status;
+      const statusText = (statusRaw != null && statusRaw !== '') ? String(statusRaw) : '-';
+      const badgeCls = badgeClassForHttpStatus(statusRaw);
+      statusTd.innerHTML = `<span class="badge${badgeCls ? ` ${badgeCls}` : ''}">${esc(statusText)}</span>`;
+      const errText = entry?.state?.last_error;
+      if (errText != null && String(errText).trim() !== '') statusTd.title = String(errText);
+      tr.appendChild(statusTd);
+
+      const actionsTd = document.createElement('td');
+      const openBtn = document.createElement('button');
+      openBtn.className = 'btn btn-xs btn-secondary';
+      openBtn.textContent = 'Open';
+      openBtn.disabled = !(entry.runtime && entry.name);
+      openBtn.addEventListener('click', () => {
+        this.openFunction(entry.name, entry.runtime, entry.version || null).catch((err) => alert(err.message || String(err)));
+      });
+      actionsTd.appendChild(openBtn);
+      tr.appendChild(actionsTd);
+
+      keepWarmTbody.appendChild(tr);
     }
   }
 

@@ -109,7 +109,7 @@ function whatsappToolsConfig(query, aiOpts, env) {
     aiOpts.tool_allow_fn ||
     env.WHATSAPP_TOOL_ALLOW_FN ||
     process.env.WHATSAPP_TOOL_ALLOW_FN ||
-    "request_inspector,telegram_ai_digest,cron_tick"
+    "request-inspector,telegram-ai-digest,cron-tick"
   )
     .split(",")
     .map((v) => String(v).trim())
@@ -154,7 +154,7 @@ function inferAutoTools(text, cfg) {
     addHttp("https://wttr.in/?format=j1");
   }
   if (has("noticias") || has("news") || has("digest")) {
-    addFn("telegram_ai_digest", "?dry_run=true&include_ai=false");
+    addFn("telegram-ai-digest", "?dry_run=true&include_ai=false");
   }
 
   const seen = new Set();

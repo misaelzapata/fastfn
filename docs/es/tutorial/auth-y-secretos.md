@@ -58,10 +58,10 @@ def handler(event):
 
 ```bash
 # ❌ Fallo
-curl -i 'http://127.0.0.1:8080/fn/api_segura'
+curl -i 'http://127.0.0.1:8080/fn/api-segura'
 
 # ✅ Éxito
-curl -i 'http://127.0.0.1:8080/fn/api_segura' \
+curl -i 'http://127.0.0.1:8080/fn/api-segura' \
   -H 'x-api-key: clave-super-secreta-123'
 ```
 

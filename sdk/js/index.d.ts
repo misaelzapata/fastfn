@@ -79,7 +79,7 @@ export interface Context {
 }
 
 export interface ProxyDirective {
-  /** Target path (e.g., "/_fn/health") or absolute URL if allowed */
+  /** Target path (e.g., "/hello") or absolute URL if allowed */
   path: string;
   /** HTTP method for the upstream request */
   method?: string;

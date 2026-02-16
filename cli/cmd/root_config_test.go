@@ -118,3 +118,65 @@ func TestApplyConfiguredOpenAPIIncludeInternal_EnvWins(t *testing.T) {
 		t.Fatalf("expected existing env to win, got %q", got)
 	}
 }
+
+func TestConfiguredForceURL_DefaultUnset(t *testing.T) {
+	t.Cleanup(viper.Reset)
+	viper.Reset()
+
+	got, ok := configuredForceURL()
+	if ok {
+		t.Fatalf("expected unset key to return ok=false, got true with value=%v", got)
+	}
+}
+
+func TestConfiguredForceURL_TopLevelKey(t *testing.T) {
+	t.Cleanup(viper.Reset)
+	viper.Reset()
+	viper.Set("force-url", true)
+
+	got, ok := configuredForceURL()
+	if !ok {
+		t.Fatalf("expected force-url to be detected")
+	}
+	if !got {
+		t.Fatalf("expected force-url=true")
+	}
+}
+
+func TestApplyConfiguredForceURL_FromConfig(t *testing.T) {
+	t.Cleanup(viper.Reset)
+	viper.Reset()
+	t.Setenv("FN_FORCE_URL", "")
+	viper.Set("force-url", true)
+
+	applied := false
+	applyConfiguredForceURL(func(value bool) {
+		applied = value
+	})
+
+	if !applied {
+		t.Fatalf("expected callback applied=true")
+	}
+	if got := os.Getenv("FN_FORCE_URL"); got != "1" {
+		t.Fatalf("expected env from config to be 1, got %q", got)
+	}
+}
+
+func TestApplyConfiguredForceURL_EnvWins(t *testing.T) {
+	t.Cleanup(viper.Reset)
+	viper.Reset()
+	t.Setenv("FN_FORCE_URL", "0")
+	viper.Set("force-url", true)
+
+	called := false
+	applyConfiguredForceURL(func(bool) {
+		called = true
+	})
+
+	if called {
+		t.Fatalf("did not expect callback when env var is already set")
+	}
+	if got := os.Getenv("FN_FORCE_URL"); got != "0" {
+		t.Fatalf("expected existing env to win, got %q", got)
+	}
+}

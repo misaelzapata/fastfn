@@ -50,7 +50,7 @@ curl -sS 'http://127.0.0.1:8080/fn/hello?name=World'
 ### Ejemplo POST
 
 ```bash
-curl -sS -X POST 'http://127.0.0.1:8080/fn/risk_score?email=user@example.com' \
+curl -sS -X POST 'http://127.0.0.1:8080/fn/risk-score?email=user@example.com' \
   -H 'Content-Type: application/json' \
   -d '{"source":"web"}'
 ```
@@ -103,7 +103,7 @@ curl -sS 'http://127.0.0.1:8080/_fn/invoke' \
   -H 'Content-Type: application/json' \
   --data '{
     "runtime":"node",
-    "name":"node_echo",
+    "name":"node-echo",
     "version":null,
     "method":"POST",
     "query":{"name":"Node"},

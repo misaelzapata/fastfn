@@ -4,25 +4,25 @@ Goal: create one file and call it from your browser or `curl`.
 
 ## What you are building
 
-A function named `hello_world`.
+A function named `hello-world`.
 
 That means your URL will be:
 
-- `/fn/hello_world`
+- `/fn/hello-world`
 
 ## Step 1: create the folder
 
 Run exactly:
 
 ```bash
-mkdir -p srv/fn/functions/node/hello_world
+mkdir -p srv/fn/functions/node/hello-world
 ```
 
 ## Step 2: create the function file
 
 Create this file:
 
-- `srv/fn/functions/node/hello_world/app.js`
+- `srv/fn/functions/node/hello-world/app.js`
 
 Paste this exact code:
 
@@ -49,20 +49,20 @@ exports.handler = async (event) => ({
 ## Step 3: call your function
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/hello_world'
+curl -sS 'http://127.0.0.1:8080/fn/hello-world'
 ```
 
 Expected output:
 
 ```json
-{"ok":true,"message":"Hello fastfn","method":"GET","path":"/fn/hello_world"}
+{"ok":true,"message":"Hello fastfn","method":"GET","path":"/fn/hello-world"}
 ```
 
 ## Step 4: try in browser
 
 Open:
 
-- `http://127.0.0.1:8080/fn/hello_world`
+- `http://127.0.0.1:8080/fn/hello-world`
 
 ## If it does not work
 
@@ -80,4 +80,4 @@ docker compose logs --tail=100 openresty
 
 3. Make sure file path and filename are exact:
 
-- `srv/fn/functions/node/hello_world/app.js`
+- `srv/fn/functions/node/hello-world/app.js`

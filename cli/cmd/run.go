@@ -11,6 +11,7 @@ import (
 )
 
 var runNativeMode bool
+var runForceURL bool
 
 func resolveRunTargetDir(args []string) string {
 	if len(args) > 0 {
@@ -39,6 +40,13 @@ At the moment, production mode is supported through --native.`,
 		applyConfiguredOpenAPIIncludeInternal(func(includeInternal bool) {
 			fmt.Printf("Using OpenAPI internal visibility from config: %t\n", includeInternal)
 		})
+		applyConfiguredForceURL(func(forceURL bool) {
+			fmt.Printf("Using force-url from config: %t\n", forceURL)
+		})
+		if runForceURL {
+			_ = os.Setenv("FN_FORCE_URL", "1")
+			fmt.Println("force-url enabled (will allow config/policy routes to override existing URLs)")
+		}
 
 		targetDir := resolveRunTargetDir(args)
 
@@ -78,4 +86,5 @@ At the moment, production mode is supported through --native.`,
 func init() {
 	rootCmd.AddCommand(runCmd)
 	runCmd.Flags().BoolVar(&runNativeMode, "native", false, "Run on host (required; Docker production mode is not wired yet)")
+	runCmd.Flags().BoolVar(&runForceURL, "force-url", false, "Allow config/policy routes to override existing mapped URLs (unsafe; prefer fixing route conflicts)")
 }

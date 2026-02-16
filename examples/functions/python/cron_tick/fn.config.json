@@ -1,1 +1,0 @@
-{"schedule":{"every_seconds":1,"query":{"action":"inc"},"headers":{},"body":"","context":{},"method":"GET","enabled":true},"invoke":{"methods":["GET"]}}

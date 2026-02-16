@@ -30,7 +30,7 @@ return {
 Use existing demos for quick verification:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/png_demo' --output out.png
+curl -sS 'http://127.0.0.1:8080/fn/png-demo' --output out.png
 file out.png
 ```
 

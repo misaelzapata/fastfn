@@ -25,8 +25,8 @@ exports.handler = async (event) => {
 ## Pruebas
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/hello_world?name=Misael' | jq .
-curl -sS -X POST 'http://127.0.0.1:8080/fn/hello_world?name=Misael' \
+curl -sS 'http://127.0.0.1:8080/fn/hello-world?name=Misael' | jq .
+curl -sS -X POST 'http://127.0.0.1:8080/fn/hello-world?name=Misael' \
   -H 'content-type: text/plain' \
   --data 'hola desde body' | jq .
 ```

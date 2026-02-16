@@ -501,6 +501,15 @@ local function hot_reload_watchdog_enabled()
   return not (raw == "0" or raw == "false" or raw == "off" or raw == "no")
 end
 
+local function force_url_enabled()
+  local raw = os.getenv("FN_FORCE_URL")
+  if raw == nil or raw == "" then
+    return false
+  end
+  raw = string.lower(raw)
+  return not (raw == "0" or raw == "false" or raw == "off" or raw == "no")
+end
+
 local function split_csv(raw)
   local out = {}
   for part in tostring(raw or ""):gmatch("[^,]+") do
@@ -881,6 +890,57 @@ local function split_rel_segments(rel)
   return out
 end
 
+local function dynamic_route_sort_key(mapped_route)
+  local static_segments = 0
+  local dynamic_segments = 0
+  local catchall_segments = 0
+  local total_segments = 0
+  for seg in tostring(mapped_route or ""):gmatch("[^/]+") do
+    if seg ~= "" then
+      total_segments = total_segments + 1
+      if seg == "*" then
+        catchall_segments = catchall_segments + 1
+      elseif seg:sub(1, 1) == ":" then
+        if seg:sub(-1) == "*" then
+          catchall_segments = catchall_segments + 1
+        else
+          dynamic_segments = dynamic_segments + 1
+        end
+      else
+        static_segments = static_segments + 1
+      end
+    end
+  end
+  return static_segments, total_segments, catchall_segments, dynamic_segments
+end
+
+local function sort_dynamic_routes(mapped_routes)
+  local keys = {}
+  for mapped_route, _ in pairs(mapped_routes or {}) do
+    if mapped_route:find(":") or mapped_route:find("*", 1, true) then
+      keys[#keys + 1] = mapped_route
+    end
+  end
+  table.sort(keys, function(a, b)
+    local as, at, ac, ad = dynamic_route_sort_key(a)
+    local bs, bt, bc, bd = dynamic_route_sort_key(b)
+    if as ~= bs then
+      return as > bs
+    end
+    if at ~= bt then
+      return at > bt
+    end
+    if ac ~= bc then
+      return ac < bc
+    end
+    if ad ~= bd then
+      return ad > bd
+    end
+    return tostring(a) < tostring(b)
+  end)
+  return keys
+end
+
 local function detect_file_based_routes_in_dir(abs_dir, rel_dir)
   local cfg = read_json_file(abs_dir .. "/fn.config.json")
   if type(cfg) == "table" and next(cfg) ~= nil then
@@ -1071,11 +1131,27 @@ local function normalize_policy(obj)
       out.allow_hosts = allow_hosts
     end
   end
+  -- By default, route conflicts are resolved safely and do not silently override
+  -- existing mappings. Setting force-url explicitly opts into overriding lower-priority
+  -- route claims. Supports both top-level and invoke-scoped keys.
+  local force_url = false
+  if obj["force-url"] == true or obj.force_url == true or obj.forceUrl == true then
+    force_url = true
+  end
+  if type(invoke) == "table" and (invoke["force-url"] == true or invoke.force_url == true or invoke.forceUrl == true) then
+    force_url = true
+  end
+  if force_url then
+    out.force_url = true
+  end
 
   local schedule = obj.schedule
   if type(schedule) == "table" then
     local enabled = schedule.enabled == true
     local every_seconds = schedule.every_seconds
+    local cron = schedule.cron
+    local timezone = schedule.timezone or schedule.tz
+    local retry = schedule.retry
     if every_seconds ~= nil then
       local v = tonumber(every_seconds)
       if not v or v <= 0 then
@@ -1087,6 +1163,35 @@ local function normalize_policy(obj)
       every_seconds = v
     end
 
+    if cron ~= nil then
+      if type(cron) ~= "string" then
+        cron = nil
+      else
+        cron = cron:gsub("^%s+", ""):gsub("%s+$", "")
+        if cron == "" then
+          cron = nil
+        end
+      end
+    end
+
+    if timezone ~= nil then
+      if type(timezone) ~= "string" then
+        timezone = nil
+      else
+        timezone = timezone:gsub("^%s+", ""):gsub("%s+$", "")
+        if timezone == "" then
+          timezone = nil
+        else
+          local lower = timezone:lower()
+          if lower == "utc" or lower == "local" or timezone == "Z" or timezone:match("^[+-]%d%d:?%d%d$") then
+            -- keep supported timezones
+          else
+            timezone = nil
+          end
+        end
+      end
+    end
+
     local method = schedule.method
     if method ~= nil then
       method = tostring(method):upper()
@@ -1095,9 +1200,81 @@ local function normalize_policy(obj)
       end
     end
 
+    local retry_out = nil
+    if retry ~= nil then
+      if retry == true then
+        retry_out = true
+      elseif retry == false then
+        retry_out = false
+      elseif type(retry) == "table" then
+        local r = {}
+        if retry.enabled ~= nil then
+          r.enabled = retry.enabled == true
+        end
+
+        local attempts = tonumber(retry.max_attempts or retry.maxAttempts or retry.attempts)
+        if attempts ~= nil then
+          attempts = math.floor(attempts)
+          if attempts < 1 then
+            attempts = 1
+          end
+          if attempts > 10 then
+            attempts = 10
+          end
+          r.max_attempts = attempts
+        end
+
+        local base_delay = tonumber(retry.base_delay_seconds or retry.baseDelaySeconds or retry.delay_seconds or retry.delaySeconds)
+        if base_delay ~= nil then
+          if base_delay < 0 then
+            base_delay = 0
+          end
+          if base_delay > 3600 then
+            base_delay = 3600
+          end
+          r.base_delay_seconds = base_delay
+        end
+
+        local max_delay = tonumber(retry.max_delay_seconds or retry.maxDelaySeconds)
+        if max_delay ~= nil then
+          if max_delay < 0 then
+            max_delay = 0
+          end
+          if max_delay > 3600 then
+            max_delay = 3600
+          end
+          r.max_delay_seconds = max_delay
+        end
+
+        local jitter = tonumber(retry.jitter)
+        if jitter ~= nil then
+          if jitter < 0 then
+            jitter = 0
+          end
+          if jitter > 0.5 then
+            jitter = 0.5
+          end
+          r.jitter = jitter
+        end
+
+        if next(r) ~= nil then
+          retry_out = r
+        end
+      end
+    end
+
     local sched = { enabled = enabled }
     if every_seconds then
       sched.every_seconds = every_seconds
+    end
+    if cron then
+      sched.cron = cron
+    end
+    if timezone then
+      sched.timezone = timezone
+    end
+    if retry_out ~= nil then
+      sched.retry = retry_out
     end
     if method then
       sched.method = method
@@ -1367,6 +1544,7 @@ function M.discover_functions(force)
 
   local cfg = load_runtime_config(false)
   local functions_root = cfg.functions_root
+  local global_force_url = force_url_enabled()
 
   local catalog = {
     generated_at = ngx.now(),
@@ -1374,6 +1552,7 @@ function M.discover_functions(force)
     runtimes = {},
     mapped_routes = {},
     mapped_route_conflicts = {},
+    dynamic_routes = {},
   }
 
   local function same_target(a, runtime, fn_name, version)
@@ -1393,7 +1572,7 @@ function M.discover_functions(force)
     return false
   end
 
-  local function register_route(route, runtime, fn_name, version, methods, source_rank, allow_hosts)
+  local function register_route(route, runtime, fn_name, version, methods, source_rank, allow_hosts, force_url)
     if type(route) ~= "string" or route == "" then
       return
     end
@@ -1411,6 +1590,7 @@ function M.discover_functions(force)
       methods = methods,
       source_rank = tonumber(source_rank) or 1,
       allow_hosts = normalize_allow_hosts(allow_hosts),
+      force_url = force_url == true,
     }
 
     local current_list = catalog.mapped_routes[route]
@@ -1421,6 +1601,9 @@ function M.discover_functions(force)
 
     -- Check for conflicts with existing entries
     -- Precedence: config/policy (3) > manifest (2) > file-based (1)
+    -- force-url is only meaningful for config/policy routes: it allows overriding
+    -- existing lower-priority claims. Without force-url, policy routes never
+    -- silently override an already-mapped URL.
     local to_remove = {}
     for _, existing in ipairs(current_list) do
       if not same_target(existing, runtime, fn_name, version) then
@@ -1429,16 +1612,37 @@ function M.discover_functions(force)
           local er = tonumber(existing.source_rank) or 1
           local nr = tonumber(new_entry.source_rank) or 1
           if er == nr then
-            -- Same priority and overlap on different target => real conflict.
-            catalog.mapped_routes[route] = nil
-            catalog.mapped_route_conflicts[route] = true
-            return
+            if nr == 3 then
+              local ef = existing.force_url == true
+              local nf = new_entry.force_url == true
+              if nf and not ef then
+                to_remove[existing] = true
+              elseif ef and not nf then
+                return
+              else
+                -- Same priority and overlap on different target => real conflict.
+                catalog.mapped_routes[route] = nil
+                catalog.mapped_route_conflicts[route] = true
+                return
+              end
+            else
+              -- Same priority and overlap on different target => real conflict.
+              catalog.mapped_routes[route] = nil
+              catalog.mapped_route_conflicts[route] = true
+              return
+            end
           elseif er > nr then
             -- Existing has higher precedence; ignore new route.
             return
           else
             -- New has higher precedence; remove lower-priority overlapping entries.
-            to_remove[existing] = true
+            -- Policy routes only override if explicitly forced.
+            if nr == 3 and new_entry.force_url ~= true then
+              -- Keep existing mapping; still allow the new entry to be appended so
+              -- it can serve non-overlapping methods/hosts on the same route.
+            else
+              to_remove[existing] = true
+            end
           end
         end
       end
@@ -1460,18 +1664,18 @@ function M.discover_functions(force)
   end
 
 
-  do
-    local root_manifest_routes, root_has_manifest = detect_manifest_routes_in_dir(functions_root, ".")
-    if root_has_manifest then
-      for _, item in ipairs(root_manifest_routes) do
-        register_route(item.route, item.runtime, item.target, nil, item.methods, 2)
-      end
-    end
-  end
+	  do
+	    local root_manifest_routes, root_has_manifest = detect_manifest_routes_in_dir(functions_root, ".")
+	    if root_has_manifest then
+	      for _, item in ipairs(root_manifest_routes) do
+	        register_route(item.route, item.runtime, item.target, nil, item.methods, 2)
+	      end
+	    end
+	  end
 
-  local function discover_zero_config_dir(abs_dir, rel_dir, depth)
-    if depth > 2 then
-      return
+	  local function discover_zero_config_dir(abs_dir, rel_dir, depth)
+	    if depth > 2 then
+	      return
     end
 
     local has_manifest = false
@@ -1487,21 +1691,21 @@ function M.discover_functions(force)
     for _, item in ipairs(file_routes) do
       register_route(item.route, item.runtime, item.target, nil, item.methods, 1)
     end
-
-    local cfg = read_json_file(abs_dir .. "/fn.config.json")
-    local has_explicit_cfg = type(cfg) == "table" and next(cfg) ~= nil
-    local detected_here = has_manifest or (#file_routes > 0) or has_explicit_cfg
-
-    if depth == 2 then
-      return
-    end
-    if detected_here and rel_dir ~= "." then
-      return
-    end
-
-    for _, sub_dir in ipairs(list_dirs(abs_dir)) do
-      local sub_name = basename(sub_dir)
-      if sub_name and sub_name ~= "" and sub_name:sub(1, 1) ~= "." then
+	
+	    local fn_cfg = read_json_file(abs_dir .. "/fn.config.json")
+	    local has_explicit_cfg = type(fn_cfg) == "table" and next(fn_cfg) ~= nil
+	    local is_leaf = has_manifest or has_explicit_cfg
+	
+	    if depth == 2 then
+	      return
+	    end
+	    if is_leaf and rel_dir ~= "." then
+	      return
+	    end
+	
+	    for _, sub_dir in ipairs(list_dirs(abs_dir)) do
+	      local sub_name = basename(sub_dir)
+	      if sub_name and sub_name ~= "" and sub_name:sub(1, 1) ~= "." then
         local sub_rel = (rel_dir and rel_dir ~= "" and rel_dir ~= ".") and (rel_dir .. "/" .. sub_name) or sub_name
         discover_zero_config_dir(sub_dir, sub_rel, depth + 1)
       end
@@ -1542,12 +1746,13 @@ function M.discover_functions(force)
             local root_methods = fn_entry.policy and fn_entry.policy.methods or DEFAULT_METHODS
             local policy_routes = (fn_entry.policy and fn_entry.policy.routes) or {}
             local root_allow_hosts = fn_entry.policy and fn_entry.policy.allow_hosts or nil
+            local root_force_url = fn_entry.policy and fn_entry.policy.force_url or nil
             if #policy_routes == 0 then
               local canonical_name = normalize_route_token(fn_name) or fn_name
               policy_routes = { "/" .. canonical_name, "/" .. canonical_name .. "/*" }
             end
             for _, route in ipairs(policy_routes) do
-              register_route(route, runtime, fn_name, nil, root_methods, 3, root_allow_hosts)
+              register_route(route, runtime, fn_name, nil, root_methods, 3, root_allow_hosts, root_force_url or global_force_url)
             end
           end
 
@@ -1555,8 +1760,11 @@ function M.discover_functions(force)
             local ver_policy = (fn_entry.versions_policy or {})[ver] or {}
             local ver_methods = ver_policy.methods or (fn_entry.policy and fn_entry.policy.methods) or DEFAULT_METHODS
             local ver_allow_hosts = ver_policy.allow_hosts or (fn_entry.policy and fn_entry.policy.allow_hosts) or nil
+            -- Version-scoped configs should not be able to "take over" an existing URL mapping by
+            -- themselves. This keeps per-version routing additive by default. Operators can still
+            -- force all policy routes globally via FN_FORCE_URL=1 / `fastfn dev --force-url`.
             for _, route in ipairs(ver_policy.routes or {}) do
-              register_route(route, runtime, fn_name, ver, ver_methods, 3, ver_allow_hosts)
+              register_route(route, runtime, fn_name, ver, ver_methods, 3, ver_allow_hosts, global_force_url)
             end
           end
         end
@@ -1565,6 +1773,8 @@ function M.discover_functions(force)
 
     catalog.runtimes[runtime] = runtime_entry
   end
+
+  catalog.dynamic_routes = sort_dynamic_routes(catalog.mapped_routes)
 
   CACHE:set("catalog:raw", cjson.encode(catalog))
   CACHE:set("catalog:scanned_at", ngx.now())
@@ -1672,8 +1882,10 @@ function M.resolve_mapped_target(path, method, host_ctx)
   end
 
   -- 2. Try Pattern Matching (Dynamic Routes)
-  for mapped_route, route_entries in pairs(catalog.mapped_routes or {}) do
-    if mapped_route:find(":") or mapped_route:find("*", 1, true) then
+  local dynamic_routes = type(catalog.dynamic_routes) == "table" and catalog.dynamic_routes or sort_dynamic_routes(catalog.mapped_routes)
+  for _, mapped_route in ipairs(dynamic_routes) do
+    local route_entries = (catalog.mapped_routes or {})[mapped_route]
+    if route_entries then
       local params = extract_dynamic_route_params(mapped_route, route)
       if params ~= nil then
         for _, entry in ipairs(route_entries) do

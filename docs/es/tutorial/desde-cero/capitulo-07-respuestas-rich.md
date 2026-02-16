@@ -27,4 +27,4 @@ return {
 
 ## PNG
 
-- Devuelve bytes en base64 + header `image/png` (ver demos `png_demo` y `qr`).
+- Devuelve bytes en base64 + header `image/png` (ver demos `png-demo` y `qr`).

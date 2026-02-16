@@ -1,0 +1,13 @@
+{
+  "group": "tests",
+  "max_concurrency": 2,
+  "worker_pool": {
+    "enabled": true,
+    "max_workers": 1,
+    "max_queue": 0
+  },
+  "invoke": {
+    "methods": ["GET"]
+  }
+}
+

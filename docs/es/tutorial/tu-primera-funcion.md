@@ -43,10 +43,10 @@ export FN_FUNCTIONS_ROOT="$PWD/srv/fn/functions"
 
 Ejemplos (relativos a `FN_FUNCTIONS_ROOT`):
 
-- `python/mi_perfil/`
-- `node/mi_perfil/`
-- `php/mi_perfil/`
-- `rust/mi_perfil/`
+- `python/mi-perfil/`
+- `node/mi-perfil/`
+- `php/mi-perfil/`
+- `rust/mi-perfil/`
 
 ## 3) Agregar handler (mismo comportamiento en 4 lenguajes)
 
@@ -54,7 +54,7 @@ La funcion lee query/header/context y devuelve JSON.
 
 === "Python (`app.py`)"
 
-    ```python title="$FN_FUNCTIONS_ROOT/python/mi_perfil/app.py"
+    ```python title="$FN_FUNCTIONS_ROOT/python/mi-perfil/app.py"
     import json
 
     def handler(event):
@@ -78,7 +78,7 @@ La funcion lee query/header/context y devuelve JSON.
 
 === "Node (`app.js`)"
 
-    ```js title="$FN_FUNCTIONS_ROOT/node/mi_perfil/app.js"
+    ```js title="$FN_FUNCTIONS_ROOT/node/mi-perfil/app.js"
     exports.handler = async (event) => {
       const query = event.query || {};
       const headers = event.headers || {};
@@ -101,7 +101,7 @@ La funcion lee query/header/context y devuelve JSON.
 
 === "PHP (`app.php`)"
 
-    ```php title="$FN_FUNCTIONS_ROOT/php/mi_perfil/app.php"
+    ```php title="$FN_FUNCTIONS_ROOT/php/mi-perfil/app.php"
     <?php
     function handler($event) {
         $query = $event['query'] ?? [];
@@ -125,7 +125,7 @@ La funcion lee query/header/context y devuelve JSON.
 
 === "Rust (`app.rs`)"
 
-    ```rust title="$FN_FUNCTIONS_ROOT/rust/mi_perfil/app.rs"
+    ```rust title="$FN_FUNCTIONS_ROOT/rust/mi-perfil/app.rs"
     use serde_json::{json, Value};
 
     pub fn handler(event: Value) -> Value {
@@ -155,7 +155,7 @@ La funcion lee query/header/context y devuelve JSON.
 
 Crear `fn.config.json` en la misma carpeta de la funcion:
 
-```json title="$FN_FUNCTIONS_ROOT/<runtime>/mi_perfil/fn.config.json"
+```json title="$FN_FUNCTIONS_ROOT/<runtime>/mi-perfil/fn.config.json"
 {
   "timeout_ms": 1500,
   "max_concurrency": 5,
@@ -180,14 +180,14 @@ curl -sS 'http://127.0.0.1:8080/_fn/reload'
 ## 6) Probar endpoint
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/mi_perfil?name=Ada&role=admin' \
+curl -sS 'http://127.0.0.1:8080/fn/mi-perfil?name=Ada&role=admin' \
   -H 'Authorization: Bearer demo-token'
 ```
 
 POST:
 
 ```bash
-curl -sS -X POST 'http://127.0.0.1:8080/fn/mi_perfil?name=Bob' \
+curl -sS -X POST 'http://127.0.0.1:8080/fn/mi-perfil?name=Bob' \
   -H 'Content-Type: application/json' \
   -d '{"nota":"event.body contiene el input raw"}'
 ```
@@ -225,7 +225,7 @@ bin/fastfn run --native "$FN_FUNCTIONS_ROOT"
 Validacion rapida desde otra terminal:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/mi_perfil?name=Ada'
+curl -sS 'http://127.0.0.1:8080/fn/mi-perfil?name=Ada'
 curl -sS 'http://127.0.0.1:8080/openapi.json'
 curl -sS 'http://127.0.0.1:8080/_fn/openapi.json' | jq -r '.servers[0].url'
 # https://api.midominio.com
@@ -262,7 +262,7 @@ Ejemplo de app cliente consumiendo la API en native:
 const baseUrl = process.env.FASTFN_BASE_URL || 'http://127.0.0.1:8080';
 
 async function main() {
-  const res = await fetch(`${baseUrl}/fn/mi_perfil?name=Ada`);
+  const res = await fetch(`${baseUrl}/fn/mi-perfil?name=Ada`);
   const body = await res.json();
   console.log({ status: res.status, body });
 }
