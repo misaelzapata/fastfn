@@ -12,7 +12,7 @@
   <a href="https://codecov.io/gh/misaelzapata/fastfn"><img alt="Coverage" src="https://codecov.io/gh/misaelzapata/fastfn/graph/badge.svg"></a>
   <a href="./LICENSE"><img alt="License" src="https://img.shields.io/badge/License-MIT-green.svg"></a>
   <a href="./docs/en/reference/http-api.md"><img alt="OpenAPI" src="https://img.shields.io/badge/OpenAPI-3.1-6BA539?logo=openapiinitiative&logoColor=white"></a>
-  <a href="./docs/en/reference/function-spec.md"><img alt="Runtimes" src="https://img.shields.io/badge/runtimes-python%20%7C%20node%20%7C%20php%20%7C%20rust%20%7C%20go-0A7EA4"></a>
+  <a href="./docs/en/reference/function-spec.md"><img alt="Runtimes" src="https://img.shields.io/badge/runtimes-python%20%7C%20node%20%7C%20php%20%7C%20lua%20%7C%20rust%20%7C%20go-0A7EA4"></a>
 </p>
 
 <p align="center">
@@ -46,7 +46,7 @@
 FastFN is built for teams that want local-file speed with production API behavior.
 
 - Routing from files: `functions/hello/get.py` -> `GET /hello`
-- Mix runtimes in one project: Python, Node.js, PHP, Rust, Go
+- Mix runtimes in one project: Python, Node.js, PHP, Lua, Rust, Go
 - OpenAPI and Swagger generated from discovered routes
 - Internal/admin endpoints hidden from Swagger by default
 - Same CLI surface for native and portable execution modes

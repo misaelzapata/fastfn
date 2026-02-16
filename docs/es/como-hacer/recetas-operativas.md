@@ -8,7 +8,7 @@ Recetas practicas con objetivo, comando, resultado esperado y diagnostico rapido
 curl -sS 'http://127.0.0.1:8080/_fn/health'
 ```
 
-Esperado: runtimes `python`, `node`, `php` y `rust` con `health.up=true`.
+Esperado: runtimes estables `python`, `node`, `php` y `lua` con `health.up=true` (`rust`/`go` cuando estén habilitados).
 
 Si `curl` no conecta pero el stack esta levantado (y/o `wget` te funciona), probá:
 
@@ -61,7 +61,7 @@ curl -sS 'http://127.0.0.1:8080/fn/php_profile?name=PHP'
 curl -sS 'http://127.0.0.1:8080/fn/rust_profile?name=Rust'
 ```
 
-## Receta 4c: probar QR (Python + Node)
+## Receta 4c: probar rutas (patrón Python + Node + PHP + Lua)
 
 ```bash
 curl -sS 'http://127.0.0.1:8080/fn/qr?text=PythonQR' -o qr-python.svg

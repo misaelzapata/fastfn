@@ -1,7 +1,10 @@
-# Bienvenido a fastfn
+# Bienvenido a FastFN
 
-!!! info "Filosofía"
-    **fastfn** está diseñado para ser el camino más rápido desde código a endpoint HTTP: creas el handler y llamas `/fn/<nombre>`.
+!!! tip "Filosofía: El 'Next.js' para el Backend"
+    **FastFN** te da la **Experiencia de Desarrollo de Next.js** pero para **Cualquier Lenguaje de Backend** (Python, Node, PHP, Lua, Go, Rust).
+    
+    Crea un archivo `api/users/[id].py`, y obtén un endpoint escalable `GET /api/users/:id` al instante. 
+    Sin construir contenedores. Sin configurar YAML. **Solo código.**
 
 Esta documentación sigue el framework **[Diátaxis](https://diataxis.fr/)** para que encuentres exactamente lo que necesitas según el momento.
 
@@ -33,12 +36,26 @@ Esta documentación sigue el framework **[Diátaxis](https://diataxis.fr/)** par
 
 </div>
 
+## ¿Por qué FastFN?
+
+### 🆚 Mejor que FastApi/Express puro
+*   **Cero Boilerplate**: Sin `app = FastAPI()`, sin `app.listen()`. Solo funciones.
+*   **Auto-Discovery**: El sistema de archivos es el router.
+*   **Políglota**: Mezcla Python para IA, Node para IO, Lua para glue logic y Rust para velocidad.
+
+### 🆚 Mejor que OpenFaaS/Knative
+*   **Sin Kubernetes**: Corre en Docker simple o procesos nativos.
+*   **Ciclo de Dev Instantáneo**: Los cambios se reflejan al instante (`fastfn dev`). Sin construir Docker por cambio.
+*   **Ligero**: Mínimo consumo de recursos.
+
 ## Características clave
 
+*   **Routing Mágico**: Soporte nativo para `[id]`, `[...slug]`.
 *   **Gateway de bajo overhead**: OpenResty valida policy y despacha por unix sockets locales.
 *   **Basado en estándares**: Generación automática OpenAPI 3.1.
 *   **Developer first**: La plataforma se adapta a archivos de funciones.
-*   **Multi-runtime**: Python, Node, PHP y Rust con un contrato uniforme.
+
+*   **Multi-runtime**: Python, Node, PHP, Lua y Rust con un contrato uniforme.
 
 ## Enlaces rápidos
 

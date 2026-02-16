@@ -25,7 +25,12 @@ Implemented and runnable now:
 - `python`
 - `node`
 - `php`
+- `lua` (in-process)
+
+Experimental (opt-in via `FN_RUNTIMES`):
+
 - `rust`
+- `go`
 
 ## Configurable function root
 
@@ -38,34 +43,26 @@ Resolution order:
 3. `$PWD/srv/fn/functions` (local dev default)
 4. `/srv/fn/functions`
 
-You can also control runtime discovery with:
-
-- `FN_RUNTIMES` (CSV, e.g. `python,node,php,rust`)
-- `FN_RUNTIME_SOCKETS` (JSON map runtime -> socket URI)
-- `FN_SOCKET_BASE_DIR` (base dir when socket map is not provided)
-
-Runtime precedence for legacy routes:
-
-- If the same function name exists in multiple runtimes, `/fn/<name>` picks the first runtime in `FN_RUNTIMES`.
-- If `FN_RUNTIMES` is not set, it falls back to alphabetical order of runtime folders.
-
 ## Source filenames
 
-Implemented runtime files:
+The runtime looks for a valid entrypoint file in the following order:
 
-- Python: `app.py` or `handler.py`
-- Node: `app.js` or `handler.js`
-- PHP: `app.php` or `handler.php`
-- Rust: `app.rs` or `handler.rs`
+1. Explicit `entrypoint` in `fn.config.json` (e.g. `src/my_handler.py`).
+2. `app.{py,js,ts,php,lua,rs,go}`
+3. `handler.{py,js,ts,php,lua,rs,go}`
+4. `main.{py,js,ts,php,lua,rs,go}`
+5. `index.{py,js,ts,php,lua}`
 
 ## Directory layout (relative to `FN_FUNCTIONS_ROOT`)
 
 ```text
 <FN_FUNCTIONS_ROOT>/
-  python/<name>[/<version>]/app.py|handler.py
-  node/<name>[/<version>]/app.js|handler.js
-  php/<name>[/<version>]/app.php|handler.php
-  rust/<name>[/<version>]/app.rs|handler.rs
+  python/<name>[/<version>]/main.py
+  node/<name>[/<version>]/index.ts
+  php/<name>[/<version>]/handler.php
+  lua/<name>[/<version>]/handler.lua
+  rust/<name>[/<version>]/src/main.rs
+  go/<name>[/<version>]/app.go
 ```
 
 Optional files by function/version:
@@ -73,11 +70,13 @@ Optional files by function/version:
 - `fn.config.json`
 - `fn.env.json`
 - `requirements.txt` (Python)
-- `package.json`, `package-lock.json` (Node)
-- `composer.json`, `composer.lock` (PHP, optional)
-- `Cargo.toml`, `Cargo.lock` (Rust, optional)
+- `package.json` (Node)
+- `composer.json` (PHP)
+- `cjson.safe` available in Lua runtime sandbox
+- `Cargo.toml` (Rust)
+- `go.mod`, `go.sum` (Go, optional)
 
-## Minimal handler examples (same contract)
+## Minimal handler examples
 
 All handlers consume `event` and return `{status, headers, body}`.
 
@@ -87,11 +86,9 @@ All handlers consume `event` and return `{status, headers, body}`.
     import json
 
     def handler(event):
-        name = (event.get("query") or {}).get("name", "world")
         return {
             "status": 200,
-            "headers": {"Content-Type": "application/json"},
-            "body": json.dumps({"hello": name}),
+            "body": json.dumps({"hello": "world"}),
         }
     ```
 
@@ -99,100 +96,105 @@ All handlers consume `event` and return `{status, headers, body}`.
 
     ```js
     exports.handler = async (event) => {
-      const query = event.query || {};
-      const name = query.name || 'world';
       return {
         status: 200,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hello: name }),
+        body: JSON.stringify({ hello: 'world' }),
       };
     };
     ```
 
-=== "PHP"
+=== "Go"
 
-    ```php
-    <?php
-    function handler($event) {
-        $query = $event['query'] ?? [];
-        $name = $query['name'] ?? 'world';
+    ```go
+    package main
 
-        return [
-            'status' => 200,
-            'headers' => ['Content-Type' => 'application/json'],
-            'body' => json_encode(['hello' => $name]),
-        ];
+    import "encoding/json"
+
+    func handler(event map[string]interface{}) map[string]interface{} {
+        body, _ := json.Marshal(map[string]interface{}{"hello": "world"})
+        return map[string]interface{}{
+            "status": 200,
+            "headers": map[string]interface{}{"Content-Type": "application/json"},
+            "body": string(body),
+        }
     }
     ```
 
-=== "Rust"
+=== "Lua"
 
-    ```rust
-    use serde_json::{json, Value};
+    ```lua
+    local cjson = require("cjson.safe")
 
-    pub fn handler(event: Value) -> Value {
-        let name = event
-            .get("query")
-            .and_then(|q| q.get("name"))
-            .and_then(|n| n.as_str())
-            .unwrap_or("world");
-
-        json!({
-            "status": 200,
-            "headers": { "Content-Type": "application/json" },
-            "body": json!({ "hello": name }).to_string()
-        })
-    }
+    function handler(event)
+      return {
+        status = 200,
+        headers = { ["Content-Type"] = "application/json" },
+        body = cjson.encode({ hello = "world" }),
+      }
+    end
     ```
 
 ## Function config (`fn.config.json`)
 
 Main fields:
 
-- `timeout_ms`
-- `max_concurrency`
-- `max_body_bytes`
-- `group` (optional)
-- `shared_deps` (optional)
-- `edge` (optional edge passthrough config)
-- `include_debug_headers`
-- `schedule` (optional interval scheduler)
-- `invoke.methods`
-- `invoke.handler` (optional custom exported function name; default `handler`)
-- `invoke.routes` (optional public endpoint mapping)
-- `invoke.summary`
-- `invoke.query`
-- `invoke.body`
+- `timeout_ms`: Maximum execution time.
+- `max_concurrency`: Max simultaneous requests (semaphor).
+- `max_body_bytes`: Request body limit.
+- `entrypoint`: (Optional) Explicit file path to the handler script relative to function root.
+- `keep_warm`: (Optional) Periodic ping settings to keep the function hot.
+- `worker_pool`: (Optional) Advanced runtime worker pool settings.
+- `response.include_debug_headers`: Whether to include `X-Fn-Runtime` headers.
 
-Example:
+Example with advanced fields:
 
 ```json
 {
   "group": "demos",
-  "shared_deps": ["common_http"],
   "timeout_ms": 1500,
   "max_concurrency": 10,
   "max_body_bytes": 1048576,
-  "include_debug_headers": false,
+  "entrypoint": "src/api.py",
   "invoke": {
-    "handler": "main",
-    "methods": ["GET", "POST"],
-    "routes": ["/api/my-function"],
-    "summary": "My function",
-    "query": {"name": "World"},
-    "body": ""
+    "handler": "main"
+  },
+  "keep_warm": {
+    "enabled": true,
+    "min_warm": 1,
+    "ping_every_seconds": 60,
+    "idle_ttl_seconds": 300
+  },
+  "worker_pool": {
+    "enabled": true,
+    "min_warm": 0,
+    "max_workers": 5,
+    "idle_ttl_seconds": 600,
+    "queue_timeout_ms": 2000,
+    "overflow_status": 429
+  },
+  "response": {
+    "include_debug_headers": true
   }
 }
 ```
 
-Notes:
+### Keep Warm
 
-- `invoke.handler` lets you use Lambda-style custom handler names (`main`, `run`, etc.).
-- For Node and Python runtimes, the selected function must be exported/defined in the same file.
-- `invoke.routes` is optional.
-- If present, each route must be an absolute path (for example `/api/my-function`).
-- Reserved prefixes are not allowed (`/fn`, `/_fn`, `/console`, `/docs`).
-- Route conflicts return `409`.
+The `keep_warm` configuration instructs the runtime scheduler to periodically verify the function is loaded and ready.
+
+- `enabled`: Activate the keep-warm scheduler.
+- `min_warm`: Minimum number of instances (not fully implemented in all runtimes, usually 1).
+- `ping_every_seconds`: Interval between heartbeats.
+- `idle_ttl_seconds`: How long allowed to remain idle before scale-down.
+
+### Worker Pool
+
+For runtimes with subprocess worker pools (Python and Node; PHP and Lua use runtime-native execution models), `worker_pool` configures the persistent subprocess pool.
+
+- `enabled`: Use persistent workers instead of one-shot processes.
+- `max_workers`: Maximum number of subprocesses to spawn.
+- `idle_ttl_seconds`: How long a worker stays alive without requests.
+- `queue_timeout_ms`: How long to wait for a worker to become available before returning `overflow_status` (default 500).
 
 ## Edge passthrough config (`edge`)
 
@@ -209,38 +211,7 @@ If you want Cloudflare-Workers-style behavior (handler returns a `proxy` directi
 }
 ```
 
-Then your handler can return `{ "proxy": { ... } }`. See the full response contract in: **Runtime Contract**.
-
-## Shared dependency packs (`shared_deps`)
-
-Sometimes you want multiple functions to reuse the same dependency install (for example: one `node_modules` for several Node functions, or one pip install directory for several Python functions).
-
-`fastfn` supports opt-in shared dependency packs. In `fn.config.json`:
-
-```json
-{
-  "shared_deps": ["qrcode_pack"]
-}
-```
-
-Packs live under the function root, so they work with the default Docker volume mount:
-
-```text
-<FN_FUNCTIONS_ROOT>/.fastfn/packs/<runtime>/<pack>/
-```
-
-Examples:
-
-- Python pack: `<FN_FUNCTIONS_ROOT>/.fastfn/packs/python/qrcode_pack/requirements.txt`
-- Node pack: `<FN_FUNCTIONS_ROOT>/.fastfn/packs/node/qrcode_pack/package.json`
-- Node TypeScript pack (esbuild): `<FN_FUNCTIONS_ROOT>/.fastfn/packs/node/ts_pack/package.json`
-
-At runtime:
-
-- Python installs into `<pack>/.deps` and adds it to `sys.path`
-- Node installs into `<pack>/node_modules` and adds it to module resolution for that function invocation
-
-This is not a kernel-level sandbox and does not provide full virtualenv/cargo isolation, but it is a practical way to deduplicate installs.
+Then your handler can return `{ "proxy": { "path": "/foo" } }`.
 
 ## Schedule (interval cron)
 
@@ -251,18 +222,10 @@ You can attach a simple interval schedule to a function:
   "schedule": {
     "enabled": true,
     "every_seconds": 60,
-    "method": "GET",
-    "query": {},
-    "headers": {},
-    "body": "",
-    "context": {}
+    "method": "GET"
   }
 }
 ```
-
-- The scheduler runs inside OpenResty (worker 0).
-- It invokes the same runtime over unix socket.
-- The gateway policy still applies (methods, body limit, concurrency, timeout).
 
 ## Function env and secrets
 
@@ -274,7 +237,6 @@ Example:
 ```json
 {
   "API_KEY": {"value": "secret-value", "is_secret": true},
-  "PUBLIC_FLAG": {"value": "on", "is_secret": false},
-  "LEGACY_VALUE": "still-supported"
+  "PUBLIC_FLAG": {"value": "on", "is_secret": false}
 }
 ```

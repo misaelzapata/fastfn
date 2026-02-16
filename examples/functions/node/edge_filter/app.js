@@ -45,7 +45,7 @@ exports.handler = async (event) => {
   // For an out-of-the-box demo, we proxy to the built-in OpenAPI document.
   return {
     proxy: {
-      path: `/openapi.json?edge_user_id=${encodeURIComponent(userId)}`,
+      path: `/_fn/openapi.json?edge_user_id=${encodeURIComponent(userId)}`,
       method: "GET", // force GET upstream even if the incoming request is POST
       headers: {
         "x-fastfn-edge": "1",
@@ -55,8 +55,9 @@ exports.handler = async (event) => {
         ...(env.UPSTREAM_TOKEN ? { authorization: `Bearer ${String(env.UPSTREAM_TOKEN)}` } : {}),
       },
       body: "", // ignore inbound body for this demo
-      timeout_ms: ctx.timeout_ms || 2000,
+      // Keep edge demos stable under sweep load; upstream OpenAPI can exceed
+      // very tight per-hop timeouts when many requests run back-to-back.
+      timeout_ms: Math.max(Number(ctx.timeout_ms) || 0, 10000),
     },
   };
 };
-

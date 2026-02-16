@@ -347,13 +347,18 @@ async function testEdgeFilterAuthAndRewrite() {
   assert.equal(typeof ok.proxy, "object");
   assert.equal(ok.proxy.method, "GET");
   const rewritten = new URL(String(ok.proxy.path), "http://fastfn.local");
-  assert.ok(
-    rewritten.pathname === "/_fn/openapi.json" || rewritten.pathname === "/openapi.json",
-    `unexpected rewritten path: ${rewritten.pathname}`
-  );
+  assert.equal(rewritten.pathname, "/_fn/openapi.json");
   const rewrittenUserId = rewritten.searchParams.get("edge_user_id") || rewritten.searchParams.get("edge-user-id");
   assert.equal(rewrittenUserId, "123");
   assert.equal(ok.proxy.timeout_ms, 10000);
+
+  const okDefaultTimeout = await edgeFilterHandler({
+    method: "GET",
+    query: { user_id: "123" },
+    headers: { "x-api-key": "dev" },
+    env: { EDGE_FILTER_API_KEY: "dev", UPSTREAM_TOKEN: "" },
+  });
+  assert.equal(okDefaultTimeout.proxy.timeout_ms, 10000);
 }
 
 async function testRequestInspector() {

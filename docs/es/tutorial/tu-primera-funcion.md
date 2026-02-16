@@ -1,9 +1,9 @@
-# Tu primera funcion (Python, Node, PHP, Rust)
+# Tu primera funcion (Python, Node, PHP, Lua, Rust)
 
-En este tutorial crearas una funcion usando el mismo contrato en cuatro lenguajes.
+En este tutorial crearas una funcion usando el mismo contrato en cinco lenguajes.
 
 !!! info "Estado actual de runtimes"
-    `python`, `node`, `php` y `rust` se ejecutan hoy.
+    Estables hoy: `python`, `node`, `php`, `lua`. Experimentales opt-in: `rust`, `go`.
 
 ## 0) (Camino para principiantes) Usa el Wizard de la Consola
 
@@ -173,6 +173,8 @@ Crear `fn.config.json` en la misma carpeta de la funcion:
 
 ```bash
 curl -sS -X POST 'http://127.0.0.1:8080/_fn/reload'
+# opcional (mismo efecto, POST sigue siendo preferido para tooling)
+curl -sS 'http://127.0.0.1:8080/_fn/reload'
 ```
 
 ## 6) Probar endpoint
@@ -206,3 +208,64 @@ Lectura en runtime:
 - Node: `(event.env || {}).PROFILE_SOURCE`
 - PHP: `$event['env']['PROFILE_SOURCE'] ?? null`
 - Rust: `event.get("env").and_then(|e| e.get("PROFILE_SOURCE"))`
+
+## 8) Ejecutar en modo nativo para produccion
+
+Cuando quieras correr con defaults de produccion (sin hot reload), usa:
+
+```bash
+FN_HOST_PORT=8080 \
+FN_UI_ENABLED=0 \
+FN_CONSOLE_API_ENABLED=0 \
+FN_CONSOLE_WRITE_ENABLED=0 \
+FN_PUBLIC_BASE_URL=https://api.midominio.com \
+bin/fastfn run --native "$FN_FUNCTIONS_ROOT"
+```
+
+Validacion rapida desde otra terminal:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/fn/mi_perfil?name=Ada'
+curl -sS 'http://127.0.0.1:8080/openapi.json'
+curl -sS 'http://127.0.0.1:8080/_fn/openapi.json' | jq -r '.servers[0].url'
+# https://api.midominio.com
+```
+
+## 9) Usar el SDK de FastFN en Node
+
+Si queres helpers de request/response en handlers Node:
+
+```bash
+npm install ./sdk/js
+```
+
+Ejemplo de handler:
+
+```js
+const { Request, toResponse } = require('@fastfn/runtime');
+
+exports.handler = async (event) => {
+  const req = new Request(event);
+  return toResponse({
+    ok: true,
+    method: req.method,
+    path: req.path,
+  });
+};
+```
+
+Este handler funciona igual en `fastfn dev` y `fastfn run --native`.
+
+Ejemplo de app cliente consumiendo la API en native:
+
+```js
+const baseUrl = process.env.FASTFN_BASE_URL || 'http://127.0.0.1:8080';
+
+async function main() {
+  const res = await fetch(`${baseUrl}/fn/mi_perfil?name=Ada`);
+  const body = await res.json();
+  console.log({ status: res.status, body });
+}
+
+main().catch(console.error);
+```

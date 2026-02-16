@@ -256,8 +256,8 @@ Rules:
 
 Implementation note:
 
-- Python and Node enforce strict filesystem blocking at runtime level.
-- PHP and Rust run in isolated runtime processes with path validation and bounded execution, but do not currently enforce per-file protected list interception.
+- Python and Node enforce strict filesystem blocking at runtime level; PHP and Lua enforce runtime-level path validation and bounded execution in their runtime models.
+- Rust runs in an isolated runtime process with path validation and bounded execution.
 
 Important:
 

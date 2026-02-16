@@ -10,7 +10,7 @@ When to use: startup verification and incident triage.
 curl -sS 'http://127.0.0.1:8080/_fn/health'
 ```
 
-Expected: runtimes `python`, `node`, `php`, and `rust` show `health.up = true`.
+Expected: stable runtimes `python`, `node`, `php`, and `lua` show `health.up = true` (`rust`/`go` when enabled).
 
 If `curl` cannot connect but the stack is up (and/or `wget` works), try:
 
@@ -36,12 +36,12 @@ When to use: confirm discovery and runtime ownership.
 curl -sS 'http://127.0.0.1:8080/_fn/catalog'
 ```
 
-Expected: function lists exist for `python`, `node`, `php`, and `rust`.
+Expected: function lists exist for `python`, `node`, `php`, and `lua` (`rust`/`go` when enabled).
 
 ## Recipe 3: invoke query-driven function
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/echo?key=test'
+curl -sS 'http://127.0.0.1:8080/echo?key=test'
 ```
 
 Expected: JSON includes `key = test`.
@@ -49,23 +49,23 @@ Expected: JSON includes `key = test`.
 ## Recipe 4: invoke versioned route
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/hello@v2?name=NodeWay'
+curl -sS 'http://127.0.0.1:8080/hello?name=NodeWay'
 ```
 
-Expected: response from node v2 handler.
+Expected: JSON response from your configured hello route.
 
 ## Recipe 4b: invoke PHP and Rust examples
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/php_profile?name=PHP'
-curl -sS 'http://127.0.0.1:8080/fn/rust_profile?name=Rust'
+curl -sS 'http://127.0.0.1:8080/php/profile/123'
+curl -sS 'http://127.0.0.1:8080/rust/health'
 ```
 
-## Recipe 4c: invoke QR (Python + Node)
+## Recipe 4c: invoke routes (Python + Node + PHP + Lua patterns)
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/qr?text=PythonQR' -o qr-python.svg
-curl -sS 'http://127.0.0.1:8080/fn/qr@v2?text=NodeQR' -o qr-node.png
+curl -sS 'http://127.0.0.1:8080/blog/a/b/c'
+curl -sS 'http://127.0.0.1:8080/users/123'
 ```
 
 ## Recipe 5: change method policy live
@@ -79,8 +79,8 @@ curl -sS 'http://127.0.0.1:8080/_fn/function-config?runtime=node&name=node_echo'
 Validate:
 
 ```bash
-curl -sS -o /dev/null -w '%{http_code}\n' 'http://127.0.0.1:8080/fn/node_echo?name=x'         # expect 405
-curl -sS -o /dev/null -w '%{http_code}\n' -X PUT 'http://127.0.0.1:8080/fn/node_echo?name=x' # expect 200
+curl -sS -o /dev/null -w '%{http_code}\n' 'http://127.0.0.1:8080/node_echo?name=x'         # expect 405
+curl -sS -o /dev/null -w '%{http_code}\n' -X PUT 'http://127.0.0.1:8080/node_echo?name=x' # expect 200
 ```
 
 ## Recipe 6: update function env
@@ -94,7 +94,7 @@ curl -sS 'http://127.0.0.1:8080/_fn/function-env?runtime=python&name=hello' \
 Then:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/hello?name=World'
+curl -sS 'http://127.0.0.1:8080/hello?name=World'
 ```
 
 Expected greeting uses new prefix.
@@ -130,15 +130,15 @@ curl -sS 'http://127.0.0.1:8080/_fn/function-code?runtime=python&name=demo_recip
 Validate:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/demo_recipe?name=RecipeOK'
+curl -sS 'http://127.0.0.1:8080/demo_recipe?name=RecipeOK'
 ```
 
 ## Recipe 10: return non-JSON payloads
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/html_demo?name=Web'
-curl -sS 'http://127.0.0.1:8080/fn/csv_demo?name=Alice'
-curl -sS 'http://127.0.0.1:8080/fn/png_demo' --output out.png
+curl -sS 'http://127.0.0.1:8080/html_demo?name=Web'
+curl -sS 'http://127.0.0.1:8080/csv_demo?name=Alice'
+curl -sS 'http://127.0.0.1:8080/png_demo' --output out.png
 ```
 
 Expected:

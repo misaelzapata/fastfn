@@ -9,14 +9,14 @@ Bienvenido a **fastfn**. Esta guía te llevará desde cero hasta una plataforma 
 No solo estamos ejecutando un script; estamos iniciando una **Plataforma FaaS Lista para Producción** localmente que incluye:
 
 1.  **Gateway (OpenResty)**: Maneja enrutamiento, seguridad y balanceo de carga.
-2.  **Workers (Python, Node.js, PHP, Rust)**: Procesos persistentes listos para ejecutar código.
+2.  **Workers (Python, Node.js, PHP, Lua, Rust)**: Procesos persistentes listos para ejecutar código.
 3.  **Consola y Docs**: UI integrada para gestionar y probar tus funciones.
 
 ---
 
 ## 1. Iniciar la Plataforma ⚡️
 
-Todo el sistema está contenerizado. No necesitas instalar Python, Node o Nginx en tu máquina. Solo Docker.
+Todo el sistema está contenerizado. No necesitas instalar Python, Node, PHP, Lua o Nginx en tu máquina. Solo Docker.
 
 ```bash
 docker compose up -d --build

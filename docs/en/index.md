@@ -1,44 +1,74 @@
-# Welcome to fastfn
+<div class="hero-section">
+  <h1 class="hero-title">FastFN</h1>
+  <p class="hero-subtitle">
+    FastFN web framework.<br>
+    High performance, easy to learn, fast to code, ready for production.
+  </p>
+  <div class="hero-actions">
+    <a href="./tutorial/first-steps/" class="btn-primary">Get Started →</a>
+    <a href="https://github.com/misaelzapata/fastfn" class="btn-secondary">Star on GitHub</a>
+  </div>
+</div>
 
-!!! info "Philosophy"
-    **fastfn** is designed to be the fastest path from code to an HTTP endpoint: drop a handler file, hit `/fn/<name>`.
+<div class="feature-grid">
+  <div class="feature-card">
+    <h3>⚡️ Fast to Code</h3>
+    <p>Increase the speed to develop features by about 200% to 300%. Drop a file, get an endpoint.</p>
+  </div>
+  <div class="feature-card">
+    <h3>📂 Automatic Docs</h3>
+    <p>Interactive API documentation (Swagger UI) generated automatically from your code.</p>
+  </div>
+  <div class="feature-card">
+    <h3>🌐 Polyglot Power</h3>
+    <p>Use the best tool for the job. AI in Python, IO in Node, glue logic in Lua, performance in Rust.</p>
+  </div>
+</div>
 
-This documentation follows the strict **[Diátaxis](https://diataxis.fr/)** framework to ensure you find exactly what you need, when you need it.
+!!! tip "Philosophy"
+    **FastFN** brings the "Vercel experience" to your own servers. 
+    Drop a file, get an endpoint. Zero config. Null boilerplate.
+
+## Documentation
+
+This documentation follows the strict **[Diátaxis](https://diataxis.fr/)** framework.
 
 <div class="grid cards" markdown>
 
 -   :material-school: **Tutorials**
     
-    Start here if you are new. Step-by-step lessons to get you running.
+    Start here. Step-by-step lessons to build your first API.
     
-    [Start Here :arrow_right:](./tutorial/first-steps.md)
+    [Start Learning :arrow_right:](./tutorial/first-steps.md)
 
 -   :material-compass-outline: **How-To Guides**
     
-    Practical, task-focused recipes for real operational needs.
+    Solve specific problems. "How do I add auth?", "How do I deploy?".
     
-    [See Guides :arrow_right:](./how-to/run-and-test.md)
+    [See Recipes :arrow_right:](./how-to/operational-recipes.md)
 
 -   :material-book-open-page-variant: **Reference**
     
-    Technical descriptions of APIs, contracts, and configurations.
+    Technical details. Config schemas, CLI commands, and contracts.
     
-    [Browse Reference :arrow_right:](./reference/http-api.md)
+    [Browse API :arrow_right:](./reference/http-api.md)
 
 -   :material-text-box-search-outline: **Explanation**
     
-    Deep dives into the architecture, design choices, and "Why".
+    Understand the architecture. Why processes? Why not containers?
     
-    [Read Explanations :arrow_right:](./explanation/architecture.md)
+    [Read Design :arrow_right:](./explanation/architecture.md)
 
 </div>
 
 ## Key Features
 
+*   **Magic Routing**: `[id]`, `[...slug]` supported out of the box.
 *   **Low overhead gateway**: OpenResty validates policy and dispatches over local unix sockets.
 *   **Standards Based**: Fully compliant OpenAPI 3.1 generation for all your functions.
 *   **Developer First**: The platform adapts to your files, not the other way around.
-*   **Multi-Runtime**: Python, Node, PHP, and Rust with one contract.
+
+*   **Multi-Runtime**: Python, Node, PHP, Lua, and Rust with one contract.
 
 ## Quick Links
 
@@ -50,7 +80,7 @@ This documentation follows the strict **[Diátaxis](https://diataxis.fr/)** fram
 ## Extended Tutorials
 
 *   [Build a complete API (end-to-end)](./tutorial/build-complete-api.md)
-*   [QR in Python + Node (dependency isolation)](./tutorial/qr-in-python-node.md)
+*   [QR patterns in Python + Node + PHP + Lua (dependency isolation)](./tutorial/qr-in-python-node.md)
 *   [Versioning and rollout](./tutorial/versioning-and-rollout.md)
 *   [Auth and secrets](./tutorial/auth-and-secrets.md)
 

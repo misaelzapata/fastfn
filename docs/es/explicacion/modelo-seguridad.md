@@ -25,8 +25,7 @@ Por defecto (`FN_STRICT_FS=1`) el modo estricto de runtime está activo.
 
 Estado de enforcement:
 
-- Python/Node: intercepción estricta de filesystem (lectura/escritura/subprocess).
-- PHP/Rust: ejecución en proceso aislado con validación de rutas y ejecución acotada.
+- Python/Node: intercepción estricta de filesystem (lectura/escritura/subprocess); PHP/Lua/Rust aplican validación de rutas y ejecución acotada en su modelo de runtime.
 
 Permitido por defecto:
 

@@ -3,7 +3,7 @@
 This guide separates two concerns that are usually mixed:
 
 1. Platform administration access (`/console`, `/_fn/*`)
-2. Business authentication inside each function (`/fn/*`)
+2. Business authentication inside each function route (`/<route>`)
 
 ## 1) Platform admin surface
 
@@ -41,7 +41,7 @@ Useful fields:
 - `event.body`
 - `event.env`
 
-## Pattern A: API key (Python, Node, PHP)
+## Pattern A: API key (Python, Node, PHP, Lua)
 
 === "Python"
 
@@ -95,7 +95,7 @@ Useful fields:
     };
     ```
 
-=== "PHP (template/planned runtime)"
+=== "PHP"
 
     ```php
     <?php
@@ -122,6 +122,33 @@ Useful fields:
     }
     ```
 
+=== "Lua"
+
+    ```lua
+    local cjson = require("cjson.safe")
+
+    function handler(event)
+      local headers = event.headers or {}
+      local env = event.env or {}
+      local provided = headers["x-api-key"]
+      local expected = env.API_KEY
+
+      if not expected or provided ~= expected then
+        return {
+          status = 401,
+          headers = { ["Content-Type"] = "application/json" },
+          body = cjson.encode({ error = "unauthorized" }),
+        }
+      end
+
+      return {
+        status = 200,
+        headers = { ["Content-Type"] = "application/json" },
+        body = cjson.encode({ ok = true }),
+      }
+    end
+    ```
+
 Store secret in function env:
 
 ```bash
@@ -130,7 +157,7 @@ curl -sS 'http://127.0.0.1:8080/_fn/function-env?runtime=python&name=hello' \
   --data '{"API_KEY":{"value":"hello-secret","is_secret":true}}'
 ```
 
-## Pattern B: Session cookie (Python, Node, PHP)
+## Pattern B: Session cookie (Python, Node, PHP, Lua)
 
 === "Python"
 
@@ -178,7 +205,7 @@ curl -sS 'http://127.0.0.1:8080/_fn/function-env?runtime=python&name=hello' \
     };
     ```
 
-=== "PHP (template/planned runtime)"
+=== "PHP"
 
     ```php
     <?php
@@ -200,6 +227,31 @@ curl -sS 'http://127.0.0.1:8080/_fn/function-env?runtime=python&name=hello' \
             'body' => json_encode(['ok' => true]),
         ];
     }
+    ```
+
+=== "Lua"
+
+    ```lua
+    local cjson = require("cjson.safe")
+
+    function handler(event)
+      local headers = event.headers or {}
+      local cookie = headers.cookie or headers.Cookie or ""
+
+      if not string.find(cookie, "session_id=", 1, true) then
+        return {
+          status = 401,
+          headers = { ["Content-Type"] = "application/json" },
+          body = cjson.encode({ error = "missing session" }),
+        }
+      end
+
+      return {
+        status = 200,
+        headers = { ["Content-Type"] = "application/json" },
+        body = cjson.encode({ ok = true }),
+      }
+    end
     ```
 
 ## Secret visibility and masking

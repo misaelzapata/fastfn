@@ -25,8 +25,7 @@ By default (`FN_STRICT_FS=1`), runtime strict mode is enabled.
 
 Current enforcement:
 
-- Python/Node: strict filesystem interception (read/write/subprocess guards).
-- PHP/Rust: isolated process execution with path validation and bounded execution.
+- Python/Node: strict filesystem interception (read/write/subprocess guards); PHP/Lua/Rust apply runtime-level path validation and bounded execution in their runtime models.
 
 Allowed by default:
 

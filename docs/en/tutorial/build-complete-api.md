@@ -1,4 +1,4 @@
-# Tutorial: QR in Python + Node (Dependency Isolation)
+# Tutorial: QR in Python + Node (portable pattern for PHP + Lua)
 
 This tutorial builds the same function in two runtimes:
 
@@ -176,6 +176,6 @@ docker compose exec -T openresty sh -lc "test -d /app/srv/fn/functions/node/qr/v
 ## 6) What this proves
 
 - Discovery works on legacy route style (`/fn/<name>` + optional `@version`).
-- Python and Node can implement the same endpoint independently.
+- Python and Node can implement the same endpoint independently, and the same contract pattern extends to PHP and Lua handlers.
 - Each runtime installs dependencies inside its own function directory.
 - Both binary content types are served correctly through the same gateway.
