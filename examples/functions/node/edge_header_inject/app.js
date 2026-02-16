@@ -7,7 +7,7 @@
 // - compute/inject gateway headers (tenant, request id, etc)
 // - proxy to an upstream endpoint
 //
-// Demo upstream: /fn/request_inspector (so you can see injected headers).
+// Demo upstream: /request-inspector (so you can see injected headers).
 
 exports.handler = async (event) => {
   const ctx = event.context || {};
@@ -16,7 +16,7 @@ exports.handler = async (event) => {
 
   return {
     proxy: {
-      path: "/fn/request_inspector",
+      path: "/request-inspector",
       method: event.method || "GET",
       headers: {
         "x-fastfn-edge": "1",
@@ -28,4 +28,3 @@ exports.handler = async (event) => {
     },
   };
 };
-

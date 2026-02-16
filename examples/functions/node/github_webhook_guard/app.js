@@ -62,7 +62,7 @@ exports.handler = async (event) => {
   const ghEvent = String(header(event, "x-github-event") || "");
 
   // Default behavior: return an ACK payload.
-  // If you add ?forward=1, we forward to /fn/request_inspector (demo).
+  // If you add ?forward=1, we forward to /request-inspector (demo).
   const q = event.query || {};
   const forward = String(q.forward || "").trim() === "1";
   if (!forward) {
@@ -76,7 +76,7 @@ exports.handler = async (event) => {
 
   return {
     proxy: {
-      path: "/fn/request_inspector",
+      path: "/request-inspector",
       method: "POST",
       headers: {
         "x-fastfn-edge": "1",
@@ -90,4 +90,3 @@ exports.handler = async (event) => {
     },
   };
 };
-
