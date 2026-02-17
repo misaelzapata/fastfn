@@ -89,6 +89,28 @@ wait_for_health() {
   fi
 }
 
+assert_container_runs_as_host_user() {
+  local host_uid host_gid
+  host_uid="$(id -u)"
+  host_gid="$(id -g)"
+
+  local c_uid c_gid
+  c_uid="$(cd "$ROOT_DIR" && COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT_NAME" docker compose exec -T openresty sh -lc 'id -u' 2>/dev/null | tr -d '\r' || true)"
+  c_gid="$(cd "$ROOT_DIR" && COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT_NAME" docker compose exec -T openresty sh -lc 'id -g' 2>/dev/null | tr -d '\r' || true)"
+
+  if [[ -z "$c_uid" || -z "$c_gid" ]]; then
+    echo "FAIL could not determine container uid/gid"
+    exit 1
+  fi
+
+  if [[ "$c_uid" != "$host_uid" || "$c_gid" != "$host_gid" ]]; then
+    echo "FAIL container must run as host uid:gid for bind-mount permissions (regression guard)"
+    echo "  host uid:gid=$host_uid:$host_gid"
+    echo "  container uid:gid=$c_uid:$c_gid"
+    exit 1
+  fi
+}
+
 wait_for_runtime_up() {
   local runtime="$1"
   local ready=0
@@ -155,6 +177,7 @@ start_stack() {
   ) &
   STACK_PID="$!"
   wait_for_health
+  assert_container_runs_as_host_user
 }
 
 start_stack_with_config() {
@@ -178,6 +201,7 @@ start_stack_with_config() {
   ) &
   STACK_PID="$!"
   wait_for_health
+  assert_container_runs_as_host_user
 }
 
 stop_stack() {

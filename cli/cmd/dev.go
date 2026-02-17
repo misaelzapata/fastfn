@@ -177,28 +177,7 @@ var devCmd = &cobra.Command{
 				log.Fatal("Invalid docker-compose.yml: no openresty service")
 			}
 
-			// Run the container as the host user by default.
-			//
-			// Why: Nginx/OpenResty workers can run as an unprivileged user when the
-			// master is started as root. That breaks write flows (console write, ad-hoc
-			// function creation, etc.) on Linux bind mounts where the project directory
-			// is not world-writable (e.g. mktemp() creates 0700 dirs in CI).
-			//
-			// Override knobs:
-			// - FN_DOCKER_USER: explicit docker user value (e.g. "1000:1000")
-			// - FN_DOCKER_RUN_AS_ROOT=1: keep the service user unset
-			if _, hasUser := openresty["user"]; !hasUser {
-				if strings.TrimSpace(os.Getenv("FN_DOCKER_RUN_AS_ROOT")) == "1" {
-					// keep unset
-				} else if u := strings.TrimSpace(os.Getenv("FN_DOCKER_USER")); u != "" {
-					openresty["user"] = u
-				} else {
-					uid, gid := os.Getuid(), os.Getgid()
-					if uid >= 0 && gid >= 0 {
-						openresty["user"] = fmt.Sprintf("%d:%d", uid, gid)
-					}
-				}
-			}
+			applyOpenRestyDockerUser(openresty)
 
 			volumes, ok := openresty["volumes"].([]interface{})
 			if !ok {
@@ -266,6 +245,36 @@ var devCmd = &cobra.Command{
 			log.Fatalf("Docker run failed: %v", err)
 		}
 	},
+}
+
+// applyOpenRestyDockerUser makes Docker dev behave predictably on Linux bind mounts.
+//
+// Why: Nginx/OpenResty workers can run as an unprivileged user by default. That
+// breaks write flows (console write, ad-hoc function creation, etc.) on bind
+// mounts where the project directory is not world-writable (e.g. mktemp() creates
+// 0700 dirs in CI).
+//
+// Override knobs:
+// - FN_DOCKER_USER: explicit docker user value (e.g. "1000:1000")
+// - FN_DOCKER_RUN_AS_ROOT=1: keep the service user unset
+func applyOpenRestyDockerUser(openresty map[string]interface{}) {
+	if openresty == nil {
+		return
+	}
+	if _, hasUser := openresty["user"]; hasUser {
+		return
+	}
+	if strings.TrimSpace(os.Getenv("FN_DOCKER_RUN_AS_ROOT")) == "1" {
+		return
+	}
+	if u := strings.TrimSpace(os.Getenv("FN_DOCKER_USER")); u != "" {
+		openresty["user"] = u
+		return
+	}
+	uid, gid := os.Getuid(), os.Getgid()
+	if uid >= 0 && gid >= 0 {
+		openresty["user"] = fmt.Sprintf("%d:%d", uid, gid)
+	}
 }
 
 type FnConfig struct {

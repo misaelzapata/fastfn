@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -172,5 +173,54 @@ func TestScanForMounts_HybridProjectIncludesRootAndFnConfigMounts(t *testing.T) 
 	}
 	if !strings.Contains(joined, configExpected) {
 		t.Fatalf("missing config mount: %s\nall mounts:\n%s", configExpected, joined)
+	}
+}
+
+func TestApplyOpenRestyDockerUser_DefaultsToHostUser(t *testing.T) {
+	t.Setenv("FN_DOCKER_RUN_AS_ROOT", "")
+	t.Setenv("FN_DOCKER_USER", "")
+
+	openresty := map[string]interface{}{}
+	applyOpenRestyDockerUser(openresty)
+
+	want := strings.Join([]string{strconv.Itoa(os.Getuid()), strconv.Itoa(os.Getgid())}, ":")
+	if got, _ := openresty["user"].(string); got != want {
+		t.Fatalf("openresty.user = %q, want %q", got, want)
+	}
+}
+
+func TestApplyOpenRestyDockerUser_ExplicitOverride(t *testing.T) {
+	t.Setenv("FN_DOCKER_RUN_AS_ROOT", "")
+	t.Setenv("FN_DOCKER_USER", "123:456")
+
+	openresty := map[string]interface{}{}
+	applyOpenRestyDockerUser(openresty)
+
+	if got, _ := openresty["user"].(string); got != "123:456" {
+		t.Fatalf("openresty.user = %q, want %q", got, "123:456")
+	}
+}
+
+func TestApplyOpenRestyDockerUser_DoesNotOverrideExisting(t *testing.T) {
+	t.Setenv("FN_DOCKER_RUN_AS_ROOT", "")
+	t.Setenv("FN_DOCKER_USER", "123:456")
+
+	openresty := map[string]interface{}{"user": "9:9"}
+	applyOpenRestyDockerUser(openresty)
+
+	if got, _ := openresty["user"].(string); got != "9:9" {
+		t.Fatalf("openresty.user = %q, want %q", got, "9:9")
+	}
+}
+
+func TestApplyOpenRestyDockerUser_RunAsRootSkips(t *testing.T) {
+	t.Setenv("FN_DOCKER_RUN_AS_ROOT", "1")
+	t.Setenv("FN_DOCKER_USER", "123:456")
+
+	openresty := map[string]interface{}{}
+	applyOpenRestyDockerUser(openresty)
+
+	if _, ok := openresty["user"]; ok {
+		t.Fatalf("openresty.user should be unset when FN_DOCKER_RUN_AS_ROOT=1, got=%v", openresty["user"])
 	}
 }
