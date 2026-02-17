@@ -158,5 +158,5 @@ Quick expectations:
 
 - Internal endpoints exist under `/_fn/*` (for example `/_fn/invoke`, `/_fn/catalog`).
 - Public routes exist as mapped OpenAPI paths (`/users`, `/users/{id}`, `/blog/{slug}`, `/php/profile/{id}`, `/rust/health`).
-- No legacy `/fn/*` paths are emitted by default.
+- No `/fn/*` compatibility paths are emitted by default.
 - No `unknown/unknown` operation summaries are emitted.

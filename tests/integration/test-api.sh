@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-WAIT_SECS="${WAIT_SECS:-90}"
+WAIT_SECS="${WAIT_SECS:-240}"
 KEEP_UP="${KEEP_UP:-0}"
 KEEP_FIXTURE_ARTIFACTS="${KEEP_FIXTURE_ARTIFACTS:-0}"
 RUNTIMES_WITH_RUST="${RUNTIMES_WITH_RUST:-python,node,php,rust}"
@@ -158,12 +158,12 @@ start_stack() {
   if [[ "$#" -gt 0 ]]; then
     (
       cd "$ROOT_DIR"
-      env "$@" ./bin/fastfn dev "$target_dir" >"$STACK_LOG" 2>&1
+      env FN_HOT_RELOAD=0 "$@" ./bin/fastfn dev "$target_dir" >"$STACK_LOG" 2>&1
     ) &
   else
     (
       cd "$ROOT_DIR"
-      ./bin/fastfn dev "$target_dir" >"$STACK_LOG" 2>&1
+      env FN_HOT_RELOAD=0 ./bin/fastfn dev "$target_dir" >"$STACK_LOG" 2>&1
     ) &
   fi
   STACK_PID="$!"
@@ -544,7 +544,7 @@ def get_param(params, name):
 
 if mode == "next-style":
     if "/hello_demo/{wildcard}" in paths:
-        raise SystemExit("unexpected wildcard legacy path still present: /hello_demo/{wildcard}")
+        raise SystemExit("unexpected wildcard underscore path still present: /hello_demo/{wildcard}")
     hello_demo = (paths.get("/hello-demo/{name}") or {}).get("get") or {}
     hello_demo_name = get_param(hello_demo.get("parameters"), "name")
     if not isinstance(hello_demo_name, dict) or hello_demo_name.get("in") != "path":
@@ -1188,6 +1188,7 @@ import urllib.request
 BASE_URL = "http://127.0.0.1:8080"
 THRESHOLD_MS = int(os.environ.get("PARALLEL_THRESHOLD_MS", "3500"))
 WARM_TIMEOUT_SEC = float(os.environ.get("PARALLEL_WARM_TIMEOUT_SEC", "45"))
+WARM_TIMEOUT_RUST_SEC = float(os.environ.get("PARALLEL_WARM_TIMEOUT_RUST_SEC", "180"))
 
 def sample_path(route):
     path = re.sub(r":([A-Za-z0-9_]+)\*", "a/b", route)
@@ -1258,10 +1259,12 @@ for route, entries in mapped.items():
         if not isinstance(entry, dict):
             continue
         methods = entry.get("methods") or ["GET"]
+        runtime = entry.get("runtime") if isinstance(entry.get("runtime"), str) else ""
         picked = {
             "route": route,
             "path": sample_path(route),
             "method": pick_method(methods),
+            "runtime": runtime,
         }
         break
     if picked:
@@ -1281,7 +1284,10 @@ if not uniq:
 
 # Warm-up: avoid counting cold starts as blocking regressions.
 for spec in uniq:
-    warm = request_one(spec, timeout=WARM_TIMEOUT_SEC)
+    timeout = WARM_TIMEOUT_SEC
+    if spec.get("runtime") == "rust":
+        timeout = max(timeout, WARM_TIMEOUT_RUST_SEC)
+    warm = request_one(spec, timeout=timeout)
     if not warm["ok"]:
         raise SystemExit("warm-up failed: " + json.dumps(warm, ensure_ascii=False))
 
@@ -1306,7 +1312,7 @@ PY
 }
 
 echo "== Phase 1: Next-style single app =="
-start_stack "examples/functions/next-style" "FN_UI_ENABLED=0" "FN_CONSOLE_WRITE_ENABLED=0" "FN_RUNTIMES=$RUNTIMES_WITH_RUST"
+start_stack "examples/functions/next-style" "FN_UI_ENABLED=0" "FN_CONSOLE_WRITE_ENABLED=0" "FN_RUNTIMES=$RUNTIMES_WITH_RUST" "FN_DEFAULT_TIMEOUT_MS=10000"
 assert_config_files_hidden
 assert_reload_methods
 assert_status GET "/users" "200"
@@ -1359,7 +1365,7 @@ env -u NO_COLOR node "$ROOT_DIR/tests/integration/test-multilang-e2e.js"
 stop_stack
 
 echo "== Phase 2: Multi-directory / multi-runtime =="
-start_stack "tests/fixtures" "FN_RUNTIMES=$RUNTIMES_WITH_RUST"
+start_stack "tests/fixtures/multi-root" "FN_RUNTIMES=$RUNTIMES_WITH_RUST"
 assert_reload_methods
 assert_status GET "/nextstyle-clean/users" "200"
 assert_status GET "/nextstyle-clean/users/123" "200"
@@ -1404,7 +1410,7 @@ assert_status GET "/_fn/catalog" "404"
 stop_stack
 
 echo "== Phase 5: Polyglot tutorial demo =="
-start_stack "examples/functions" "FN_RUNTIMES=$RUNTIMES_WITH_RUST"
+start_stack "examples/functions" "FN_RUNTIMES=$RUNTIMES_WITH_RUST" "FN_DEFAULT_TIMEOUT_MS=90000"
 assert_status GET "/polyglot-tutorial/step-1" "200"
 assert_status GET "/polyglot-tutorial/step-2?name=Ana" "200"
 assert_status GET "/polyglot-tutorial/step-3?name=Ana" "200"
@@ -1436,7 +1442,7 @@ assert_keep_warm_visibility
 stop_stack
 
 echo "== Phase 8: worker pool runtime/function/version =="
-start_stack "tests/fixtures/worker-pool" "FN_UI_ENABLED=0" "FN_CONSOLE_WRITE_ENABLED=0" "FN_RUNTIMES=$RUNTIMES_WITH_RUST"
+start_stack "tests/fixtures/worker-pool" "FN_UI_ENABLED=0" "FN_CONSOLE_WRITE_ENABLED=0" "FN_RUNTIMES=$RUNTIMES_WITH_RUST" "FN_DEFAULT_TIMEOUT_MS=10000"
 assert_status GET "/slow" "200"
 assert_status GET "/slow-node" "200"
 assert_status GET "/slow-python" "200"

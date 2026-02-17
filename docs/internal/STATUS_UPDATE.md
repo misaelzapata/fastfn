@@ -335,7 +335,7 @@
 
 | Scope | Validation | Result | Evidence |
 |------|------------|--------|----------|
-| `hello_demo` public route contract | Swagger/OpenAPI exports `/hello-demo/{name}` and does not export legacy `/hello_demo/{wildcard}` | **OK** | `tests/integration/test-api.sh` (`assert_openapi_paths`) |
+| `hello_demo` public route contract | Swagger/OpenAPI exports `/hello-demo/{name}` and does not export underscore `/hello_demo/{wildcard}` | **OK** | `tests/integration/test-api.sh` (`assert_openapi_paths`) |
 | `hello_demo` interactive behavior | `GET /hello-demo/Juan` returns dynamic response with `"name":"Juan"` and `"message":"Hello Juan"` | **OK** | `tests/integration/test-api.sh` Phase 1 assertions |
 | Docker OpenAPI completeness | Every mapped catalog route is present in OpenAPI | **OK** | `bash tests/integration/test-api.sh`, `bash tests/integration/test-openapi-system.sh` |
 | Docker OpenAPI exactness | OpenAPI has no extra public paths beyond mapped catalog routes | **OK** | strict parity assertions added in `test-api.sh` + `test-openapi-system.sh` |
@@ -542,7 +542,7 @@ No unit tests for: `client`, `http_client`, `scheduler`, `jobs`, `watchdog`, `as
 
 - **Rust:** Zero handler unit tests (only integration/e2e coverage).
 - **Handler tests hardcode `examples/functions/` paths:** any rename breaks ~1000 lines of tests.
-- `test_usuarios_api.js` validates a legacy two-argument `handler(event, context)` pattern no longer standard.
+- `test_usuarios_api.js` validates a two-argument `handler(event, context)` compatibility pattern (no longer standard).
 
 #### 5.4 Missing integration tests
 

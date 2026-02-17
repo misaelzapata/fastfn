@@ -1,6 +1,6 @@
 local M = {}
 
-function M.parse_legacy_target(uri)
+function M.parse_fn_compat_target(uri)
   if type(uri) ~= "string" then
     return nil, nil
   end

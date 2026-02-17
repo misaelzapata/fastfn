@@ -1,9 +1,31 @@
-.git
-.gitignore
-openresty/logs
-__pycache__
-*.pyc
-*.pyo
-*.pyd
-node_modules
-.DS_Store
+##
+## Minimize build context for docker/openresty/Dockerfile.
+##
+## The runtime image only needs:
+## - OpenResty (nginx + Lua) sources under `openresty/`
+## - Runtime daemons under `srv/fn/runtimes/`
+## - Default functions root placeholder under `srv/fn/functions/`
+## - Docker entrypoints under `docker/openresty/`
+##
+## Everything else (docs, examples, tests, sdk, local artifacts) is mounted at
+## runtime or used outside the image build and should not slow `docker compose build`.
+##
+
+# Ignore everything by default.
+**
+
+# Allow the minimal build inputs.
+!.dockerignore
+!docker/
+!docker/openresty/
+!docker/openresty/Dockerfile
+!docker/openresty/start.sh
+!openresty/
+!openresty/**
+!srv/
+!srv/fn/
+!srv/fn/runtimes/
+!srv/fn/runtimes/**
+!srv/fn/functions/
+!srv/fn/functions/**
+

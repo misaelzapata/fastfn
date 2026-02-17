@@ -139,6 +139,8 @@ PY
 
 if [[ ! -x "$ROOT_DIR/bin/fastfn" ]]; then
   "$ROOT_DIR/cli/build.sh"
+elif find "$ROOT_DIR/cli" -type f -newer "$ROOT_DIR/bin/fastfn" -print -quit 2>/dev/null | grep -q .; then
+  "$ROOT_DIR/cli/build.sh"
 fi
 
 echo "== cli init auto-discovery smoke =="

@@ -37,7 +37,7 @@ class TestPythonMagicReturn(unittest.TestCase):
         self.assertEqual(body["error"], "bad")
 
     def test_explicit_response(self):
-        """Test legacy explicit response shape."""
+        """Test explicit response shape."""
         raw = {"status": 202, "body": "accepted", "headers": {"X-Custom": "1"}}
         resp = python_daemon._normalize_response(raw)
         self.assertEqual(resp["status"], 202)

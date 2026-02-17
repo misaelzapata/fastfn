@@ -1333,7 +1333,7 @@ function M.build(catalog, opts)
 
   local runtimes = (catalog and catalog.runtimes) or {}
   local runtime_order = opts.runtime_order or sorted_keys(runtimes)
-  local include_legacy = opts.include_legacy == true
+  local include_fn_paths = opts.include_fn_paths == true
   local include_internal = opts.include_internal == true
   local invoke_meta_lookup = opts.invoke_meta_lookup
   local seen_default = {}
@@ -1350,7 +1350,7 @@ function M.build(catalog, opts)
     }
   end
 
-  if include_legacy then
+  if include_fn_paths then
     for _, runtime in ipairs(runtime_order) do
       local runtime_entry = runtimes[runtime] or {}
       local functions = runtime_entry.functions or {}

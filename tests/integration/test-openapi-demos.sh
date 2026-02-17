@@ -69,6 +69,7 @@ start_stack() {
     cd "$ROOT_DIR"
     env \
       FN_SCHEDULER_ENABLED=0 \
+      FN_DEFAULT_TIMEOUT_MS="${FN_DEFAULT_TIMEOUT_MS:-90000}" \
       FN_RUNTIMES="${FN_RUNTIMES:-python,node,php,rust}" \
       EDGE_AUTH_TOKEN=dev-token \
       EDGE_FILTER_API_KEY=dev \
@@ -105,6 +106,8 @@ warm_heavy_endpoints() {
   warm_endpoint "/pack-qr-node?text=warm"
   warm_endpoint "/pack-qr?text=warm"
   warm_endpoint "/rust-profile?name=warm"
+  warm_endpoint "/polyglot-tutorial/step-4"
+  warm_endpoint "/polyglot-tutorial/step-5?name=warm"
   warm_endpoint "/polyglot-db-demo/items/demo" "404" "80" "DELETE"
 }
 
@@ -127,20 +130,20 @@ def query_param_map(op):
             out[p["name"]] = p
     return out
 
-telegram-send_get = ((paths.get("/telegram-send") or {}).get("get") or {})
-q = query_param_map(telegram-send_get)
+telegram_send_get = ((paths.get("/telegram-send") or {}).get("get") or {})
+q = query_param_map(telegram_send_get)
 for required in ("chat_id", "text", "dry_run"):
     assert required in q, f"telegram-send GET missing query example param: {required}"
 
-telegram-send_post = ((paths.get("/telegram-send") or {}).get("post") or {})
-rb = (((telegram-send_post.get("requestBody") or {}).get("content") or {}).get("application/json") or {})
+telegram_send_post = ((paths.get("/telegram-send") or {}).get("post") or {})
+rb = (((telegram_send_post.get("requestBody") or {}).get("content") or {}).get("application/json") or {})
 examples = rb.get("examples") or {}
 example_values = [v.get("value") for v in examples.values() if isinstance(v, dict)]
 has_chat = any(isinstance(v, dict) and ("chat_id" in v) for v in example_values)
 assert has_chat, "telegram-send POST must expose chat_id example payload"
 
-telegram-ai-reply_post = ((paths.get("/telegram-ai-reply") or {}).get("post") or {})
-rb = (((telegram-ai-reply_post.get("requestBody") or {}).get("content") or {}).get("application/json") or {})
+telegram_ai_reply_post = ((paths.get("/telegram-ai-reply") or {}).get("post") or {})
+rb = (((telegram_ai_reply_post.get("requestBody") or {}).get("content") or {}).get("application/json") or {})
 examples = rb.get("examples") or {}
 example_values = [v.get("value") for v in examples.values() if isinstance(v, dict)]
 has_update = False

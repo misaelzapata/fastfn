@@ -38,7 +38,7 @@ Socket mapping is configurable:
 - `FN_RUNTIME_SOCKETS` (JSON map runtime -> socket URI)
 - `FN_SOCKET_BASE_DIR` (base dir when map is not provided)
 
-Legacy route precedence:
+Compatibility route precedence:
 
 - If the same function name exists in multiple runtimes, `/fn/<name>` resolves to the first runtime in `FN_RUNTIMES`.
 - If `FN_RUNTIMES` is not set, it uses alphabetical order of runtime folders.

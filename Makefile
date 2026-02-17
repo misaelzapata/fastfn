@@ -1,29 +1,34 @@
 # FastFn Makefile
-# The single entry point for development, testing, and operations.
+# Convenience wrapper around the repo's canonical CI scripts.
+#
+# Notes:
+# - CI entrypoint: scripts/ci/test-pipeline.sh
+# - Core suite (unit + integration): cli/test-all.sh
+# - Playwright UI E2E: cli/test-playwright.sh
 
-.PHONY: help up down logs restart clean test test-unit test-e2e build-cli
+.PHONY: help up down logs restart clean dev build-cli test test-core test-unit test-unit-lua test-integration test-e2e
 
-# Default: print help
 help:
 	@echo "FastFn Management Commands"
 	@echo "--------------------------"
-	@echo "make up          - Start the stack (detach mode)"
-	@echo "make down        - Stop the stack"
-	@echo "make logs        - Follow logs"
-	@echo "make restart     - Restart stack"
-	@echo "make clean       - Remove containers and orphans"
-	@echo "make test        - Run ALL tests"
-	@echo "make test-unit   - Run unit tests only"
-	@echo "make test-e2e    - Run Playwright E2E tests"
-	@echo "make build-cli   - Build the Go CLI (requires go installed)"
-
-# --- Operations ---
+	@echo "make dev           - Run FastFn dev in the current directory"
+	@echo "make up            - Start the Docker stack (detach mode)"
+	@echo "make down          - Stop the Docker stack"
+	@echo "make logs          - Follow OpenResty logs"
+	@echo "make restart       - Restart OpenResty"
+	@echo "make clean         - Remove containers/networks and test artifacts"
+	@echo "make build-cli     - Build ./bin/fastfn"
+	@echo "make test          - Run the full local CI pipeline (includes UI E2E)"
+	@echo "make test-core     - Run core suite only (skip UI E2E)"
+	@echo "make test-unit     - Run unit tests only (fast loop)"
+	@echo "make test-unit-lua - Run Lua/OpenResty unit suite"
+	@echo "make test-integration - Run integration suite scripts"
+	@echo "make test-e2e      - Run Playwright UI E2E only"
 
 up:
 	docker compose up -d
 
 dev:
-	@echo "Starting dev mode..."
 	bin/fastfn dev .
 
 down:
@@ -37,31 +42,38 @@ restart:
 
 clean:
 	docker compose down --remove-orphans
-	rm -rf test-results/
-
-# --- Testing ---
-
-test: test-unit test-e2e test-integration
-
-test-unit:
-	@echo "Running Unit Tests..."
-	@if [ -f tests/unit/test_sdks.sh ]; then bash tests/unit/test_sdks.sh; fi
-	@echo "Running Runtime Handler Tests..."
-	@node tests/unit/test_node_handler.js
-	@if command -v php >/dev/null; then php tests/unit/test_php_handler.php; else echo "Skipping PHP handler (runtime not found)"; fi
-	@python3 tests/unit/test_python_handlers.py
-	@python3 tests/unit/test_rust_handler.py
-
-test-integration:
-	@echo "Running Integration Tests..."
-	@node tests/integration/test_multilang_e2e.js
-
-test-e2e:
-	@echo "Running E2E Tests..."
-	npm run test:e2e:ui
-
-# --- CLI Build (Placeholder) ---
+	rm -rf tests/results playwright-report
 
 build-cli:
-	@echo "Building fastfn CLI..."
-	cd cli && go build -o ../bin/fastfn
+	bash cli/build.sh
+
+# Full pipeline (mirrors CI) in one command.
+test:
+	RUN_UI_E2E=1 bash scripts/ci/test-pipeline.sh
+
+# Same as `make test`, but skips Playwright UI tests.
+test-core:
+	RUN_UI_E2E=0 bash scripts/ci/test-pipeline.sh
+
+# Fast local loop for most changes (no Docker stack required).
+test-unit:
+	python3 tests/unit/test-python-handlers.py
+	python3 tests/unit/test-go-handler.py
+	@if command -v node >/dev/null 2>&1; then env -u NO_COLOR node tests/unit/test-node-handler.js; else echo "skip: node unit (node not found)"; fi
+	@if command -v rustc >/dev/null 2>&1 && command -v cargo >/dev/null 2>&1; then python3 tests/unit/test-rust-handler.py; else echo "skip: rust unit (rust toolchain not found)"; fi
+	@if command -v php >/dev/null 2>&1; then php tests/unit/test-php-handler.php; else echo "skip: php unit (php not found)"; fi
+	bash tests/unit/test-sdks.sh
+
+test-unit-lua:
+	bash cli/test-lua.sh
+
+test-integration:
+	bash tests/integration/test-api.sh
+	bash tests/integration/test-openapi-system.sh
+	bash tests/integration/test-openapi-native.sh
+	bash tests/integration/test-openapi-demos.sh
+	bash tests/integration/test-hotreload-runtime-matrix.sh
+	bash tests/integration/test-cli-init-auto.sh
+
+test-e2e:
+	bash cli/test-playwright.sh

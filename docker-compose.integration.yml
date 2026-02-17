@@ -6,8 +6,11 @@ services:
     # Integration tests `exec` into the container and call 127.0.0.1:8080 internally,
     # so we intentionally do NOT publish a host port here (avoids clashing with dev stacks).
     volumes:
-      - ./srv/fn/functions:/app/srv/fn/functions
+      # The test runner is expected to provide a throwaway functions root via FN_FUNCTIONS_ROOT
+      # (usually a temp copy of examples/fixtures). This avoids mutating tracked files.
+      - ${FN_FUNCTIONS_ROOT:-./srv/fn/functions}:/app/srv/fn/functions
     environment:
+      FN_RUNTIMES: ${FN_RUNTIMES:-python,node,php,lua,rust}
       FN_UI_ENABLED: ${FN_UI_ENABLED:-0}
       FN_CONSOLE_API_ENABLED: ${FN_CONSOLE_API_ENABLED:-1}
       FN_CONSOLE_WRITE_ENABLED: ${FN_CONSOLE_WRITE_ENABLED:-1}
@@ -15,14 +18,21 @@ services:
       FN_ADMIN_TOKEN: ${FN_ADMIN_TOKEN:-}
       FN_STRICT_FS: ${FN_STRICT_FS:-1}
       FN_STRICT_FS_ALLOW: ${FN_STRICT_FS_ALLOW:-}
-      FN_PREINSTALL_PY_DEPS_ON_START: ${FN_PREINSTALL_PY_DEPS_ON_START:-1}
-      FN_PREINSTALL_NODE_DEPS_ON_START: ${FN_PREINSTALL_NODE_DEPS_ON_START:-1}
+      # Docker integration runs exercise cold-start paths; keep the default timeout
+      # high enough to avoid false failures while runtimes spin up workers.
+      FN_DEFAULT_TIMEOUT_MS: ${FN_DEFAULT_TIMEOUT_MS:-8000}
+      FN_PREINSTALL_PY_DEPS_ON_START: ${FN_PREINSTALL_PY_DEPS_ON_START:-0}
+      # Keep integration startup deterministic and avoid background npm installs
+      # interfering with early runtime calls.
+      FN_PREINSTALL_NODE_DEPS_ON_START: ${FN_PREINSTALL_NODE_DEPS_ON_START:-0}
       FN_HTTP_VERIFY_TLS: ${FN_HTTP_VERIFY_TLS:-1}
       FN_ASSISTANT_ENABLED: ${FN_ASSISTANT_ENABLED:-0}
       FN_ASSISTANT_PROVIDER: ${FN_ASSISTANT_PROVIDER:-mock}
+      # OpenAPI options (opt-in compatibility paths)
+      FN_OPENAPI_INCLUDE_FN_PATHS: ${FN_OPENAPI_INCLUDE_FN_PATHS:-0}
+      FN_OPENAPI_INCLUDE_INTERNAL: ${FN_OPENAPI_INCLUDE_INTERNAL:-0}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_API_BASE: ${TELEGRAM_API_BASE:-}
-

@@ -58,9 +58,9 @@ func TestInitCreatesRuntimeScopedFunctionDirs(t *testing.T) {
 			t.Fatalf("expected entry file at %s: %v", entry, err)
 		}
 
-		legacyPath := filepath.Join(tmpDir, tc.fnName)
-		if _, err := os.Stat(legacyPath); err == nil {
-			t.Fatalf("unexpected legacy function dir %s", legacyPath)
+		flatPath := filepath.Join(tmpDir, tc.fnName)
+		if _, err := os.Stat(flatPath); err == nil {
+			t.Fatalf("unexpected flat function dir %s", flatPath)
 		}
 	}
 }

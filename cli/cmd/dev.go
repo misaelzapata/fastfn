@@ -18,6 +18,7 @@ import (
 var dryRun bool
 var devForceURL bool
 var devBuild bool
+var devNativeMode bool
 
 func resolveDevTargetDir(args []string) string {
 	if len(args) > 0 {
@@ -49,7 +50,7 @@ func findProjectRoot(startPath string) (string, error) {
 		if _, err := os.Stat(filepath.Join(current, "docker-compose.yml")); err == nil {
 			return current, nil
 		}
-		
+
 		parent := filepath.Dir(current)
 		if parent == current {
 			return "", fmt.Errorf("could not find docker-compose.yml in any parent directory")
@@ -63,9 +64,6 @@ var devCmd = &cobra.Command{
 	Short: "Start development environment with hot-reload",
 	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		// 0. Pre-flight checks
-		checkSystemRequirements()
-
 		applyConfiguredOpenAPIIncludeInternal(func(includeInternal bool) {
 			fmt.Printf("Using openapi-include-internal from config: %t\n", includeInternal)
 		})
@@ -77,21 +75,56 @@ var devCmd = &cobra.Command{
 			fmt.Println("force-url enabled (will allow config/policy routes to override existing URLs)")
 		}
 
-		// 1. Resolve absolute path
+		// Resolve absolute path.
 		targetDir := resolveDevTargetDir(args)
 		absPath, err := filepath.Abs(targetDir)
 		if err != nil {
 			log.Fatalf("Failed to resolve absolute path: %v", err)
 		}
+		if _, err := os.Stat(absPath); err != nil {
+			log.Fatalf("Invalid functions directory: %s", absPath)
+		}
 
-		// 2. Resolve volume mounts
+		if devNativeMode {
+			if dryRun || devBuild {
+				log.Fatal("--dry-run/--build are only supported in Docker mode (omit --native)")
+			}
+			if os.Getenv("FN_PUBLIC_BASE_URL") == "" {
+				if baseURL := configuredPublicBaseURL(); baseURL != "" {
+					_ = os.Setenv("FN_PUBLIC_BASE_URL", baseURL)
+					fmt.Printf("Using public base URL from config: %s\n", baseURL)
+				}
+			}
+			fmt.Println("Running in NATIVE mode (embedded runtime stack)...")
+			if err := runNative(absPath); err != nil {
+				log.Fatalf("Native dev failed: %v", err)
+			}
+			return
+		}
+
+		// Docker mode: ensure Docker is available and the daemon is running.
+		// Resolve volume mounts.
 		mounts := scanForMounts(absPath)
 		if len(mounts) == 0 {
 			log.Fatalf("Invalid functions directory: %s", absPath)
 		}
 
-		// 3. Find docker-compose.yml (recursively up)
-		projectRoot, err := findProjectRoot(absPath)
+		// Find docker-compose.yml (recursively up).
+		//
+		// We prefer starting from the current working directory so repo developers
+		// can run `fastfn dev /tmp/project` from the repo root and still use the
+		// repo stack. If that fails, fall back to scanning from the target dir.
+		projectRoot := ""
+		if wd, wdErr := os.Getwd(); wdErr == nil {
+			if root, rootErr := findProjectRoot(wd); rootErr == nil {
+				projectRoot = root
+			}
+		}
+		if projectRoot == "" {
+			projectRoot, err = findProjectRoot(absPath)
+		} else {
+			err = nil
+		}
 		var composePath string
 
 		if err == nil {
@@ -101,10 +134,10 @@ var devCmd = &cobra.Command{
 		} else {
 			// Portable case (Homebrew): Generate temporary compose file
 			fmt.Println("No local docker-compose.yml found. Using portable mode...")
-			
+
 			// For now, fail as we need the image to exist
 			log.Fatal("Portable mode requires 'ghcr.io/fastfn/runtime' image which is not yet published.\nPlease run from within the repo.")
-			
+
 			/* FUTURE IMPLEMENTATION:
 			tempDir, err := os.MkdirTemp("", "fastfn-dev-*")
 			if err != nil {
@@ -117,10 +150,10 @@ var devCmd = &cobra.Command{
 				log.Fatalf("Failed to generate docker-compose.yml: %v", err)
 			}
 			composePath = genPath
-			projectRoot = tempDir 
+			projectRoot = tempDir
 			*/
 		}
-		
+
 		fmt.Printf("Using configuration from: %s\n", composePath)
 
 		// 4. Parse YAML
@@ -143,12 +176,12 @@ var devCmd = &cobra.Command{
 		if !ok {
 			log.Fatal("Invalid docker-compose.yml: no openresty service")
 		}
-		
+
 		volumes, ok := openresty["volumes"].([]interface{})
 		if !ok {
 			volumes = []interface{}{}
 		}
-		
+
 		// Filter out existing /app/srv/fn/functions mounts
 		newVolumes := []interface{}{}
 		for _, v := range volumes {
@@ -158,7 +191,7 @@ var devCmd = &cobra.Command{
 			}
 			newVolumes = append(newVolumes, v)
 		}
-		
+
 		// Add our calculated mounts
 		for _, m := range mounts {
 			newVolumes = append(newVolumes, m)
@@ -176,7 +209,7 @@ var devCmd = &cobra.Command{
 			envMap["FN_FORCE_URL"] = os.Getenv("FN_FORCE_URL")
 			openresty["environment"] = envMap
 		}
-		
+
 		// Encode back to YAML
 		modifiedYAML, err := yaml.Marshal(compose)
 		if err != nil {
@@ -189,6 +222,9 @@ var devCmd = &cobra.Command{
 			return
 		}
 
+		// Docker mode: ensure Docker is available and the daemon is running.
+		checkSystemRequirements()
+
 		// 6. Run docker compose
 		dockerArgs := []string{"compose", "-f", "-", "up"}
 		if devBuild {
@@ -198,7 +234,7 @@ var devCmd = &cobra.Command{
 		dockerCmd.Stdin = bytes.NewReader(modifiedYAML)
 		dockerCmd.Stdout = os.Stdout
 		dockerCmd.Stderr = os.Stderr
-		
+
 		// Set working dir to where the original compose file is
 		dockerCmd.Dir = filepath.Dir(composePath)
 
@@ -218,15 +254,35 @@ func mountProjectRoot(rootPath string) []string {
 	return []string{fmt.Sprintf("%s:/app/srv/fn/functions", rootPath)}
 }
 
+func hasRuntimeLayoutDirs(rootPath string) bool {
+	for _, dir := range []string{"node", "python", "php", "lua", "rust", "go"} {
+		if info, err := os.Stat(filepath.Join(rootPath, dir)); err == nil && info.IsDir() {
+			return true
+		}
+	}
+	return false
+}
+
 // scanForMounts returns a list of "hostPath:containerPath" strings.
 // Dual/hybrid behavior:
-// - file-based routes: mount root to preserve route discovery.
-// - fn.config functions: mount per runtime+function path.
-// - mixed projects: include both mount styles.
+//   - If the target dir uses the standard runtime layout (node/, python/, etc), mount the
+//     root so hot-reload can discover newly created functions without restarting.
+//   - If the target dir is a single function leaf (has fn.config.json), mount it into
+//     the runtime layout location inside the container.
+//   - Otherwise, fall back to mounting discovered fn.config functions individually.
 func scanForMounts(rootPath string) []string {
 	info, err := os.Stat(rootPath)
 	if err != nil || !info.IsDir() {
 		return nil
+	}
+
+	if isFunction(rootPath) {
+		rt, name := getFunctionDetails(rootPath)
+		return []string{fmt.Sprintf("%s:/app/srv/fn/functions/%s/%s", rootPath, rt, name)}
+	}
+
+	if hasRuntimeLayoutDirs(rootPath) {
+		return mountProjectRoot(rootPath)
 	}
 
 	functions, err := discovery.Scan(rootPath, nil)
@@ -311,6 +367,7 @@ func getFunctionDetails(path string) (string, string) {
 
 func init() {
 	rootCmd.AddCommand(devCmd)
+	devCmd.Flags().BoolVar(&devNativeMode, "native", false, "Run on host using the embedded runtime stack (no Docker)")
 	devCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Print generated docker-compose config without running")
 	devCmd.Flags().BoolVar(&devForceURL, "force-url", false, "Allow config/policy routes to override existing mapped URLs (unsafe; prefer fixing route conflicts)")
 	devCmd.Flags().BoolVar(&devBuild, "build", false, "Build the runtime image before starting the dev server (slower)")

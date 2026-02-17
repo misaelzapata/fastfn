@@ -100,6 +100,34 @@ func TestScanForMounts_FnConfigSubdirMountsRuntimeFunctionPath(t *testing.T) {
 	}
 }
 
+func TestScanForMounts_RuntimeLayoutDirsMountsProjectRoot(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "fastfn-test-runtime-layout-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	fnDir := filepath.Join(tmpDir, "node", "alpha")
+	if err := os.MkdirAll(fnDir, 0755); err != nil {
+		t.Fatalf("mkdir failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(fnDir, "fn.config.json"), []byte(`{"name":"alpha","entrypoint":"handler.js"}`), 0644); err != nil {
+		t.Fatalf("write fn.config.json failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(fnDir, "handler.js"), []byte("exports.handler = async () => ({ status: 200, body: '{}' });"), 0644); err != nil {
+		t.Fatalf("write handler failed: %v", err)
+	}
+
+	mounts := scanForMounts(tmpDir)
+	if len(mounts) != 1 {
+		t.Fatalf("Expected 1 mount (project root), got %d: %v", len(mounts), mounts)
+	}
+	want := tmpDir + ":/app/srv/fn/functions"
+	if mounts[0] != want {
+		t.Fatalf("unexpected mount: got=%q want=%q", mounts[0], want)
+	}
+}
+
 func TestScanForMounts_InvalidDirectoryReturnsNil(t *testing.T) {
 	mounts := scanForMounts(filepath.Join(os.TempDir(), "fastfn-missing-dir"))
 	if mounts != nil {

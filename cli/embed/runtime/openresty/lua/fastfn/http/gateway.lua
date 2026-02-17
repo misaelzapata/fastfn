@@ -445,14 +445,14 @@ local function host_is_allowed(allowed_hosts)
 end
 
 local request_uri = ngx.var.uri or ""
-local legacy_name, legacy_version = utils.parse_legacy_target(request_uri)
+local compat_name, compat_version = utils.parse_fn_compat_target(request_uri)
 local runtime
 local fn_name
 local requested_version
 local path_params
 local resolve_err
 
--- Prefer mapped routes for normal traffic; fall back to legacy /fn/<name> if present.
+-- Prefer mapped routes for normal traffic; fall back to /fn/<name> compat paths if present.
 runtime, fn_name, requested_version, path_params, resolve_err = routes_mod.resolve_mapped_target(
   request_uri,
   ngx.req.get_method(),
@@ -471,12 +471,12 @@ if not runtime then
     return
   end
 
-  if legacy_name then
-    local legacy_runtime, legacy_resolved_version = routes_mod.resolve_legacy_target(legacy_name, legacy_version)
-    if legacy_runtime then
-      runtime = legacy_runtime
-      fn_name = legacy_name
-      requested_version = legacy_resolved_version
+  if compat_name then
+    local compat_runtime, compat_resolved_version = routes_mod.resolve_fn_compat_target(compat_name, compat_version)
+    if compat_runtime then
+      runtime = compat_runtime
+      fn_name = compat_name
+      requested_version = compat_resolved_version
       path_params = {}
     end
   end

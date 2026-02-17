@@ -229,15 +229,15 @@ end
 local function test_gateway_utils()
   local utils = require("fastfn.core.gateway_utils")
 
-  local name, version = utils.parse_legacy_target("/fn/hello")
+  local name, version = utils.parse_fn_compat_target("/fn/hello")
   assert_eq(name, "hello", "parse name")
   assert_eq(version, nil, "parse nil version")
 
-  local name2, version2 = utils.parse_legacy_target("/fn/hello@v2")
+  local name2, version2 = utils.parse_fn_compat_target("/fn/hello@v2")
   assert_eq(name2, "hello", "parse versioned name")
   assert_eq(version2, "v2", "parse version")
 
-  local n3 = utils.parse_legacy_target("/bad/path")
+  local n3 = utils.parse_fn_compat_target("/bad/path")
   assert_eq(n3, nil, "parse invalid")
 
   assert_eq(utils.resolve_numeric("1500", nil, 2500, 999), 1500, "resolve version")
@@ -414,11 +414,11 @@ local function test_openapi_builder()
   assert_eq(spec.info.title, "Test API", "openapi title")
   assert_eq(spec.info.version, "test", "openapi info version")
 
-  assert_true(spec.paths["/fn/hello"] == nil, "legacy default hello path hidden")
-  assert_true(spec.paths["/fn/hello@v2"] == nil, "legacy versioned hello path hidden")
-  assert_true(spec.paths["/fn/risk-score"] == nil, "legacy risk path hidden")
-  assert_true(spec.paths["/fn/php-profile"] == nil, "legacy php path hidden")
-  assert_true(spec.paths["/fn/rust-profile"] == nil, "legacy rust path hidden")
+  assert_true(spec.paths["/fn/hello"] == nil, "/fn compat path hidden (default hello)")
+  assert_true(spec.paths["/fn/hello@v2"] == nil, "/fn compat path hidden (versioned hello)")
+  assert_true(spec.paths["/fn/risk-score"] == nil, "/fn compat path hidden (risk-score)")
+  assert_true(spec.paths["/fn/php-profile"] == nil, "/fn compat path hidden (php-profile)")
+  assert_true(spec.paths["/fn/rust-profile"] == nil, "/fn compat path hidden (rust-profile)")
   assert_true(spec.paths["/api/hello"] ~= nil, "mapped route path")
   assert_true(spec.paths["/api/hello-v2"] ~= nil, "mapped version route path")
   assert_true(spec.paths["/api/dispatch"] ~= nil, "mapped route multi-entry path")
@@ -699,9 +699,9 @@ local function test_routes_discovery_and_host_routing()
     local rt_base = routes.resolve_mapped_target("/blog", "GET", { host = "api.example.com" })
     assert_eq(rt_base, "python", "optional catch-all base route")
 
-    local legacy_rt, legacy_ver = routes.resolve_legacy_target("hello", nil)
-    assert_eq(legacy_rt, "node", "legacy target uses runtime order")
-    assert_eq(legacy_ver, nil, "legacy target version default")
+    local compat_rt, compat_ver = routes.resolve_fn_compat_target("hello", nil)
+    assert_eq(compat_rt, "node", "/fn compat target uses runtime order")
+    assert_eq(compat_ver, nil, "/fn compat target version default")
 
     local file_policy = routes.resolve_function_policy("python", "get.users.[id].py", nil)
     assert_true(type(file_policy) == "table", "file target policy fallback")
@@ -2224,14 +2224,21 @@ local function test_jobs_module_queue_and_result()
       return nil
     end
 
-    local routes_stub = {
-      get_config = function()
-        return { functions_root = root, runtimes = { lua = runtime_cfg } }
-      end,
-      discover_functions = function()
-        return {
-          mapped_routes = {
-            ["/mapped/:id"] = {
+	    local routes_stub = {
+	      get_config = function()
+	        -- Ensure job specs/results are written under this test's temp dir rather than shared /tmp paths.
+	        return { functions_root = root, socket_base_dir = root, runtimes = { lua = runtime_cfg } }
+	      end,
+	      resolve_fn_compat_target = function(fn_name, version)
+	        if fn_name == "demo" then
+	          return "lua", version
+	        end
+	        return nil, nil
+	      end,
+	      discover_functions = function()
+	        return {
+	          mapped_routes = {
+	            ["/mapped/:id"] = {
               { runtime = "lua", fn_name = "demo", version = nil, methods = { "GET" } },
             },
           },
@@ -2388,10 +2395,20 @@ local function test_jobs_module_queue_and_result()
         assert_eq(cancel_status, 200, "jobs cancel status")
         assert_eq(canceled.status, "canceled", "jobs cancel state")
 
-        local missing_runtime, missing_runtime_status, missing_runtime_err = jobs.enqueue({ name = "demo" })
-        assert_eq(missing_runtime, nil, "jobs missing runtime response")
-        assert_eq(missing_runtime_status, 400, "jobs missing runtime status")
-        assert_eq(missing_runtime_err, "runtime is required", "jobs missing runtime error")
+        local missing_runtime_meta, missing_runtime_status, missing_runtime_err = jobs.enqueue({
+          name = "demo",
+          params = { id = "resolved" },
+        })
+        assert_eq(missing_runtime_err, nil, "jobs runtime optional error")
+        assert_eq(missing_runtime_status, 201, "jobs runtime optional status")
+        assert_eq(missing_runtime_meta.runtime, "lua", "jobs runtime optional resolved runtime")
+        assert_eq(missing_runtime_meta.route, "/mapped/resolved", "jobs runtime optional resolved route")
+        -- Prevent this queued job from interfering with later queue_tick() assertions.
+        local canceled_missing, canceled_missing_status = jobs.cancel(missing_runtime_meta.id)
+        assert_eq(canceled_missing_status, 200, "jobs runtime optional cancel status")
+        assert_eq(canceled_missing.status, "canceled", "jobs runtime optional cancel state")
+        -- Drain the canceled job from the in-memory queue so later queue assertions are deterministic.
+        queue_tick(false)
 
         local missing_param, missing_param_status, missing_param_err = jobs.enqueue({
           runtime = "lua",
@@ -2517,16 +2534,22 @@ local function test_scheduler_tick_and_snapshot()
       }
     end
 
-    local routes_stub = {
-      get_config = function()
-        return {
-          runtimes = { lua = runtime_cfg },
-        }
-      end,
-      discover_functions = function()
-        return {
-          runtimes = {
-            lua = {
+	    local routes_stub = {
+	      get_config = function()
+	        return {
+	          runtimes = { lua = runtime_cfg },
+	        }
+	      end,
+	      resolve_fn_compat_target = function(fn_name, version)
+	        if fn_name == "demo" then
+	          return "lua", version
+	        end
+	        return nil, nil
+	      end,
+	      discover_functions = function()
+	        return {
+	          runtimes = {
+	            lua = {
               functions = {
                 demo = {
                   has_default = true,
@@ -2691,14 +2714,20 @@ local function test_scheduler_cron_and_retry_backoff()
     local runtime_cfg = { socket = "inprocess:lua", timeout_ms = 2500, in_process = true }
     local runtime_up = true
 
-    local routes_stub = {
-      get_config = function()
-        return { runtimes = { lua = runtime_cfg } }
-      end,
-      discover_functions = function()
-        return {
-          runtimes = {
-            lua = {
+	    local routes_stub = {
+	      get_config = function()
+	        return { runtimes = { lua = runtime_cfg } }
+	      end,
+	      resolve_fn_compat_target = function(fn_name, version)
+	        if fn_name == "demo" then
+	          return "lua", version
+	        end
+	        return nil, nil
+	      end,
+	      discover_functions = function()
+	        return {
+	          runtimes = {
+	            lua = {
               functions = {
                 demo = {
                   has_default = true,
@@ -2913,14 +2942,20 @@ local function test_scheduler_cron_timezone_and_invalid_timezone()
       return nil
     end
 
-    local routes_stub = {
-      get_config = function()
-        return { runtimes = { lua = runtime_cfg } }
-      end,
-      discover_functions = function()
-        return {
-          runtimes = {
-            lua = {
+	    local routes_stub = {
+	      get_config = function()
+	        return { runtimes = { lua = runtime_cfg } }
+	      end,
+	      resolve_fn_compat_target = function(fn_name, version)
+	        if fn_name == "offset" or fn_name == "badtz" then
+	          return "lua", version
+	        end
+	        return nil, nil
+	      end,
+	      discover_functions = function()
+	        return {
+	          runtimes = {
+	            lua = {
               functions = {
                 offset = { has_default = true, versions = {}, policy = policy_for("offset") },
                 badtz = { has_default = true, versions = {}, policy = policy_for("badtz") },
@@ -3035,14 +3070,20 @@ local function test_scheduler_persist_state_roundtrip()
     mkdir_p(root)
 
     local runtime_cfg = { socket = "inprocess:lua", timeout_ms = 2500, in_process = true }
-    local routes_stub = {
-      get_config = function()
-        return { functions_root = root, runtimes = { lua = runtime_cfg } }
-      end,
-      discover_functions = function()
-        return {
-          runtimes = {
-            lua = {
+	    local routes_stub = {
+	      get_config = function()
+	        return { functions_root = root, runtimes = { lua = runtime_cfg } }
+	      end,
+	      resolve_fn_compat_target = function(fn_name, version)
+	        if fn_name == "demo" then
+	          return "lua", version
+	        end
+	        return nil, nil
+	      end,
+	      discover_functions = function()
+	        return {
+	          runtimes = {
+	            lua = {
               functions = {
                 demo = {
                   has_default = true,

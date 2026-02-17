@@ -747,13 +747,21 @@ function M.enqueue(payload)
   if verr then
     return nil, 400, verr
   end
-local runtime, rerr = ensure_runtime(payload.runtime)
-if runtime == nil then
-  return nil, 400, "runtime is required"
-end
-if rerr then
-  return nil, 400, rerr
-end
+  local runtime_raw = payload.runtime
+  local runtime, rerr = ensure_runtime(runtime_raw)
+  if runtime == nil then
+    -- Backward-compatible: allow omitting runtime for job enqueue. Resolve using
+    -- configured runtime order.
+    local resolved_rt, resolved_ver = routes.resolve_fn_compat_target(name, version)
+    if not resolved_rt then
+      return nil, 404, "unknown function or version"
+    end
+    runtime = resolved_rt
+    version = resolved_ver
+  end
+  if rerr then
+    return nil, 400, rerr
+  end
   local method, merr = normalize_method(payload.method)
   if not method then
     return nil, 400, merr

@@ -7,6 +7,19 @@ if [[ -n "${FORCE_COLOR:-}" && -n "${NO_COLOR:-}" ]]; then
   unset NO_COLOR
 fi
 
+ensure_cli_built() {
+  if [[ ! -x "$ROOT_DIR/bin/fastfn" ]]; then
+    "$ROOT_DIR/cli/build.sh"
+    return
+  fi
+  if find "$ROOT_DIR/cli" -type f -newer "$ROOT_DIR/bin/fastfn" -print -quit 2>/dev/null | grep -q .; then
+    "$ROOT_DIR/cli/build.sh"
+    return
+  fi
+}
+
+ensure_cli_built
+
 echo "== unit: python =="
 python3 "$ROOT_DIR/tests/unit/test-python-handlers.py"
 
@@ -21,15 +34,18 @@ if command -v cargo >/dev/null 2>&1 && command -v rustc >/dev/null 2>&1; then
   python3 "$ROOT_DIR/tests/unit/test-rust-handler.py"
 elif command -v docker >/dev/null 2>&1; then
   echo "== unit: rust (docker fallback) =="
-  PROJECT_NAME="${COMPOSE_PROJECT_NAME:-fastfn_rust_test_${RANDOM}_$$}"
-  if docker compose -p "$PROJECT_NAME" -f "$ROOT_DIR/docker-compose.yml" run --rm --no-deps \
-    -v "$ROOT_DIR:/app" \
-    openresty \
-    python3 /app/tests/unit/test-rust-handler.py; then
-    :
-  else
-    echo "== unit: rust (skipped, host rust missing and docker fallback failed) =="
-  fi
+  (
+    set -e
+    PROJECT_NAME="${COMPOSE_PROJECT_NAME:-fastfn_rust_test_${RANDOM}_$$}"
+    DC=(docker compose -p "$PROJECT_NAME" -f "$ROOT_DIR/docker-compose.yml")
+    cleanup() { "${DC[@]}" down --remove-orphans >/dev/null 2>&1 || true; }
+    trap cleanup EXIT
+    if "${DC[@]}" run --rm --no-deps -v "$ROOT_DIR:/app" openresty python3 /app/tests/unit/test-rust-handler.py; then
+      :
+    else
+      echo "== unit: rust (skipped, host rust missing and docker fallback failed) =="
+    fi
+  )
 else
   echo "== unit: rust (skipped, rust toolchain not found) =="
 fi
@@ -39,15 +55,18 @@ if command -v php >/dev/null 2>&1; then
   php "$ROOT_DIR/tests/unit/test-php-handler.php"
 elif command -v docker >/dev/null 2>&1; then
   echo "== unit: php (docker fallback) =="
-  PROJECT_NAME="${COMPOSE_PROJECT_NAME:-fastfn_php_test_${RANDOM}_$$}"
-  if docker compose -p "$PROJECT_NAME" -f "$ROOT_DIR/docker-compose.yml" run --rm --no-deps \
-    -v "$ROOT_DIR:/app" \
-    openresty \
-    php /app/tests/unit/test-php-handler.php; then
-    :
-  else
-    echo "== unit: php (skipped, host php missing and docker fallback failed) =="
-  fi
+  (
+    set -e
+    PROJECT_NAME="${COMPOSE_PROJECT_NAME:-fastfn_php_test_${RANDOM}_$$}"
+    DC=(docker compose -p "$PROJECT_NAME" -f "$ROOT_DIR/docker-compose.yml")
+    cleanup() { "${DC[@]}" down --remove-orphans >/dev/null 2>&1 || true; }
+    trap cleanup EXIT
+    if "${DC[@]}" run --rm --no-deps -v "$ROOT_DIR:/app" openresty php /app/tests/unit/test-php-handler.php; then
+      :
+    else
+      echo "== unit: php (skipped, host php missing and docker fallback failed) =="
+    fi
+  )
 else
   echo "== unit: php (skipped, php binary not found) =="
 fi

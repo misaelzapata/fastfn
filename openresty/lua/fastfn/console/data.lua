@@ -615,6 +615,14 @@ local function normalize_routes_from_invoke(invoke_cfg)
   if type(invoke_cfg) ~= "table" then
     return nil
   end
+  local raw_route = invoke_cfg.route
+  if raw_route == cjson.null then
+    raw_route = nil
+  end
+  local raw_routes = invoke_cfg.routes
+  if raw_routes == cjson.null then
+    raw_routes = nil
+  end
   local routes_out = {}
   local seen = {}
 
@@ -630,16 +638,19 @@ local function normalize_routes_from_invoke(invoke_cfg)
     end
   end
 
-  if invoke_cfg.route ~= nil then
-    merge(parse_invoke_routes(invoke_cfg.route))
+  if raw_route ~= nil then
+    merge(parse_invoke_routes(raw_route))
   end
-  if invoke_cfg.routes ~= nil then
-    merge(parse_invoke_routes(invoke_cfg.routes))
+  if raw_routes ~= nil then
+    merge(parse_invoke_routes(raw_routes))
   end
 
   if #routes_out == 0 then
-    if invoke_cfg.route ~= nil or invoke_cfg.routes ~= nil then
-      return {}
+    if raw_route ~= nil or raw_routes ~= nil then
+      -- Explicit "clear routes" intent. Persisting an empty Lua table would be
+      -- encoded as `{}` by cjson, which is ambiguous. Use cjson.null as a
+      -- deletion sentinel and remove the key during merge.
+      return cjson.null
     end
     return nil
   end
@@ -655,7 +666,7 @@ local function validate_invoke_routes_payload(invoke_cfg)
   local had_invalid = false
 
   local function check(raw)
-    if raw == nil then
+    if raw == nil or raw == cjson.null then
       return
     end
     provided = true
@@ -810,7 +821,7 @@ local function normalize_invoke_config(invoke_cfg)
     end
   end
   local routes_cfg = normalize_routes_from_invoke(invoke_cfg)
-  if routes_cfg ~= nil then
+  if routes_cfg ~= nil and routes_cfg ~= cjson.null then
     out.routes = routes_cfg
   end
   if invoke_cfg.allow_hosts ~= nil then
@@ -931,7 +942,7 @@ local function merge_invoke(route, hint_invoke, config_invoke)
     push_unique(r)
   end
 
-  return {
+  local out = {
     summary = summary,
     methods = methods,
     default_method = default_method,
@@ -941,12 +952,17 @@ local function merge_invoke(route, hint_invoke, config_invoke)
     content_type = content_type,
     route = primary_route,
     canonical_route = route,
-    mapped_routes = mapped_routes,
     allow_hosts = allow_hosts,
     public_routes = public_routes,
     full_route_example = full_route,
     curl_get_example = "curl -sS 'http://127.0.0.1:8080" .. full_route .. "'",
   }
+  -- Only include configured mapped_routes when non-empty. Empty arrays are
+  -- represented by omission to avoid `{}` vs `[]` ambiguity in JSON encoding.
+  if type(mapped_routes) == "table" and #mapped_routes > 0 then
+    out.mapped_routes = mapped_routes
+  end
+  return out
 end
 
 local function build_fn_dir(functions_root, runtime, name, version)
@@ -1735,12 +1751,18 @@ function M.function_detail(runtime, name, version, include_code)
   local hint_invoke = parse_handler_hints(app_path)
   local config_invoke = normalize_invoke_config(invoke_cfg)
   local invoke = merge_invoke(route, hint_invoke, config_invoke)
-  local effective_mapped_routes = merge_unique_routes(invoke.mapped_routes or {}, mapped_public_routes)
+  local configured_mapped_routes = type(invoke.mapped_routes) == "table" and invoke.mapped_routes or {}
+  local effective_mapped_routes = merge_unique_routes(configured_mapped_routes, mapped_public_routes)
   local effective_public_routes = merge_unique_routes(invoke.public_routes or {}, mapped_public_routes)
   if #effective_public_routes == 0 then
     effective_public_routes = { route }
   end
-  invoke.mapped_routes = effective_mapped_routes
+  -- Keep invoke.mapped_routes as "configured routes" (from fn.config.json). The
+  -- effective/public mappings are exposed separately to avoid mixing operator
+  -- intent with current routing state.
+  invoke.mapped_public_routes = mapped_public_routes
+  invoke.effective_mapped_routes = effective_mapped_routes
+  invoke.effective_public_routes = effective_public_routes
   invoke.public_routes = effective_public_routes
   local public_urls = {}
   for _, r in ipairs(effective_public_routes) do
@@ -1897,7 +1919,11 @@ function M.set_function_config(runtime, name, version, payload)
     elseif k == "invoke" and type(v) == "table" then
       local current = type(base.invoke) == "table" and copy_table(base.invoke) or {}
       for ik, iv in pairs(v) do
-        current[ik] = iv
+        if ik == "routes" and iv == cjson.null then
+          current[ik] = nil
+        else
+          current[ik] = iv
+        end
       end
       base.invoke = current
     else

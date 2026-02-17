@@ -4,15 +4,19 @@ services:
       context: .
       dockerfile: docker/openresty/Dockerfile
     ports:
-      - "8080:8080"
+      - "${FN_HOST_PORT:-8080}:8080"
     volumes:
-      - ./examples/functions:/app/srv/fn/functions
+      # Use a writable throwaway functions root by default to avoid mutating tracked examples.
+      # To run the shipped demos with docker-compose directly:
+      #   FN_FUNCTIONS_ROOT=./examples/functions docker compose up
+      - ${FN_FUNCTIONS_ROOT:-./srv/fn/functions}:/app/srv/fn/functions
     environment:
       FN_RUNTIMES: ${FN_RUNTIMES:-python,node,php,lua}
       FN_RUNTIME_SOCKETS: ${FN_RUNTIME_SOCKETS:-}
       FN_UI_ENABLED: ${FN_UI_ENABLED:-0}
       FN_ADMIN_API_ENABLED: ${FN_ADMIN_API_ENABLED:-1}
       FN_DOCS_ENABLED: ${FN_DOCS_ENABLED:-1}
+      FN_OPENAPI_INCLUDE_FN_PATHS: ${FN_OPENAPI_INCLUDE_FN_PATHS:-0}
       FN_OPENAPI_INCLUDE_INTERNAL: ${FN_OPENAPI_INCLUDE_INTERNAL:-0}
       FN_CONSOLE_API_ENABLED: ${FN_CONSOLE_API_ENABLED:-1}
       FN_CONSOLE_WRITE_ENABLED: ${FN_CONSOLE_WRITE_ENABLED:-1}
@@ -21,6 +25,10 @@ services:
       FN_STRICT_FS: ${FN_STRICT_FS:-1}
       FN_STRICT_FS_ALLOW: ${FN_STRICT_FS_ALLOW:-/usr/bin/chromium:/usr/bin/chromium-browser:/usr/lib/chromium}
       FN_SCHEDULER_ENABLED: ${FN_SCHEDULER_ENABLED:-1}
+      # Docker Desktop bind mounts do not reliably deliver inotify delete/move events.
+      # Use interval-based rescans by default for predictable hot-reload.
+      # Set FN_HOT_RELOAD_WATCHDOG=1 to enable the inotify watchdog.
+      FN_HOT_RELOAD_WATCHDOG: ${FN_HOT_RELOAD_WATCHDOG:-0}
       FN_PREINSTALL_PY_DEPS_ON_START: ${FN_PREINSTALL_PY_DEPS_ON_START:-1}
       FN_PREINSTALL_NODE_DEPS_ON_START: ${FN_PREINSTALL_NODE_DEPS_ON_START:-1}
       FN_DEFAULT_TIMEOUT_MS: ${FN_DEFAULT_TIMEOUT_MS:-}

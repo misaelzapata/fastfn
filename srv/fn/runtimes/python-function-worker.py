@@ -26,9 +26,179 @@ import json
 import os
 import struct
 import sys
+import builtins
+import io
+import subprocess
+from contextlib import contextmanager
+from pathlib import Path
 
 
 _handler_cache: dict = {}
+
+STRICT_FS = os.environ.get("FN_STRICT_FS", "1").lower() not in {"0", "false", "off", "no"}
+STRICT_FS_EXTRA_ALLOW = os.environ.get("FN_STRICT_FS_ALLOW", "")
+_PROTECTED_FN_FILES = {"fn.config.json", "fn.env.json", "fn.test_events.json"}
+
+
+def _parse_extra_allow_roots() -> list[Path]:
+    out: list[Path] = []
+    for chunk in STRICT_FS_EXTRA_ALLOW.split(","):
+        part = chunk.strip()
+        if not part:
+            continue
+        try:
+            out.append(Path(part).expanduser().resolve(strict=False))
+        except Exception:
+            continue
+    return out
+
+
+def _resolve_candidate_path(target) -> Path | None:
+    if isinstance(target, int):
+        return None
+    if isinstance(target, bytes):
+        try:
+            target = target.decode("utf-8", errors="ignore")
+        except Exception:
+            return None
+    if isinstance(target, os.PathLike):
+        target = os.fspath(target)
+    if not isinstance(target, str) or target == "":
+        return None
+    try:
+        return Path(target).expanduser().resolve(strict=False)
+    except Exception:
+        return None
+
+
+def _build_allowed_roots(handler_path: Path, deps_dirs: list[str]) -> tuple[list[Path], Path]:
+    fn_dir = handler_path.parent.resolve(strict=False)
+    roots: list[Path] = [fn_dir, (fn_dir / ".deps").resolve(strict=False)]
+
+    for d in deps_dirs:
+        try:
+            roots.append(Path(d).expanduser().resolve(strict=False))
+        except Exception:
+            continue
+
+    # Allow Python runtime + stdlib locations.
+    for p in {sys.prefix, getattr(sys, "base_prefix", ""), getattr(sys, "exec_prefix", "")}:
+        if not p:
+            continue
+        try:
+            roots.append(Path(p).resolve(strict=False))
+        except Exception:
+            continue
+
+    # Minimal system roots (certs, temp, tzdata) and common stdlib paths.
+    for p in ("/tmp", "/etc/ssl", "/etc/pki", "/usr/share/zoneinfo", "/usr", "/lib", "/usr/local"):
+        try:
+            roots.append(Path(p).resolve(strict=False))
+        except Exception:
+            continue
+
+    roots.extend(_parse_extra_allow_roots())
+
+    dedup: list[Path] = []
+    seen = set()
+    for root in roots:
+        s = str(root)
+        if s not in seen:
+            seen.add(s)
+            dedup.append(root)
+    return dedup, fn_dir
+
+
+@contextmanager
+def _strict_fs_guard(handler_path: Path, deps_dirs: list[str]):
+    if not STRICT_FS:
+        yield
+        return
+
+    allowed_roots, fn_dir = _build_allowed_roots(handler_path, deps_dirs)
+
+    def check_target(target) -> None:
+        candidate = _resolve_candidate_path(target)
+        if candidate is None:
+            return
+        if candidate.name in _PROTECTED_FN_FILES and candidate.parent == fn_dir:
+            raise PermissionError("access to protected function config/env file denied: " + str(candidate))
+        for root in allowed_roots:
+            if candidate == root or root in candidate.parents:
+                return
+        raise PermissionError("path outside strict function sandbox: " + str(candidate))
+
+    orig_open = builtins.open
+    orig_io_open = io.open
+    orig_os_open = os.open
+    orig_listdir = os.listdir
+    orig_scandir = os.scandir
+    orig_system = os.system
+    orig_path_open = Path.open
+    orig_subprocess_run = subprocess.run
+    orig_subprocess_call = subprocess.call
+    orig_subprocess_check_call = subprocess.check_call
+    orig_subprocess_check_output = subprocess.check_output
+    orig_subprocess_popen = subprocess.Popen
+
+    def guarded_open(file, *args, **kwargs):
+        check_target(file)
+        return orig_open(file, *args, **kwargs)
+
+    def guarded_io_open(file, *args, **kwargs):
+        check_target(file)
+        return orig_io_open(file, *args, **kwargs)
+
+    def guarded_os_open(file, *args, **kwargs):
+        check_target(file)
+        return orig_os_open(file, *args, **kwargs)
+
+    def guarded_listdir(path="."):
+        check_target(path)
+        return orig_listdir(path)
+
+    def guarded_scandir(path="."):
+        check_target(path)
+        return orig_scandir(path)
+
+    def guarded_path_open(self, *args, **kwargs):
+        check_target(self)
+        return orig_path_open(self, *args, **kwargs)
+
+    def blocked_subprocess(*_args, **_kwargs):
+        raise PermissionError("subprocess disabled by strict function sandbox")
+
+    def blocked_system(*_args, **_kwargs):
+        raise PermissionError("os.system disabled by strict function sandbox")
+
+    builtins.open = guarded_open
+    io.open = guarded_io_open
+    os.open = guarded_os_open
+    os.listdir = guarded_listdir
+    os.scandir = guarded_scandir
+    os.system = blocked_system
+    subprocess.run = blocked_subprocess
+    subprocess.call = blocked_subprocess
+    subprocess.check_call = blocked_subprocess
+    subprocess.check_output = blocked_subprocess
+    subprocess.Popen = blocked_subprocess
+    Path.open = guarded_path_open
+
+    try:
+        yield
+    finally:
+        builtins.open = orig_open
+        io.open = orig_io_open
+        os.open = orig_os_open
+        os.listdir = orig_listdir
+        os.scandir = orig_scandir
+        os.system = orig_system
+        subprocess.run = orig_subprocess_run
+        subprocess.call = orig_subprocess_call
+        subprocess.check_call = orig_subprocess_check_call
+        subprocess.check_output = orig_subprocess_check_output
+        subprocess.Popen = orig_subprocess_popen
+        Path.open = orig_path_open
 
 
 def _read_frame() -> bytes | None:
@@ -97,9 +267,11 @@ def _handle(payload: dict) -> dict:
         if d not in sys.path:
             sys.path.insert(0, d)
 
-    handler = _load_handler(handler_path, handler_name)
-    resp = handler(event)
-    return _normalize_response(resp)
+    handler_path_p = Path(handler_path).resolve(strict=False)
+    with _strict_fs_guard(handler_path_p, deps_dirs):
+        handler = _load_handler(handler_path, handler_name)
+        resp = handler(event)
+        return _normalize_response(resp)
 
 
 def _error_resp(exc: Exception) -> dict:

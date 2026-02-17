@@ -871,6 +871,25 @@ local function normalize_route_token(segment)
   return lower
 end
 
+-- Canonicalize a function name into a safe public URL segment.
+-- This is used by internal tooling (for example /_fn/invoke) to synthesize a
+-- stable route template even when public routing is ambiguous (for example
+-- two runtimes claim the same canonical path).
+function M.canonical_route_segment_for_name(name)
+  local s = tostring(name or ""):gsub("^%s+", ""):gsub("%s+$", "")
+  if s == "" then
+    return nil
+  end
+  local lower = string.lower(s)
+  lower = lower:gsub("_+", "-")
+  lower = lower:gsub("[^a-z0-9-]+", "-")
+  lower = lower:gsub("^-+", ""):gsub("-+$", "")
+  if lower == "" then
+    return nil
+  end
+  return lower
+end
+
 local function is_optional_catchall_token(segment)
   return tostring(segment or ""):match("^%[%[%.%.%.[A-Za-z0-9_]+%]%]$") ~= nil
 end
@@ -2009,7 +2028,7 @@ function M.resolve_function_policy(runtime, fn_name, version)
   return resolved
 end
 
-function M.resolve_legacy_target(fn_name, version)
+function M.resolve_fn_compat_target(fn_name, version)
   local catalog = M.discover_functions(false)
   local order = M.get_runtime_order()
 

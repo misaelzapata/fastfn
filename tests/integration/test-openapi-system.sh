@@ -346,7 +346,7 @@ for path, ops in paths.items():
                 assert "in_" not in p, f"invalid in_ key on path {path}"
 
 assert "/blog/{slug}" in paths, "catch-all mapped path not exported"
-assert "/fn/hello" not in paths, "legacy /fn path leaked into OpenAPI"
+assert "/fn/hello" not in paths, "/fn compat path leaked into OpenAPI"
 
 
 def route_to_openapi_path(route):
@@ -474,6 +474,8 @@ assert_ad_hoc_route_exported() {
     cat /tmp/openapi-system-reload.out || true
     exit 1
   fi
+  # Ensure the target runtime is actually healthy before probing the new route.
+  wait_for_runtime_up "node"
 
   probe_get_code="$(curl -sS -o /tmp/openapi-system-probe-get.out -w '%{http_code}' \
     -H 'Host: api.allowed.test' \

@@ -12,6 +12,16 @@ export FN_CONSOLE_API_ENABLED="${FN_CONSOLE_API_ENABLED:-1}"
 export FN_UI_ENABLED="${FN_UI_ENABLED:-1}"
 export FN_CONSOLE_WRITE_ENABLED="${FN_CONSOLE_WRITE_ENABLED:-1}"
 export FN_ADMIN_TOKEN="${FN_ADMIN_TOKEN:-test-admin-token}"
+export FN_OPENAPI_INCLUDE_FN_PATHS="${FN_OPENAPI_INCLUDE_FN_PATHS:-1}"
+
+# This suite mutates files under the functions root (config/env and job artifacts).
+# Always run against a throwaway copy so we never modify tracked examples.
+TMP_FUNCTIONS_ROOT=""
+if [[ -z "${FN_FUNCTIONS_ROOT:-}" ]]; then
+  TMP_FUNCTIONS_ROOT="$(mktemp -d -t fastfn-functions.XXXXXX)"
+  cp -R "$ROOT_DIR/examples/functions/." "$TMP_FUNCTIONS_ROOT"/
+  export FN_FUNCTIONS_ROOT="$TMP_FUNCTIONS_ROOT"
+fi
 
 dc_request() {
   local path="$1"
@@ -33,6 +43,9 @@ cleanup() {
     return
   fi
   "${DC[@]}" down --remove-orphans >/dev/null 2>&1 || true
+  if [[ -n "$TMP_FUNCTIONS_ROOT" ]]; then
+    rm -rf "$TMP_FUNCTIONS_ROOT" >/dev/null 2>&1 || true
+  fi
 }
 
 trap cleanup EXIT
@@ -322,9 +335,9 @@ echo_ops = paths["/fn/echo"]
 assert "get" in echo_ops
 assert "post" not in echo_ops
 
-node-echo_ops = paths["/fn/node-echo"]
-assert "get" in node-echo_ops
-assert "post" in node-echo_ops
+node_echo_ops = paths["/fn/node-echo"]
+assert "get" in node_echo_ops
+assert "post" in node_echo_ops
 
 qr_py_ops = paths["/fn/qr"]
 assert "get" in qr_py_ops
@@ -441,9 +454,9 @@ methods = obj.get("policy", {}).get("methods") or []
 assert methods == ["GET"], methods
 PY
 
-node-echo_post_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' -X POST 'http://127.0.0.1:8080/fn/node-echo' -H 'Content-Type: application/json' --data '{\"name\":\"Nope\"}'")"
-if [[ "$node-echo_post_code" != "405" ]]; then
-  echo "FAIL expected POST /fn/node-echo => 405 got $node-echo_post_code"
+node_echo_post_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' -X POST 'http://127.0.0.1:8080/fn/node-echo' -H 'Content-Type: application/json' --data '{\"name\":\"Nope\"}'")"
+if [[ "$node_echo_post_code" != "405" ]]; then
+  echo "FAIL expected POST /fn/node-echo => 405 got $node_echo_post_code"
   "${DC[@]}" exec -T openresty sh -lc "cat /tmp/resp.out || true"
   exit 1
 fi
@@ -458,9 +471,9 @@ assert "get" in ops
 assert "post" not in ops
 PY
 
-invoke_node-echo_post_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' -X POST 'http://127.0.0.1:8080/_fn/invoke' -H 'Content-Type: application/json' --data '{\"name\":\"node-echo\",\"method\":\"POST\",\"query\":{\"name\":\"Node\"},\"body\":\"\"}'")"
-if [[ "$invoke_node-echo_post_code" != "405" ]]; then
-  echo "FAIL expected /_fn/invoke node-echo POST => 405 got $invoke_node-echo_post_code"
+invoke_node_echo_post_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' -X POST 'http://127.0.0.1:8080/_fn/invoke' -H 'Content-Type: application/json' --data '{\"name\":\"node-echo\",\"method\":\"POST\",\"query\":{\"name\":\"Node\"},\"body\":\"\"}'")"
+if [[ "$invoke_node_echo_post_code" != "405" ]]; then
+  echo "FAIL expected /_fn/invoke node-echo POST => 405 got $invoke_node_echo_post_code"
   "${DC[@]}" exec -T openresty sh -lc "cat /tmp/resp.out || true"
   exit 1
 fi
@@ -486,37 +499,37 @@ assert "get" not in ops
 assert "post" not in ops
 PY
 
-node-echo_get_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' 'http://127.0.0.1:8080/fn/node-echo?name=Nope'")"
-if [[ "$node-echo_get_code" != "405" ]]; then
-  echo "FAIL expected GET /fn/node-echo => 405 got $node-echo_get_code"
+node_echo_get_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' 'http://127.0.0.1:8080/fn/node-echo?name=Nope'")"
+if [[ "$node_echo_get_code" != "405" ]]; then
+  echo "FAIL expected GET /fn/node-echo => 405 got $node_echo_get_code"
   "${DC[@]}" exec -T openresty sh -lc "cat /tmp/resp.out || true"
   exit 1
 fi
 
-node-echo_put_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' -X PUT 'http://127.0.0.1:8080/fn/node-echo?name=PutWay' -H 'Content-Type: application/json' --data '{}'")"
-if [[ "$node-echo_put_code" != "200" ]]; then
-  echo "FAIL expected PUT /fn/node-echo => 200 got $node-echo_put_code"
+node_echo_put_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' -X PUT 'http://127.0.0.1:8080/fn/node-echo?name=PutWay' -H 'Content-Type: application/json' --data '{}'")"
+if [[ "$node_echo_put_code" != "200" ]]; then
+  echo "FAIL expected PUT /fn/node-echo => 200 got $node_echo_put_code"
   "${DC[@]}" exec -T openresty sh -lc "cat /tmp/resp.out || true"
   exit 1
 fi
 
-node-echo_delete_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' -X DELETE 'http://127.0.0.1:8080/fn/node-echo?name=DeleteWay'")"
-if [[ "$node-echo_delete_code" != "200" ]]; then
-  echo "FAIL expected DELETE /fn/node-echo => 200 got $node-echo_delete_code"
+node_echo_delete_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' -X DELETE 'http://127.0.0.1:8080/fn/node-echo?name=DeleteWay'")"
+if [[ "$node_echo_delete_code" != "200" ]]; then
+  echo "FAIL expected DELETE /fn/node-echo => 200 got $node_echo_delete_code"
   "${DC[@]}" exec -T openresty sh -lc "cat /tmp/resp.out || true"
   exit 1
 fi
 
-invoke_node-echo_put_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' -X POST 'http://127.0.0.1:8080/_fn/invoke' -H 'Content-Type: application/json' --data '{\"name\":\"node-echo\",\"method\":\"PUT\",\"query\":{\"name\":\"ViaInvokePut\"},\"body\":\"{}\"}'")"
-if [[ "$invoke_node-echo_put_code" != "200" ]]; then
-  echo "FAIL expected /_fn/invoke node-echo PUT => 200 got $invoke_node-echo_put_code"
+invoke_node_echo_put_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' -X POST 'http://127.0.0.1:8080/_fn/invoke' -H 'Content-Type: application/json' --data '{\"name\":\"node-echo\",\"method\":\"PUT\",\"query\":{\"name\":\"ViaInvokePut\"},\"body\":\"{}\"}'")"
+if [[ "$invoke_node_echo_put_code" != "200" ]]; then
+  echo "FAIL expected /_fn/invoke node-echo PUT => 200 got $invoke_node_echo_put_code"
   "${DC[@]}" exec -T openresty sh -lc "cat /tmp/resp.out || true"
   exit 1
 fi
 
-invoke_node-echo_delete_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' -X POST 'http://127.0.0.1:8080/_fn/invoke' -H 'Content-Type: application/json' --data '{\"name\":\"node-echo\",\"method\":\"DELETE\",\"query\":{\"name\":\"ViaInvokeDelete\"},\"body\":\"\"}'")"
-if [[ "$invoke_node-echo_delete_code" != "200" ]]; then
-  echo "FAIL expected /_fn/invoke node-echo DELETE => 200 got $invoke_node-echo_delete_code"
+invoke_node_echo_delete_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' -X POST 'http://127.0.0.1:8080/_fn/invoke' -H 'Content-Type: application/json' --data '{\"name\":\"node-echo\",\"method\":\"DELETE\",\"query\":{\"name\":\"ViaInvokeDelete\"},\"body\":\"\"}'")"
+if [[ "$invoke_node_echo_delete_code" != "200" ]]; then
+  echo "FAIL expected /_fn/invoke node-echo DELETE => 200 got $invoke_node_echo_delete_code"
   "${DC[@]}" exec -T openresty sh -lc "cat /tmp/resp.out || true"
   exit 1
 fi
@@ -530,9 +543,9 @@ methods = obj.get("policy", {}).get("methods") or []
 assert methods == ["GET", "POST"], methods
 PY
 
-node-echo_post_ok_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' -X POST 'http://127.0.0.1:8080/fn/node-echo?name=Back' -H 'Content-Type: application/json' --data '{}'")"
-if [[ "$node-echo_post_ok_code" != "200" ]]; then
-  echo "FAIL expected POST /fn/node-echo => 200 after restore got $node-echo_post_ok_code"
+node_echo_post_ok_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -o /tmp/resp.out -w '%{http_code}' -X POST 'http://127.0.0.1:8080/fn/node-echo?name=Back' -H 'Content-Type: application/json' --data '{}'")"
+if [[ "$node_echo_post_ok_code" != "200" ]]; then
+  echo "FAIL expected POST /fn/node-echo => 200 after restore got $node_echo_post_ok_code"
   "${DC[@]}" exec -T openresty sh -lc "cat /tmp/resp.out || true"
   exit 1
 fi
@@ -603,8 +616,8 @@ if [[ "$invoke_hello_post_code" != "405" ]]; then
   exit 1
 fi
 
-invoke_node-echo_get_resp="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -X POST 'http://127.0.0.1:8080/_fn/invoke' -H 'Content-Type: application/json' --data '{\"runtime\":\"node\",\"name\":\"node-echo\",\"version\":null,\"method\":\"GET\",\"query\":{\"name\":\"Node\"},\"body\":\"\"}'")"
-python3 - "$invoke_node-echo_get_resp" <<'PY'
+invoke_node_echo_get_resp="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -X POST 'http://127.0.0.1:8080/_fn/invoke' -H 'Content-Type: application/json' --data '{\"runtime\":\"node\",\"name\":\"node-echo\",\"version\":null,\"method\":\"GET\",\"query\":{\"name\":\"Node\"},\"body\":\"\"}'")"
+python3 - "$invoke_node_echo_get_resp" <<'PY'
 import json
 import sys
 obj = json.loads(sys.argv[1])
@@ -737,7 +750,12 @@ python3 - "$edge_out" <<'PY'
 import json
 import sys
 obj = json.loads(sys.argv[1])
-assert "runtimes" in obj, obj
+assert obj.get("ok") is True, obj
+assert obj.get("method") == "GET", obj
+assert obj.get("path") == "/request-inspector", obj
+assert (obj.get("query") or {}).get("via") == "edge-proxy", obj
+hdrs = obj.get("headers") or {}
+assert hdrs.get("x-fastfn-edge") == "1", hdrs
 PY
 
 echo "== test: shared_deps packs (python/node) =="
@@ -1011,7 +1029,7 @@ obj = json.loads(sys.argv[1])
 assert obj.get("name") == "strict_fs_py", obj
 PY
 
-strict_py_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -X PUT 'http://127.0.0.1:8080/_fn/function-code?runtime=python&name=strict_fs_py' -H 'Content-Type: application/json' --data '{\"code\":\"import json\\nimport os\\n\\ndef handler(event):\\n    out = {}\\n    here = os.path.dirname(__file__)\\n    try:\\n        with open(os.path.join(here, \\\"app.py\\\"), \\\"r\\\", encoding=\\\"utf-8\\\") as f:\\n            f.read(1)\\n        out[\\\"self_read\\\"] = True\\n    except Exception as e:\\n        out[\\\"self_read\\\"] = False\\n        out[\\\"self_err\\\"] = str(e)\\n    try:\\n        with open(\\\"/app/README.md\\\", \\\"r\\\", encoding=\\\"utf-8\\\") as f:\\n            f.read(1)\\n        out[\\\"outside_read\\\"] = True\\n    except Exception as e:\\n        out[\\\"outside_read\\\"] = False\\n        out[\\\"outside_err\\\"] = str(e)\\n    try:\\n        with open(os.path.join(here, \\\"fn.config.json\\\"), \\\"r\\\", encoding=\\\"utf-8\\\") as f:\\n            f.read(1)\\n        out[\\\"config_read\\\"] = True\\n    except Exception as e:\\n        out[\\\"config_read\\\"] = False\\n        out[\\\"config_err\\\"] = str(e)\\n    return {\\\"status\\\": 200, \\\"headers\\\": {\\\"Content-Type\\\": \\\"application/json\\\"}, \\\"body\\\": json.dumps(out)}\\n\"}'")"
+strict_py_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -X PUT 'http://127.0.0.1:8080/_fn/function-code?runtime=python&name=strict_fs_py' -H 'Content-Type: application/json' --data '{\"code\":\"import json\\nimport os\\n\\ndef handler(event):\\n    out = {}\\n    here = os.path.dirname(__file__)\\n    try:\\n        with open(os.path.join(here, \\\"app.py\\\"), \\\"r\\\", encoding=\\\"utf-8\\\") as f:\\n            f.read(1)\\n        out[\\\"self_read\\\"] = True\\n    except Exception as e:\\n        out[\\\"self_read\\\"] = False\\n        out[\\\"self_err\\\"] = str(e)\\n    try:\\n        with open(\\\"/app/openresty/nginx.conf\\\", \\\"r\\\", encoding=\\\"utf-8\\\") as f:\\n            f.read(1)\\n        out[\\\"outside_read\\\"] = True\\n    except Exception as e:\\n        out[\\\"outside_read\\\"] = False\\n        out[\\\"outside_err\\\"] = str(e)\\n    try:\\n        with open(os.path.join(here, \\\"fn.config.json\\\"), \\\"r\\\", encoding=\\\"utf-8\\\") as f:\\n            f.read(1)\\n        out[\\\"config_read\\\"] = True\\n    except Exception as e:\\n        out[\\\"config_read\\\"] = False\\n        out[\\\"config_err\\\"] = str(e)\\n    return {\\\"status\\\": 200, \\\"headers\\\": {\\\"Content-Type\\\": \\\"application/json\\\"}, \\\"body\\\": json.dumps(out)}\\n\"}'")"
 python3 - "$strict_py_code" <<'PY'
 import json
 import sys
@@ -1027,6 +1045,8 @@ obj = json.loads(sys.argv[1])
 assert obj.get("self_read") is True, obj
 assert obj.get("outside_read") is False, obj
 assert obj.get("config_read") is False, obj
+assert "path outside strict function sandbox" in (obj.get("outside_err") or ""), obj
+assert "access to protected function config/env file denied" in (obj.get("config_err") or ""), obj
 PY
 
 strict_node_create="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -X POST 'http://127.0.0.1:8080/_fn/function?runtime=node&name=strict_fs_node' -H 'Content-Type: application/json' --data '{\"methods\":[\"GET\"],\"summary\":\"strict fs node probe\"}'")"
@@ -1037,7 +1057,7 @@ obj = json.loads(sys.argv[1])
 assert obj.get("name") == "strict_fs_node", obj
 PY
 
-strict_node_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -X PUT 'http://127.0.0.1:8080/_fn/function-code?runtime=node&name=strict_fs_node' -H 'Content-Type: application/json' --data '{\"code\":\"const fs = require(\\\"fs\\\");\\nconst path = require(\\\"path\\\");\\nexports.handler = async () => {\\n  const out = {};\\n  try { fs.readFileSync(path.join(__dirname, \\\"app.js\\\"), \\\"utf8\\\"); out.self_read = true; } catch (e) { out.self_read = false; out.self_err = String(e); }\\n  try { fs.readFileSync(\\\"/app/README.md\\\", \\\"utf8\\\"); out.outside_read = true; } catch (e) { out.outside_read = false; out.outside_err = String(e); }\\n  try { fs.readFileSync(path.join(__dirname, \\\"fn.config.json\\\"), \\\"utf8\\\"); out.config_read = true; } catch (e) { out.config_read = false; out.config_err = String(e); }\\n  return { status: 200, headers: { \\\"Content-Type\\\": \\\"application/json\\\" }, body: JSON.stringify(out) };\\n};\\n\"}'")"
+strict_node_code="$("${DC[@]}" exec -T openresty sh -lc "curl -sS -X PUT 'http://127.0.0.1:8080/_fn/function-code?runtime=node&name=strict_fs_node' -H 'Content-Type: application/json' --data '{\"code\":\"const fs = require(\\\"fs\\\");\\nconst path = require(\\\"path\\\");\\nexports.handler = async () => {\\n  const out = {};\\n  try { fs.readFileSync(path.join(__dirname, \\\"app.js\\\"), \\\"utf8\\\"); out.self_read = true; } catch (e) { out.self_read = false; out.self_err = String(e); }\\n  try { fs.readFileSync(\\\"/app/openresty/nginx.conf\\\", \\\"utf8\\\"); out.outside_read = true; } catch (e) { out.outside_read = false; out.outside_err = String(e); }\\n  try { fs.readFileSync(path.join(__dirname, \\\"fn.config.json\\\"), \\\"utf8\\\"); out.config_read = true; } catch (e) { out.config_read = false; out.config_err = String(e); }\\n  return { status: 200, headers: { \\\"Content-Type\\\": \\\"application/json\\\" }, body: JSON.stringify(out) };\\n};\\n\"}'")"
 python3 - "$strict_node_code" <<'PY'
 import json
 import sys
@@ -1053,6 +1073,8 @@ obj = json.loads(sys.argv[1])
 assert obj.get("self_read") is True, obj
 assert obj.get("outside_read") is False, obj
 assert obj.get("config_read") is False, obj
+assert "path outside strict function sandbox" in (obj.get("outside_err") or ""), obj
+assert "access to protected function config/env file denied" in (obj.get("config_err") or ""), obj
 PY
 
 "${DC[@]}" exec -T openresty sh -lc "curl -sS -X DELETE 'http://127.0.0.1:8080/_fn/function?runtime=python&name=strict_fs_py' >/tmp/strict_cleanup_py.out"
@@ -1088,19 +1110,31 @@ if [[ "$demo_recipe_delete_code" != "200" ]]; then
 fi
 
 echo "== test: stress smoke =="
-python3 "$ROOT_DIR/tests/stress/load-runner.py" \
-  --base-url "http://127.0.0.1:8080" \
-  --path "/fn/hello?name=stress" \
-  --total 120 \
-  --concurrency 24 \
-  --expect 200 429
+stress_smoke() {
+  local path="$1"
+  local total="$2"
+  local conc="$3"
+  local allowed_csv="$4"
+  # Run inside the container (integration compose intentionally does not publish host ports).
+  "${DC[@]}" exec -T openresty sh -lc "
+    set -euo pipefail
+    PATH_REQ='$path'
+    TOTAL='$total'
+    CONC='$conc'
+    ALLOWED='$allowed_csv'
+    seq 1 \"\$TOTAL\" | xargs -P \"\$CONC\" -I{} sh -lc \"curl -sS -o /dev/null -w '%{http_code}\\n' 'http://127.0.0.1:8080'\$PATH_REQ || echo 0\" | sort | uniq -c > /tmp/stress_counts.out
+    echo \"stress_counts for \$PATH_REQ:\"
+    cat /tmp/stress_counts.out
+    bad=\$(awk '{print \$2}' /tmp/stress_counts.out | tr -d '\\r' | grep -vE \"^(\${ALLOWED//,/|})\$\" || true)
+    if [ -n \"\$bad\" ]; then
+      echo \"unexpected statuses: \$(tr -d '\\n' </tmp/stress_counts.out | sed 's/  */ /g')\" >&2
+      exit 1
+    fi
+  "
+}
 
-python3 "$ROOT_DIR/tests/stress/load-runner.py" \
-  --base-url "http://127.0.0.1:8080" \
-  --path "/fn/slow?sleep_ms=120" \
-  --total 120 \
-  --concurrency 24 \
-  --expect 200 429
+stress_smoke "/fn/hello?name=stress" 120 24 "200,429"
+stress_smoke "/fn/slow?sleep_ms=120" 120 24 "200,429"
 
 echo "== test: runtime down -> 503 =="
 if "${DC[@]}" exec -T openresty sh -lc "pkill -f node-daemon.js >/dev/null 2>&1 || true"; then

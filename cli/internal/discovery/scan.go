@@ -165,7 +165,7 @@ func detectFunction(path string, root string, logFn Logger) ([]Function, bool) {
 		return fileBasedFns, true
 	}
 
-	// 4. Legacy single-entry fallback
+	// 4. Single-entry fallback
 	// Check for standard "main" files first (existing behavior)
 	rt := detectRuntimeFromFiles(path)
 	if rt != "" {

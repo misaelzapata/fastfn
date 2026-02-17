@@ -798,7 +798,7 @@ func checkConfigFile(applyFix bool) (doctorCheck, bool) {
 		return doctorCheck{
 			ID:      "project.config",
 			Status:  doctorStatusWarn,
-			Message: fmt.Sprintf("Using legacy config file %s", path),
+			Message: fmt.Sprintf("Using fallback config file %s", path),
 			Hint:    "Prefer fastfn.json to avoid format ambiguity",
 		}, false
 	}

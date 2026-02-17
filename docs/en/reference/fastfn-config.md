@@ -16,7 +16,7 @@ FastFN looks for this file in the current directory when you run commands like `
 
 Notes:
 - Preferred keys use kebab-case: `functions-dir`, `public-base-url`.
-- Legacy aliases are still accepted for compatibility: `functions_dir`, `functionsDir`, `public_base_url`, `publicBaseUrl`.
+- Compatibility aliases are still accepted: `functions_dir`, `functionsDir`, `public_base_url`, `publicBaseUrl`.
 - OpenAPI internal visibility aliases are also accepted: `openapi_include_internal`, `openapi.include_internal`, `swagger-include-admin`.
 - `domains` is for `fastfn doctor domains` checks only. It does not enforce inbound host routing by itself.
 - To restrict inbound hosts per function, use `invoke.allow_hosts` in each `fn.config.json`.
@@ -143,7 +143,7 @@ To hide internal/admin endpoints from Swagger again, set it to `false` (or remov
 
 1. CLI flag `--config` (explicit file path).
 2. `fastfn.json` in current directory.
-3. Legacy `fastfn.toml` (fallback only).
+3. `fastfn.toml` (fallback only).
 
 For URL resolution in OpenAPI:
 1. `FN_PUBLIC_BASE_URL` env var (or `public-base-url` from `fastfn.json`).

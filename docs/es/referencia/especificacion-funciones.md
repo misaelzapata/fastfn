@@ -34,7 +34,7 @@ Tambien puedes controlar discovery con:
 - `FN_RUNTIME_SOCKETS` (JSON runtime -> socket URI)
 - `FN_SOCKET_BASE_DIR` (base de sockets si no hay mapa explicito)
 
-Precedencia de runtime para rutas legacy:
+Precedencia de runtime para rutas de compatibilidad:
 
 - Si el mismo nombre existe en varios runtimes, `/fn/<name>` usa el primer runtime en `FN_RUNTIMES`.
 - Si `FN_RUNTIMES` no esta definido, usa orden alfabetico de carpetas runtime.

@@ -160,8 +160,17 @@ if type(name) ~= "string" then
   return
 end
 if runtime == nil then
-  guard.write_json(400, { error = "runtime is required" })
-  return
+  -- Backward-compatible: allow omitting runtime when invoking by name.
+  -- Resolve using the configured runtime order.
+  local resolved_rt, resolved_ver = routes.resolve_fn_compat_target(name, resolved_version)
+  if not resolved_rt then
+    guard.write_json(404, { error = "unknown function or version" })
+    return
+  end
+  resolved_runtime = resolved_rt
+  resolved_version = resolved_ver
+  runtime = resolved_rt
+  version = resolved_ver
 end
 if type(runtime) ~= "string" or runtime == "" then
   guard.write_json(400, { error = "runtime must be a non-empty string" })
@@ -221,8 +230,17 @@ if route ~= nil then
 else
   uri = resolve_mapped_route(resolved_runtime, name, resolved_version, method)
   if not uri then
-    guard.write_json(404, { error = "no mapped public route for target" })
-    return
+    -- Fallback for ambiguous routing: allow invoking by runtime+name even when
+    -- the canonical public URL is in conflict (for example node/foo and python/foo).
+    -- This endpoint is already protected by guard.enforce_api().
+    local seg = routes.canonical_route_segment_for_name(name)
+    if seg then
+      uri = invoke_rules.normalize_route("/" .. seg)
+    end
+    if not uri then
+      guard.write_json(404, { error = "no mapped public route for target" })
+      return
+    end
   end
 end
 local route_template = uri
