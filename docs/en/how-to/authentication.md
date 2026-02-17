@@ -43,111 +43,111 @@ Useful fields:
 
 ## Pattern A: API key (Python, Node, PHP, Lua)
 
-=== "Python"
+### Python
 
-    ```python
-    import json
+```python
+import json
 
-    def handler(event):
-        headers = event.get("headers") or {}
-        env = event.get("env") or {}
+def handler(event):
+    headers = event.get("headers") or {}
+    env = event.get("env") or {}
 
-        provided = headers.get("x-api-key")
-        expected = env.get("API_KEY")
+    provided = headers.get("x-api-key")
+    expected = env.get("API_KEY")
 
-        if not expected or provided != expected:
-            return {
-                "status": 401,
-                "headers": {"Content-Type": "application/json"},
-                "body": json.dumps({"error": "unauthorized"}),
-            }
-
+    if not expected or provided != expected:
         return {
-            "status": 200,
+            "status": 401,
             "headers": {"Content-Type": "application/json"},
-            "body": json.dumps({"ok": True}),
+            "body": json.dumps({"error": "unauthorized"}),
         }
-    ```
 
-=== "Node"
+    return {
+        "status": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": json.dumps({"ok": True}),
+    }
+```
 
-    ```js
-    exports.handler = async (event) => {
-      const headers = event.headers || {};
-      const env = event.env || {};
+### Node
 
-      const provided = headers['x-api-key'];
-      const expected = env.API_KEY;
+```js
+exports.handler = async (event) => {
+  const headers = event.headers || {};
+  const env = event.env || {};
 
-      if (!expected || provided !== expected) {
-        return {
-          status: 401,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'unauthorized' }),
-        };
-      }
+  const provided = headers['x-api-key'];
+  const expected = env.API_KEY;
 
-      return {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ok: true }),
-      };
+  if (!expected || provided !== expected) {
+    return {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error: 'unauthorized' }),
     };
-    ```
+  }
 
-=== "PHP"
+  return {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ok: true }),
+  };
+};
+```
 
-    ```php
-    <?php
-    function handler($event) {
-        $headers = $event['headers'] ?? [];
-        $env = $event['env'] ?? [];
+### PHP
 
-        $provided = $headers['x-api-key'] ?? null;
-        $expected = $env['API_KEY'] ?? null;
+```php
+<?php
+function handler($event) {
+    $headers = $event['headers'] ?? [];
+    $env = $event['env'] ?? [];
 
-        if (!$expected || $provided !== $expected) {
-            return [
-                'status' => 401,
-                'headers' => ['Content-Type' => 'application/json'],
-                'body' => json_encode(['error' => 'unauthorized']),
-            ];
-        }
+    $provided = $headers['x-api-key'] ?? null;
+    $expected = $env['API_KEY'] ?? null;
 
+    if (!$expected || $provided !== $expected) {
         return [
-            'status' => 200,
+            'status' => 401,
             'headers' => ['Content-Type' => 'application/json'],
-            'body' => json_encode(['ok' => true]),
+            'body' => json_encode(['error' => 'unauthorized']),
         ];
     }
-    ```
 
-=== "Lua"
+    return [
+        'status' => 200,
+        'headers' => ['Content-Type' => 'application/json'],
+        'body' => json_encode(['ok' => true]),
+    ];
+}
+```
 
-    ```lua
-    local cjson = require("cjson.safe")
+### Lua
 
-    function handler(event)
-      local headers = event.headers or {}
-      local env = event.env or {}
-      local provided = headers["x-api-key"]
-      local expected = env.API_KEY
+```lua
+local cjson = require("cjson.safe")
 
-      if not expected or provided ~= expected then
-        return {
-          status = 401,
-          headers = { ["Content-Type"] = "application/json" },
-          body = cjson.encode({ error = "unauthorized" }),
-        }
-      end
+function handler(event)
+  local headers = event.headers or {}
+  local env = event.env or {}
+  local provided = headers["x-api-key"]
+  local expected = env.API_KEY
 
-      return {
-        status = 200,
-        headers = { ["Content-Type"] = "application/json" },
-        body = cjson.encode({ ok = true }),
-      }
-    end
-    ```
+  if not expected or provided ~= expected then
+    return {
+      status = 401,
+      headers = { ["Content-Type"] = "application/json" },
+      body = cjson.encode({ error = "unauthorized" }),
+    }
+  end
+
+  return {
+    status = 200,
+    headers = { ["Content-Type"] = "application/json" },
+    body = cjson.encode({ ok = true }),
+  }
+end
+```
 
 Store secret in function env:
 
@@ -159,100 +159,100 @@ curl -sS 'http://127.0.0.1:8080/_fn/function-env?runtime=python&name=hello' \
 
 ## Pattern B: Session cookie (Python, Node, PHP, Lua)
 
-=== "Python"
+### Python
 
-    ```python
-    import json
+```python
+import json
 
-    def handler(event):
-        headers = event.get("headers") or {}
-        cookie = headers.get("cookie") or headers.get("Cookie") or ""
+def handler(event):
+    headers = event.get("headers") or {}
+    cookie = headers.get("cookie") or headers.get("Cookie") or ""
 
-        if "session_id=" not in cookie:
-            return {
-                "status": 401,
-                "headers": {"Content-Type": "application/json"},
-                "body": json.dumps({"error": "missing session"}),
-            }
-
+    if "session_id=" not in cookie:
         return {
-            "status": 200,
+            "status": 401,
             "headers": {"Content-Type": "application/json"},
-            "body": json.dumps({"ok": True}),
+            "body": json.dumps({"error": "missing session"}),
         }
-    ```
 
-=== "Node"
+    return {
+        "status": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": json.dumps({"ok": True}),
+    }
+```
 
-    ```js
-    exports.handler = async (event) => {
-      const headers = event.headers || {};
-      const cookie = headers.cookie || headers.Cookie || '';
+### Node
 
-      if (!cookie.includes('session_id=')) {
-        return {
-          status: 401,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ error: 'missing session' }),
-        };
-      }
+```js
+exports.handler = async (event) => {
+  const headers = event.headers || {};
+  const cookie = headers.cookie || headers.Cookie || '';
 
-      return {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ok: true }),
-      };
+  if (!cookie.includes('session_id=')) {
+    return {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error: 'missing session' }),
     };
-    ```
+  }
 
-=== "PHP"
+  return {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ok: true }),
+  };
+};
+```
 
-    ```php
-    <?php
-    function handler($event) {
-        $headers = $event['headers'] ?? [];
-        $cookie = $headers['cookie'] ?? ($headers['Cookie'] ?? '');
+### PHP
 
-        if (strpos($cookie, 'session_id=') === false) {
-            return [
-                'status' => 401,
-                'headers' => ['Content-Type' => 'application/json'],
-                'body' => json_encode(['error' => 'missing session']),
-            ];
-        }
+```php
+<?php
+function handler($event) {
+    $headers = $event['headers'] ?? [];
+    $cookie = $headers['cookie'] ?? ($headers['Cookie'] ?? '');
 
+    if (strpos($cookie, 'session_id=') === false) {
         return [
-            'status' => 200,
+            'status' => 401,
             'headers' => ['Content-Type' => 'application/json'],
-            'body' => json_encode(['ok' => true]),
+            'body' => json_encode(['error' => 'missing session']),
         ];
     }
-    ```
 
-=== "Lua"
+    return [
+        'status' => 200,
+        'headers' => ['Content-Type' => 'application/json'],
+        'body' => json_encode(['ok' => true]),
+    ];
+}
+```
 
-    ```lua
-    local cjson = require("cjson.safe")
+### Lua
 
-    function handler(event)
-      local headers = event.headers or {}
-      local cookie = headers.cookie or headers.Cookie or ""
+```lua
+local cjson = require("cjson.safe")
 
-      if not string.find(cookie, "session_id=", 1, true) then
-        return {
-          status = 401,
-          headers = { ["Content-Type"] = "application/json" },
-          body = cjson.encode({ error = "missing session" }),
-        }
-      end
+function handler(event)
+  local headers = event.headers or {}
+  local cookie = headers.cookie or headers.Cookie or ""
 
-      return {
-        status = 200,
-        headers = { ["Content-Type"] = "application/json" },
-        body = cjson.encode({ ok = true }),
-      }
-    end
-    ```
+  if not string.find(cookie, "session_id=", 1, true) then
+    return {
+      status = 401,
+      headers = { ["Content-Type"] = "application/json" },
+      body = cjson.encode({ error = "missing session" }),
+    }
+  end
+
+  return {
+    status = 200,
+    headers = { ["Content-Type"] = "application/json" },
+    body = cjson.encode({ ok = true }),
+  }
+end
+```
 
 ## Secret visibility and masking
 

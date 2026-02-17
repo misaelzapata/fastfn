@@ -1,19 +1,52 @@
-# Built-in Function Catalog
+# Example Function Catalog
 
-This document lists the real sample functions included in the repository, with concrete request/response examples.
+This page is a guided tour of the **example functions** shipped with this repository.
+
+Important distinction:
+
+- Public example routes live at normal paths like `/hello` and `/telegram-ai-reply`.
+- Platform control-plane endpoints live under `/_fn/*` (health, OpenAPI, config, logs).
+
+## Run the examples
+
+Recommended (Next.js-style routes + showcase):
+
+```bash
+bin/fastfn dev examples/functions/next-style
+```
+
+Then try:
+
+- `GET /showcase`
+- `GET /openapi.json`
+- `GET /docs`
+
+Full catalog (everything under `examples/functions/`):
+
+```bash
+bin/fastfn dev examples/functions
+```
+
+Source code layout:
+
+- Python: `examples/functions/python/<name>/`
+- Node: `examples/functions/node/<name>/`
+- PHP: `examples/functions/php/<name>/`
+- Rust: `examples/functions/rust/<name>/`
+- Next.js-style app: `examples/functions/next-style/` (file routes)
 
 ## Python runtime
 
 ### `cron-tick` (scheduler demo)
 
-- Route: `/fn/cron-tick`
+- Route: `/cron-tick`
 - Methods: `GET`
 - Goal: simple counter you can increment via schedule
 
 Read current count:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/cron-tick?action=read'
+curl -sS 'http://127.0.0.1:8080/cron-tick?action=read'
 ```
 
 Enable schedule (every 1s) via Console API:
@@ -33,7 +66,7 @@ curl -sS 'http://127.0.0.1:8080/_fn/schedules'
 
 ### `utc-time` (cron + timezone demo)
 
-- Route: `/fn/utc-time`
+- Route: `/utc-time`
 - Methods: `GET`
 - Goal: show UTC/local timestamps + scheduler trigger context
 - Schedule: daily at `09:00` in `UTC` (cron)
@@ -41,12 +74,12 @@ curl -sS 'http://127.0.0.1:8080/_fn/schedules'
 Call it:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/utc-time'
+curl -sS 'http://127.0.0.1:8080/utc-time'
 ```
 
 ### `offset-time` (cron + timezone demo)
 
-- Route: `/fn/offset-time`
+- Route: `/offset-time`
 - Methods: `GET`
 - Goal: same as `utc-time`, but scheduled using a fixed offset timezone
 - Schedule: daily at `09:00` in `-05:00` (cron)
@@ -54,7 +87,7 @@ curl -sS 'http://127.0.0.1:8080/fn/utc-time'
 Call it:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/offset-time'
+curl -sS 'http://127.0.0.1:8080/offset-time'
 ```
 
 Tip: compare `next` values via `/_fn/schedules`, or from the browser devtools:
@@ -65,7 +98,7 @@ fetch('/_fn/schedules').then((r) => r.json()).then(console.log)
 
 ### `tools-loop` (tools loop demo, inspired by agent loops)
 
-- Route: `/fn/tools-loop`
+- Route: `/tools-loop`
 - Methods: `GET`, `POST`
 - Goal: minimal "agent loop" style planner/executor for testing tools (no API keys).
 - Default behavior: `dry_run=true`
@@ -73,24 +106,24 @@ fetch('/_fn/schedules').then((r) => r.json()).then(console.log)
 Dry run (plan only):
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/tools-loop?text=quiero%20mi%20ip%20y%20clima&dry_run=true'
+curl -sS 'http://127.0.0.1:8080/tools-loop?text=quiero%20mi%20ip%20y%20clima&dry_run=true'
 ```
 
 Execute tools:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/tools-loop?tool=ip_lookup,weather&city=Buenos%20Aires&dry_run=false'
+curl -sS 'http://127.0.0.1:8080/tools-loop?tool=ip_lookup,weather&city=Buenos%20Aires&dry_run=false'
 ```
 
 Execute tools (offline mock):
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/tools-loop?tool=ip_lookup,weather&city=Buenos%20Aires&dry_run=false&mock=true'
+curl -sS 'http://127.0.0.1:8080/tools-loop?tool=ip_lookup,weather&city=Buenos%20Aires&dry_run=false&mock=true'
 ```
 
 ### `telegram-ai-reply-py` (Telegram AI bot, Python)
 
-- Route: `/fn/telegram-ai-reply-py`
+- Route: `/telegram-ai-reply-py`
 - Methods: `GET`, `POST`
 - Goal: Telegram webhook/query -> OpenAI -> Telegram reply (Python), with tools + memory + loop mode
 - Default behavior: `dry_run=true`
@@ -99,34 +132,34 @@ curl -sS 'http://127.0.0.1:8080/fn/tools-loop?tool=ip_lookup,weather&city=Buenos
 Dry run (query-mode):
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/telegram-ai-reply-py?mode=reply&chat_id=123&text=Hola&dry_run=true'
+curl -sS 'http://127.0.0.1:8080/telegram-ai-reply-py?mode=reply&chat_id=123&text=Hola&dry_run=true'
 ```
 
 Real send (query-mode):
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/telegram-ai-reply-py?mode=reply&chat_id=123&text=Hola&dry_run=false'
+curl -sS 'http://127.0.0.1:8080/telegram-ai-reply-py?mode=reply&chat_id=123&text=Hola&dry_run=false'
 ```
 
 Tools (manual directives inside the user text):
 
 ```bash
 curl -sS \
-"http://127.0.0.1:8080/fn/telegram-ai-reply-py?mode=reply&chat_id=123&dry_run=false&tools=true&tool_allow_fn=tools-loop,request-inspector&text=Use%20[[http:https://api.ipify.org?format=json]]%20and%20[[fn:tools-loop?text=my%20ip%20and%20weather&dry_run=true|GET]]"
+"http://127.0.0.1:8080/telegram-ai-reply-py?mode=reply&chat_id=123&dry_run=false&tools=true&tool_allow_fn=tools-loop,request-inspector&text=Use%20[[http:https://api.ipify.org?format=json]]%20and%20[[fn:tools-loop?text=my%20ip%20and%20weather&dry_run=true|GET]]"
 ```
 
 Tools (auto-tools from intent):
 
 ```bash
 curl -sS \
-"http://127.0.0.1:8080/fn/telegram-ai-reply-py?mode=reply&chat_id=123&dry_run=false&tools=true&auto_tools=true&text=How%20is%20the%20weather%20today%20and%20what%20is%20my%20IP%3F"
+"http://127.0.0.1:8080/telegram-ai-reply-py?mode=reply&chat_id=123&dry_run=false&tools=true&auto_tools=true&text=How%20is%20the%20weather%20today%20and%20what%20is%20my%20IP%3F"
 ```
 
 Loop mode (dry-run):
 
 ```bash
 curl -sS \
-"http://127.0.0.1:8080/fn/telegram-ai-reply-py?mode=loop&dry_run=true&wait_secs=20"
+"http://127.0.0.1:8080/telegram-ai-reply-py?mode=loop&dry_run=true&wait_secs=20"
 ```
 
 Memory/loop state files (created at runtime):
@@ -136,14 +169,14 @@ Memory/loop state files (created at runtime):
 
 ### `hello`
 
-- Route: `/fn/hello`
+- Route: `/hello`
 - Methods: `GET`
 - Query: optional `name`
 
 Example:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/hello?name=World'
+curl -sS 'http://127.0.0.1:8080/hello?name=World'
 ```
 
 Typical response:
@@ -154,7 +187,7 @@ Typical response:
 
 ### `risk-score`
 
-- Route: `/fn/risk-score`
+- Route: `/risk-score`
 - Methods: `GET`, `POST`
 - Inputs:
   - `query.email`
@@ -163,13 +196,13 @@ Typical response:
 GET example:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/risk-score?email=user@example.com'
+curl -sS 'http://127.0.0.1:8080/risk-score?email=user@example.com'
 ```
 
 POST example:
 
 ```bash
-curl -sS -X POST 'http://127.0.0.1:8080/fn/risk-score' \
+curl -sS -X POST 'http://127.0.0.1:8080/risk-score' \
   -H 'x-user-email: user@example.com' \
   -H 'Content-Type: application/json' \
   -d '{}'
@@ -183,72 +216,72 @@ Typical response:
 
 ### `slow`
 
-- Route: `/fn/slow`
+- Route: `/slow`
 - Methods: `GET`
 - Query: `sleep_ms`
 
 Example:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/slow?sleep_ms=100'
+curl -sS 'http://127.0.0.1:8080/slow?sleep_ms=100'
 ```
 
 ### `html-demo`
 
-- Route: `/fn/html-demo`
+- Route: `/html-demo`
 - Methods: `GET`
 - Content-Type: `text/html; charset=utf-8`
 
 Example:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/html-demo?name=Web'
+curl -sS 'http://127.0.0.1:8080/html-demo?name=Web'
 ```
 
 ### `csv-demo`
 
-- Route: `/fn/csv-demo`
+- Route: `/csv-demo`
 - Methods: `GET`
 - Content-Type: `text/csv; charset=utf-8`
 
 Example:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/csv-demo?name=Alice'
+curl -sS 'http://127.0.0.1:8080/csv-demo?name=Alice'
 ```
 
 ### `png-demo`
 
-- Route: `/fn/png-demo`
+- Route: `/png-demo`
 - Methods: `GET`
 - Content-Type: `image/png`
 
 Example:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/png-demo' --output out.png
+curl -sS 'http://127.0.0.1:8080/png-demo' --output out.png
 ```
 
 ### `lambda-echo`
 
-- Route: `/fn/lambda-echo`
+- Route: `/lambda-echo`
 - Methods: `GET`
 
 ### `custom-echo`
 
-- Route: `/fn/custom-echo`
+- Route: `/custom-echo`
 - Methods: `GET`
 - Query: `v`
 
 Example:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/custom-echo?v=demo'
+curl -sS 'http://127.0.0.1:8080/custom-echo?v=demo'
 ```
 
 ### `requirements-demo`
 
-- Route: `/fn/requirements-demo`
+- Route: `/requirements-demo`
 - Methods: `GET`
 - Dependency hints:
   - `requirements.txt`
@@ -256,7 +289,7 @@ curl -sS 'http://127.0.0.1:8080/fn/custom-echo?v=demo'
 
 ### `qr`
 
-- Route: `/fn/qr`
+- Route: `/qr`
 - Methods: `GET`
 - Query: `text` or `url`
 - Content-Type: `image/svg+xml`
@@ -264,12 +297,12 @@ curl -sS 'http://127.0.0.1:8080/fn/custom-echo?v=demo'
 Example:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/qr?text=PythonQR'
+curl -sS 'http://127.0.0.1:8080/qr?text=PythonQR'
 ```
 
 ### `gmail-send`
 
-- Route: `/fn/gmail-send`
+- Route: `/gmail-send`
 - Methods: `GET`, `POST`
 - Goal: Gmail SMTP helper for demos/integrations
 - Default behavior: `dry_run=true` (safe local testing without real credentials)
@@ -277,20 +310,20 @@ curl -sS 'http://127.0.0.1:8080/fn/qr?text=PythonQR'
 GET example:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/gmail-send?to=demo@example.com&subject=Hi&text=Hello&dry_run=true'
+curl -sS 'http://127.0.0.1:8080/gmail-send?to=demo@example.com&subject=Hi&text=Hello&dry_run=true'
 ```
 
 POST example:
 
 ```bash
-curl -sS -X POST 'http://127.0.0.1:8080/fn/gmail-send' \
+curl -sS -X POST 'http://127.0.0.1:8080/gmail-send' \
   -H 'Content-Type: application/json' \
   -d '{"to":"demo@example.com","subject":"Hi","text":"Hello","dry_run":true}'
 ```
 
 ### `sendgrid-send`
 
-- Route: `/fn/sendgrid-send`
+- Route: `/sendgrid-send`
 - Methods: `GET`, `POST`
 - Goal: SendGrid email helper (safe by default)
 - Default behavior: `dry_run=true`
@@ -299,12 +332,12 @@ curl -sS -X POST 'http://127.0.0.1:8080/fn/gmail-send' \
 GET (dry run):
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/sendgrid-send?to=demo@example.com&subject=Hi&text=Hello&dry_run=true'
+curl -sS 'http://127.0.0.1:8080/sendgrid-send?to=demo@example.com&subject=Hi&text=Hello&dry_run=true'
 ```
 
 ### `sheets-webapp-append`
 
-- Route: `/fn/sheets-webapp-append`
+- Route: `/sheets-webapp-append`
 - Methods: `GET`
 - Goal: append a row via a Google Apps Script Web App (safe by default)
 - Default behavior: `dry_run=true`
@@ -313,17 +346,17 @@ curl -sS 'http://127.0.0.1:8080/fn/sendgrid-send?to=demo@example.com&subject=Hi&
 Example (dry run):
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/sheets-webapp-append?sheet=Sheet1&values=a,b,c&dry_run=true'
+curl -sS 'http://127.0.0.1:8080/sheets-webapp-append?sheet=Sheet1&values=a,b,c&dry_run=true'
 ```
 
 ### `nombre`
 
-- Route: `/fn/nombre`
+- Route: `/nombre`
 - Methods: `GET` (default policy)
 
 ### `stripe-webhook-verify`
 
-- Route: `/fn/stripe-webhook-verify`
+- Route: `/stripe-webhook-verify`
 - Methods: `POST`
 - Goal: verify Stripe webhook signature (safe by default)
 - Default behavior: `dry_run=true`
@@ -332,7 +365,7 @@ curl -sS 'http://127.0.0.1:8080/fn/sheets-webapp-append?sheet=Sheet1&values=a,b,
 Dry run:
 
 ```bash
-curl -sS -X POST 'http://127.0.0.1:8080/fn/stripe-webhook-verify' \
+curl -sS -X POST 'http://127.0.0.1:8080/stripe-webhook-verify' \
   -H 'Content-Type: application/json' \
   -d '{"id":"evt_test"}'
 ```
@@ -345,7 +378,7 @@ Enforce verification:
 
 ### `github-webhook-verify`
 
-- Route: `/fn/github-webhook-verify`
+- Route: `/github-webhook-verify`
 - Methods: `POST`
 - Goal: verify GitHub webhook signature (safe by default)
 - Default behavior: `dry_run=true`
@@ -355,14 +388,14 @@ Enforce verification:
 
 ### `hello@v2`
 
-- Route: `/fn/hello@v2`
+- Route: `/hello@v2`
 - Methods: `GET`
 - Query: `name`
 
 Example:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/hello@v2?name=NodeWay'
+curl -sS 'http://127.0.0.1:8080/hello@v2?name=NodeWay'
 ```
 
 Typical response:
@@ -373,34 +406,34 @@ Typical response:
 
 ### `node-echo`
 
-- Route: `/fn/node-echo`
+- Route: `/node-echo`
 - Methods: `GET`, `POST` (editable in `fn.config.json`)
 - Query: `name`
 
 GET example:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/node-echo?name=Node'
+curl -sS 'http://127.0.0.1:8080/node-echo?name=Node'
 ```
 
 POST example:
 
 ```bash
-curl -sS -X POST 'http://127.0.0.1:8080/fn/node-echo?name=NodePost' \
+curl -sS -X POST 'http://127.0.0.1:8080/node-echo?name=NodePost' \
   -H 'Content-Type: application/json' \
   -d '{}'
 ```
 
 ### `echo`
 
-- Route: `/fn/echo`
+- Route: `/echo`
 - Methods: `GET`
 - Query: `key`
 
 Example:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/echo?key=test'
+curl -sS 'http://127.0.0.1:8080/echo?key=test'
 ```
 
 Typical response:
@@ -411,7 +444,7 @@ Typical response:
 
 ### `qr@v2`
 
-- Route: `/fn/qr@v2`
+- Route: `/qr@v2`
 - Methods: `GET`
 - Query: `text` or `url`, optional `size`
 - Content-Type: `image/png`
@@ -419,12 +452,12 @@ Typical response:
 Example:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/qr@v2?text=NodeQR' --output qr-node.png
+curl -sS 'http://127.0.0.1:8080/qr@v2?text=NodeQR' --output qr-node.png
 ```
 
 ### `telegram-send`
 
-- Route: `/fn/telegram-send`
+- Route: `/telegram-send`
 - Methods: `GET`, `POST`
 - Goal: Telegram Bot API helper for demos/integrations
 - Default behavior: `dry_run=true` (safe local testing without real credentials)
@@ -432,20 +465,20 @@ curl -sS 'http://127.0.0.1:8080/fn/qr@v2?text=NodeQR' --output qr-node.png
 GET example:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/telegram-send?chat_id=123456&text=Hello&dry_run=true'
+curl -sS 'http://127.0.0.1:8080/telegram-send?chat_id=123456&text=Hello&dry_run=true'
 ```
 
 POST example:
 
 ```bash
-curl -sS -X POST 'http://127.0.0.1:8080/fn/telegram-send' \
+curl -sS -X POST 'http://127.0.0.1:8080/telegram-send' \
   -H 'Content-Type: application/json' \
   -d '{"chat_id":"123456","text":"Hello","dry_run":true}'
 ```
 
 ### `telegram-ai-reply`
 
-- Route: `/fn/telegram-ai-reply`
+- Route: `/telegram-ai-reply`
 - Methods: `GET`, `POST`
 - Goal: Telegram webhook -> OpenAI -> Telegram reply
 - Default behavior: `dry_run=true` (safe local testing without sending messages)
@@ -454,7 +487,7 @@ curl -sS -X POST 'http://127.0.0.1:8080/fn/telegram-send' \
 Dry run example:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/telegram-ai-reply?dry_run=true' \
+curl -sS 'http://127.0.0.1:8080/telegram-ai-reply?dry_run=true' \
   -X POST \
   -H 'Content-Type: application/json' \
   -d '{"message":{"chat":{"id":123},"text":"Hola"}}'
@@ -491,16 +524,16 @@ Memory behavior:
 
 ### `whatsapp`
 
-- Route: `/fn/whatsapp`
+- Route: `/whatsapp`
 - Methods: `GET`, `POST`, `DELETE`
 - Goal: WhatsApp real session manager (QR, connect, send, inbox/outbox, AI chat)
 - Actions:
-  - `GET /fn/whatsapp?action=qr`
-  - `GET /fn/whatsapp?action=status`
-  - `POST /fn/whatsapp?action=send`
-  - `POST /fn/whatsapp?action=chat`
-  - `GET /fn/whatsapp?action=inbox`
-  - `DELETE /fn/whatsapp?action=reset-session`
+  - `GET /whatsapp?action=qr`
+  - `GET /whatsapp?action=status`
+  - `POST /whatsapp?action=send`
+  - `POST /whatsapp?action=chat`
+  - `GET /whatsapp?action=inbox`
+  - `DELETE /whatsapp?action=reset-session`
 
 WhatsApp tools (for `action=chat`):
 
@@ -578,13 +611,13 @@ curl -sS 'http://127.0.0.1:8080/edge-header-inject?tenant=acme' -X POST --data '
 
 #### `github-webhook-guard`
 
-- Route: `/fn/github-webhook-guard`
+- Route: `/github-webhook-guard`
 - Methods: `POST`
 - Goal: verify `x-hub-signature-256` (GitHub HMAC) and optionally forward
 - Env: `GITHUB_WEBHOOK_SECRET` (secret)
 
 ```bash
-curl -sS -i 'http://127.0.0.1:8080/fn/github-webhook-guard' \
+curl -sS -i 'http://127.0.0.1:8080/github-webhook-guard' \
   -X POST \
   -H 'x-hub-signature-256: sha256=bad' \
   --data '{"zen":"Keep it logically awesome.","hook_id":123}' | sed -n '1,12p'
@@ -592,7 +625,7 @@ curl -sS -i 'http://127.0.0.1:8080/fn/github-webhook-guard' \
 
 ### `slack-webhook`
 
-- Route: `/fn/slack-webhook`
+- Route: `/slack-webhook`
 - Methods: `GET`
 - Goal: send a Slack Incoming Webhook (safe by default)
 - Default behavior: `dry_run=true`
@@ -601,12 +634,12 @@ curl -sS -i 'http://127.0.0.1:8080/fn/github-webhook-guard' \
 Example (dry run):
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/slack-webhook?text=Hello&dry_run=true'
+curl -sS 'http://127.0.0.1:8080/slack-webhook?text=Hello&dry_run=true'
 ```
 
 ### `discord-webhook`
 
-- Route: `/fn/discord-webhook`
+- Route: `/discord-webhook`
 - Methods: `GET`
 - Goal: send a Discord webhook (safe by default)
 - Default behavior: `dry_run=true`
@@ -615,12 +648,12 @@ curl -sS 'http://127.0.0.1:8080/fn/slack-webhook?text=Hello&dry_run=true'
 Example (dry run):
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/discord-webhook?content=Hello&dry_run=true'
+curl -sS 'http://127.0.0.1:8080/discord-webhook?content=Hello&dry_run=true'
 ```
 
 ### `notion-create-page`
 
-- Route: `/fn/notion-create-page`
+- Route: `/notion-create-page`
 - Methods: `GET`
 - Goal: create a Notion page (safe by default)
 - Default behavior: `dry_run=true`
@@ -629,7 +662,7 @@ curl -sS 'http://127.0.0.1:8080/fn/discord-webhook?content=Hello&dry_run=true'
 Example (dry run):
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/notion-create-page?title=Hello&content=World&dry_run=true'
+curl -sS 'http://127.0.0.1:8080/notion-create-page?title=Hello&content=World&dry_run=true'
 ```
 
 To send for real:
@@ -642,14 +675,14 @@ To send for real:
 
 ### `php-profile`
 
-- Route: `/fn/php-profile`
+- Route: `/php-profile`
 - Methods: `GET`
 - Query: `name`
 
 Example:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/php-profile?name=PHP'
+curl -sS 'http://127.0.0.1:8080/php-profile?name=PHP'
 ```
 
 Typical response:
@@ -662,14 +695,14 @@ Typical response:
 
 ### `rust-profile`
 
-- Route: `/fn/rust-profile`
+- Route: `/rust-profile`
 - Methods: `GET`
 - Query: `name`
 
 Example:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/rust-profile?name=Rust'
+curl -sS 'http://127.0.0.1:8080/rust-profile?name=Rust'
 ```
 
 Typical response:

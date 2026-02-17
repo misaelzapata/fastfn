@@ -35,13 +35,15 @@ docker compose up -d --build
 
 Antes de ejecutar código, asegurémonos de que el cerebro del sistema esté activo.
 
-=== "Navegador"
-    Abre **[http://127.0.0.1:8080/_fn/health](http://127.0.0.1:8080/_fn/health)**
+### Navegador
 
-=== "Terminal"
-    ```bash
-    curl -sS 'http://127.0.0.1:8080/_fn/health' | jq
-    ```
+Abre **[http://127.0.0.1:8080/_fn/health](http://127.0.0.1:8080/_fn/health)**
+
+### Terminal
+
+```bash
+curl -sS 'http://127.0.0.1:8080/_fn/health' | jq
+```
 
 **Salida Esperada:**
 ```json
@@ -65,13 +67,13 @@ La plataforma trae ejemplos listos. Empieza con QR:
 
 **Petición:**
 ```bash
-curl 'http://127.0.0.1:8080/fn/qr?text=HolaQR' -o /tmp/qr.svg
+curl 'http://127.0.0.1:8080/qr?text=HolaQR' -o /tmp/qr.svg
 ```
 
 Luego prueba una función JSON:
 
 ```bash
-curl 'http://127.0.0.1:8080/fn/hello?name=Mundo'
+curl 'http://127.0.0.1:8080/hello?name=Mundo'
 ```
 
 !!! question "¿Cómo sucedió eso?"

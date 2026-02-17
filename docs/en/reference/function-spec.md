@@ -14,9 +14,13 @@ This generates the correct folder structure and configuration file.
 
 - Function name: `^[a-zA-Z0-9_-]+$`
 - Version: `^[a-zA-Z0-9_.-]+$`
-- Public routes:
+- Public routes (default):
+  - `/<name>`
+  - `/<name>@<version>`
+- Optional compatibility alias:
   - `/fn/<name>`
   - `/fn/<name>@<version>`
+  - Hidden from OpenAPI by default (set `FN_OPENAPI_INCLUDE_FN_PATHS=1` to include them).
 
 ## Runtime support status
 
@@ -80,59 +84,59 @@ Optional files by function/version:
 
 All handlers consume `event` and return `{status, headers, body}`.
 
-=== "Python"
+### Python
 
-    ```python
-    import json
+```python
+import json
 
-    def handler(event):
-        return {
-            "status": 200,
-            "body": json.dumps({"hello": "world"}),
-        }
-    ```
-
-=== "Node"
-
-    ```js
-    exports.handler = async (event) => {
-      return {
-        status: 200,
-        body: JSON.stringify({ hello: 'world' }),
-      };
-    };
-    ```
-
-=== "Go"
-
-    ```go
-    package main
-
-    import "encoding/json"
-
-    func handler(event map[string]interface{}) map[string]interface{} {
-        body, _ := json.Marshal(map[string]interface{}{"hello": "world"})
-        return map[string]interface{}{
-            "status": 200,
-            "headers": map[string]interface{}{"Content-Type": "application/json"},
-            "body": string(body),
-        }
+def handler(event):
+    return {
+        "status": 200,
+        "body": json.dumps({"hello": "world"}),
     }
-    ```
+```
 
-=== "Lua"
+### Node
 
-    ```lua
-    local cjson = require("cjson.safe")
+```js
+exports.handler = async (event) => {
+  return {
+    status: 200,
+    body: JSON.stringify({ hello: 'world' }),
+  };
+};
+```
 
-    function handler(event)
-      return {
-        status = 200,
-        headers = { ["Content-Type"] = "application/json" },
-        body = cjson.encode({ hello = "world" }),
-      }
-    end
-    ```
+### Go
+
+```go
+package main
+
+import "encoding/json"
+
+func handler(event map[string]interface{}) map[string]interface{} {
+    body, _ := json.Marshal(map[string]interface{}{"hello": "world"})
+    return map[string]interface{}{
+        "status": 200,
+        "headers": map[string]interface{}{"Content-Type": "application/json"},
+        "body": string(body),
+    }
+}
+```
+
+### Lua
+
+```lua
+local cjson = require("cjson.safe")
+
+function handler(event)
+  return {
+    status = 200,
+    headers = { ["Content-Type"] = "application/json" },
+    body = cjson.encode({ hello = "world" }),
+  }
+end
+```
 
 ## Function config (`fn.config.json`)
 

@@ -52,13 +52,15 @@ make dev
 
 Before we run code, let's make sure the brain of the system is active.
 
-=== "Browser"
-    Open **[http://127.0.0.1:8080/_fn/health](http://127.0.0.1:8080/_fn/health)**
+### Browser
 
-=== "Terminal"
-    ```bash
-    curl -sS 'http://127.0.0.1:8080/_fn/health' | jq
-    ```
+Open **[http://127.0.0.1:8080/_fn/health](http://127.0.0.1:8080/_fn/health)**
+
+### Terminal
+
+```bash
+curl -sS 'http://127.0.0.1:8080/_fn/health' | jq
+```
 
 **Expected Output:**
 ```json
@@ -82,13 +84,13 @@ The platform includes built-in examples. Start with QR:
 
 **Request:**
 ```bash
-curl 'http://127.0.0.1:8080/fn/qr?text=HelloQR' -o /tmp/qr.svg
+curl 'http://127.0.0.1:8080/qr?text=HelloQR' -o /tmp/qr.svg
 ```
 
 Then check a JSON function:
 
 ```bash
-curl 'http://127.0.0.1:8080/fn/hello?name=World'
+curl 'http://127.0.0.1:8080/hello?name=World'
 ```
 
 !!! question "How did that happen?"

@@ -30,6 +30,19 @@ hide:
 
 ## Start in 60 seconds
 
+### Option A: Run the demo app from this repo
+
+```bash
+bin/fastfn dev examples/functions/next-style
+```
+
+Then open:
+
+- `http://127.0.0.1:8080/showcase`
+- `http://127.0.0.1:8080/docs`
+
+### Option B: Drop a file, get an endpoint
+
 1. Create `hello.js`
 2. Run `fastfn dev .`
 3. Call `GET /hello`
@@ -49,6 +62,11 @@ curl -sS 'http://127.0.0.1:8080/hello?name=World'
 
 No `serverless.yml`. No framework boilerplate. File routes are discovered automatically.
 
+Next:
+
+- Example catalog: [Example Function Catalog](./en/reference/builtin-functions.md)
+- Routing rules: [Zero-Config Routing](./en/how-to/zero-config-routing.md)
+
 ## Install
 
 ```bash
@@ -60,82 +78,82 @@ More: [Install and Release (Homebrew)](./en/how-to/homebrew.md)
 
 ## Multi-language from the first page
 
-=== "Python"
+### Python
 
-    ```python
-    # hello.py
-    import json
+```python
+# hello.py
+import json
 
-    def handler(event):
-        query = event.get("query") or {}
-        name = query.get("name", "World")
-        return {
-            "status": 200,
-            "headers": {"Content-Type": "application/json"},
-            "body": json.dumps({"hello": name, "runtime": "python"}),
-        }
-    ```
-
-=== "Node.js"
-
-    ```js
-    // hello.js
-    exports.handler = async (event) => ({
-      hello: (event.query || {}).name || 'World',
-      runtime: 'node',
-    });
-    ```
-
-=== "PHP"
-
-    ```php
-    <?php
-    function handler(array $event): array {
-      $query = $event["query"] ?? [];
-      $name = $query["name"] ?? "World";
-      return [
-        "status" => 200,
-        "headers" => ["Content-Type" => "application/json"],
-        "body" => json_encode(["hello" => $name, "runtime" => "php"], JSON_UNESCAPED_SLASHES),
-      ];
+def handler(event):
+    query = event.get("query") or {}
+    name = query.get("name", "World")
+    return {
+        "status": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": json.dumps({"hello": name, "runtime": "python"}),
     }
-    ```
+```
 
-=== "Lua"
+### Node.js
 
-    ```lua
-    local cjson = require("cjson.safe")
+```js
+// hello.js
+exports.handler = async (event) => ({
+  hello: (event.query || {}).name || 'World',
+  runtime: 'node',
+});
+```
 
-    function handler(event)
-      local query = event.query or {}
-      local name = query.name or "World"
-      return {
-        status = 200,
-        headers = { ["Content-Type"] = "application/json" },
-        body = cjson.encode({ hello = name, runtime = "lua" }),
-      }
-    end
-    ```
+### PHP
 
-=== "Rust (Experimental)"
+```php
+<?php
+function handler(array $event): array {
+  $query = $event["query"] ?? [];
+  $name = $query["name"] ?? "World";
+  return [
+    "status" => 200,
+    "headers" => ["Content-Type" => "application/json"],
+    "body" => json_encode(["hello" => $name, "runtime" => "php"], JSON_UNESCAPED_SLASHES),
+  ];
+}
+```
 
-    ```rust
-    use serde_json::{json, Value};
+### Lua
 
-    pub fn handler(event: Value) -> Value {
-        let name = event
-            .get("query")
-            .and_then(|q| q.get("name"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("World");
+```lua
+local cjson = require("cjson.safe")
 
-        json!({
-            "status": 200,
-            "headers": {"Content-Type": "application/json"},
-            "body": json!({ "hello": name, "runtime": "rust" }).to_string()
-        })
-    }
-    ```
+function handler(event)
+  local query = event.query or {}
+  local name = query.name or "World"
+  return {
+    status = 200,
+    headers = { ["Content-Type"] = "application/json" },
+    body = cjson.encode({ hello = name, runtime = "lua" }),
+  }
+end
+```
+
+### Rust (Experimental)
+
+```rust
+use serde_json::{json, Value};
+
+pub fn handler(event: Value) -> Value {
+    let name = event
+        .get("query")
+        .and_then(|q| q.get("name"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("World");
+
+    json!({
+        "status": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": json!({ "hello": name, "runtime": "rust" }).to_string()
+    })
+}
+```
 
 ## Where to go next
 

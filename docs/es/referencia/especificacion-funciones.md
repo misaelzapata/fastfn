@@ -4,9 +4,13 @@
 
 - nombre: `^[a-zA-Z0-9_-]+$`
 - version: `^[a-zA-Z0-9_.-]+$`
-- rutas publicas:
+- rutas publicas (default):
+  - `/<name>`
+  - `/<name>@<version>`
+- alias de compatibilidad (opcional):
   - `/fn/<name>`
   - `/fn/<name>@<version>`
+  - No aparece en OpenAPI por defecto (usa `FN_OPENAPI_INCLUDE_FN_PATHS=1` si queres incluirlo).
 
 ## Estado de runtimes
 
@@ -71,69 +75,69 @@ Archivos opcionales por funcion/version:
 
 Todos consumen `event` y devuelven `{status, headers, body}`.
 
-=== "Python"
+### Python
 
-    ```python
-    import json
+```python
+import json
 
-    def handler(event):
-        name = (event.get("query") or {}).get("name", "world")
-        return {
-            "status": 200,
-            "headers": {"Content-Type": "application/json"},
-            "body": json.dumps({"hello": name}),
-        }
-    ```
-
-=== "Node"
-
-    ```js
-    exports.handler = async (event) => {
-      const query = event.query || {};
-      const name = query.name || 'world';
-      return {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hello: name }),
-      };
-    };
-    ```
-
-=== "PHP"
-
-    ```php
-    <?php
-    function handler($event) {
-        $query = $event['query'] ?? [];
-        $name = $query['name'] ?? 'world';
-
-        return [
-            'status' => 200,
-            'headers' => ['Content-Type' => 'application/json'],
-            'body' => json_encode(['hello' => $name]),
-        ];
+def handler(event):
+    name = (event.get("query") or {}).get("name", "world")
+    return {
+        "status": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": json.dumps({"hello": name}),
     }
-    ```
+```
 
-=== "Rust"
+### Node
 
-    ```rust
-    use serde_json::{json, Value};
+```js
+exports.handler = async (event) => {
+  const query = event.query || {};
+  const name = query.name || 'world';
+  return {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ hello: name }),
+  };
+};
+```
 
-    pub fn handler(event: Value) -> Value {
-        let name = event
-            .get("query")
-            .and_then(|q| q.get("name"))
-            .and_then(|n| n.as_str())
-            .unwrap_or("mundo");
+### PHP
 
-        json!({
-            "status": 200,
-            "headers": { "Content-Type": "application/json" },
-            "body": json!({ "hello": name }).to_string()
-        })
-    }
-    ```
+```php
+<?php
+function handler($event) {
+    $query = $event['query'] ?? [];
+    $name = $query['name'] ?? 'world';
+
+    return [
+        'status' => 200,
+        'headers' => ['Content-Type' => 'application/json'],
+        'body' => json_encode(['hello' => $name]),
+    ];
+}
+```
+
+### Rust
+
+```rust
+use serde_json::{json, Value};
+
+pub fn handler(event: Value) -> Value {
+    let name = event
+        .get("query")
+        .and_then(|q| q.get("name"))
+        .and_then(|n| n.as_str())
+        .unwrap_or("mundo");
+
+    json!({
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "body": json!({ "hello": name }).to_string()
+    })
+}
+```
 
 ## `fn.config.json`
 

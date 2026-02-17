@@ -52,104 +52,104 @@ Ejemplos (relativos a `FN_FUNCTIONS_ROOT`):
 
 La funcion lee query/header/context y devuelve JSON.
 
-=== "Python (`app.py`)"
+### Python (`app.py`)
 
-    ```python title="$FN_FUNCTIONS_ROOT/python/mi-perfil/app.py"
-    import json
+```python title="$FN_FUNCTIONS_ROOT/python/mi-perfil/app.py"
+import json
 
-    def handler(event):
-        query = event.get("query") or {}
-        headers = event.get("headers") or {}
-        ctx = event.get("context") or {}
+def handler(event):
+    query = event.get("query") or {}
+    headers = event.get("headers") or {}
+    ctx = event.get("context") or {}
 
-        perfil = {
-            "name": query.get("name", "anonimo"),
-            "role": query.get("role", "invitado"),
-            "trace": ctx.get("request_id"),
-            "auth_header_seen": bool(headers.get("authorization")),
-        }
-
-        return {
-            "status": 200,
-            "headers": {"Content-Type": "application/json"},
-            "body": json.dumps(perfil),
-        }
-    ```
-
-=== "Node (`app.js`)"
-
-    ```js title="$FN_FUNCTIONS_ROOT/node/mi-perfil/app.js"
-    exports.handler = async (event) => {
-      const query = event.query || {};
-      const headers = event.headers || {};
-      const ctx = event.context || {};
-
-      const perfil = {
-        name: query.name || 'anonimo',
-        role: query.role || 'invitado',
-        trace: ctx.request_id || null,
-        auth_header_seen: Boolean(headers.authorization),
-      };
-
-      return {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(perfil),
-      };
-    };
-    ```
-
-=== "PHP (`app.php`)"
-
-    ```php title="$FN_FUNCTIONS_ROOT/php/mi-perfil/app.php"
-    <?php
-    function handler($event) {
-        $query = $event['query'] ?? [];
-        $headers = $event['headers'] ?? [];
-        $ctx = $event['context'] ?? [];
-
-        $perfil = [
-            'name' => $query['name'] ?? 'anonimo',
-            'role' => $query['role'] ?? 'invitado',
-            'trace' => $ctx['request_id'] ?? null,
-            'auth_header_seen' => !empty($headers['authorization']),
-        ];
-
-        return [
-            'status' => 200,
-            'headers' => ['Content-Type' => 'application/json'],
-            'body' => json_encode($perfil),
-        ];
+    perfil = {
+        "name": query.get("name", "anonimo"),
+        "role": query.get("role", "invitado"),
+        "trace": ctx.get("request_id"),
+        "auth_header_seen": bool(headers.get("authorization")),
     }
-    ```
 
-=== "Rust (`app.rs`)"
-
-    ```rust title="$FN_FUNCTIONS_ROOT/rust/mi-perfil/app.rs"
-    use serde_json::{json, Value};
-
-    pub fn handler(event: Value) -> Value {
-        let query = event.get("query").cloned().unwrap_or_else(|| json!({}));
-        let headers = event.get("headers").cloned().unwrap_or_else(|| json!({}));
-        let ctx = event.get("context").cloned().unwrap_or_else(|| json!({}));
-
-        let name = query.get("name").and_then(|v| v.as_str()).unwrap_or("anonimo");
-        let role = query.get("role").and_then(|v| v.as_str()).unwrap_or("invitado");
-        let trace = ctx.get("request_id").cloned().unwrap_or(Value::Null);
-        let auth_seen = headers.get("authorization").is_some();
-
-        json!({
-            "status": 200,
-            "headers": {"Content-Type": "application/json"},
-            "body": json!({
-                "name": name,
-                "role": role,
-                "trace": trace,
-                "auth_header_seen": auth_seen
-            }).to_string()
-        })
+    return {
+        "status": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": json.dumps(perfil),
     }
-    ```
+```
+
+### Node (`app.js`)
+
+```js title="$FN_FUNCTIONS_ROOT/node/mi-perfil/app.js"
+exports.handler = async (event) => {
+  const query = event.query || {};
+  const headers = event.headers || {};
+  const ctx = event.context || {};
+
+  const perfil = {
+    name: query.name || 'anonimo',
+    role: query.role || 'invitado',
+    trace: ctx.request_id || null,
+    auth_header_seen: Boolean(headers.authorization),
+  };
+
+  return {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(perfil),
+  };
+};
+```
+
+### PHP (`app.php`)
+
+```php title="$FN_FUNCTIONS_ROOT/php/mi-perfil/app.php"
+<?php
+function handler($event) {
+    $query = $event['query'] ?? [];
+    $headers = $event['headers'] ?? [];
+    $ctx = $event['context'] ?? [];
+
+    $perfil = [
+        'name' => $query['name'] ?? 'anonimo',
+        'role' => $query['role'] ?? 'invitado',
+        'trace' => $ctx['request_id'] ?? null,
+        'auth_header_seen' => !empty($headers['authorization']),
+    ];
+
+    return [
+        'status' => 200,
+        'headers' => ['Content-Type' => 'application/json'],
+        'body' => json_encode($perfil),
+    ];
+}
+```
+
+### Rust (`app.rs`)
+
+```rust title="$FN_FUNCTIONS_ROOT/rust/mi-perfil/app.rs"
+use serde_json::{json, Value};
+
+pub fn handler(event: Value) -> Value {
+    let query = event.get("query").cloned().unwrap_or_else(|| json!({}));
+    let headers = event.get("headers").cloned().unwrap_or_else(|| json!({}));
+    let ctx = event.get("context").cloned().unwrap_or_else(|| json!({}));
+
+    let name = query.get("name").and_then(|v| v.as_str()).unwrap_or("anonimo");
+    let role = query.get("role").and_then(|v| v.as_str()).unwrap_or("invitado");
+    let trace = ctx.get("request_id").cloned().unwrap_or(Value::Null);
+    let auth_seen = headers.get("authorization").is_some();
+
+    json!({
+        "status": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": json!({
+            "name": name,
+            "role": role,
+            "trace": trace,
+            "auth_header_seen": auth_seen
+        }).to_string()
+    })
+}
+```
 
 ## 4) Configurar politica (`fn.config.json`)
 

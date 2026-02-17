@@ -38,41 +38,41 @@ Edit (or create) `fn.config.json` in your function folder:
 
 Instead of using `axios` or `fetch`, you just return a special JSON object.
 
-=== "Node.js"
+### Node.js
 
-    ```js title="index.js"
-    exports.handler = async (req) => {
-      // Logic: You can inspect headers or validation here first!
-      if (!req.headers['x-secret']) {
-        return { status: 401, body: "Unauthorized" };
+```js title="index.js"
+exports.handler = async (req) => {
+  // Logic: You can inspect headers or validation here first!
+  if (!req.headers['x-secret']) {
+    return { status: 401, body: "Unauthorized" };
+  }
+
+  // Pass-through via the gateway
+  return {
+    proxy: {
+      // Control-plane paths (/_fn/* and /console/*) are blocked. Proxy to a public endpoint instead.
+      // In this tutorial we'll proxy to the "hello" endpoint from Chapter 1.
+      path: "/hello?name=edge",
+      method: "GET",
+      headers: {
+        "x-proxy-client": "fastfn-fn"
       }
+    }
+  };
+};
+```
 
-      // Pass-through via the gateway
-      return {
-        proxy: {
-          // Control-plane paths (/_fn/* and /console/*) are blocked. Proxy to a public endpoint instead.
-          // In this tutorial we'll proxy to the "hello" endpoint from Chapter 1.
-          path: "/hello?name=edge",
-          method: "GET",
-          headers: {
-            "x-proxy-client": "fastfn-fn"
-          }
+### Python
+
+```python title="main.py"
+def handler(req):
+    return {
+        "proxy": {
+            "path": "/hello?name=edge",
+            "method": "GET"
         }
-      };
-    };
-    ```
-
-=== "Python"
-
-    ```python title="main.py"
-    def handler(req):
-        return {
-            "proxy": {
-                "path": "/hello?name=edge",
-                "method": "GET"
-            }
-        }
-    ```
+    }
+```
 
 ## Step 3: Verify it works
 

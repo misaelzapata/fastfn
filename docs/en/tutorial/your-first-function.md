@@ -21,29 +21,29 @@ cd my-functions
 
 Use the interactive CLI to generate a function skeleton. We support 4 runtimes:
 
-=== "Node.js"
+### Node.js
 
-    ```bash
-    fastfn init my-profile --template node
-    ```
+```bash
+fastfn init my-profile --template node
+```
 
-=== "Python"
+### Python
 
-    ```bash
-    fastfn init my-profile --template python
-    ```
+```bash
+fastfn init my-profile --template python
+```
 
-=== "PHP"
+### PHP
 
-    ```bash
-    fastfn init my-profile --template php
-    ```
+```bash
+fastfn init my-profile --template php
+```
 
-=== "Rust"
+### Rust
 
-    ```bash
-    fastfn init my-profile --template rust
-    ```
+```bash
+fastfn init my-profile --template rust
+```
 
 This creates a folder `my-profile/` with a configuration file `fn.config.json` and a handler file.
 
@@ -63,117 +63,117 @@ The `event` object contains:
 
 Let's modify the handler to read query parameters and return a dynamic JSON response.
 
-=== "Node.js (`handler.js`)"
+### Node.js (`handler.js`)
 
-    ```javascript
-    /**
-     * @typedef {Object} Profile
-     * @property {string} name
-     * @property {string} role
-     * @property {string} request_id
-     */
+```javascript
+/**
+ * @typedef {Object} Profile
+ * @property {string} name
+ * @property {string} role
+ * @property {string} request_id
+ */
 
-    /**
-     * @param {import('@fastfn/runtime').Request} event
-     */
-    module.exports.handler = async (event) => {
-      // 1. Extract inputs
-      const query = event.query || {};
-      const context = event.context || {};
+/**
+ * @param {import('@fastfn/runtime').Request} event
+ */
+module.exports.handler = async (event) => {
+  // 1. Extract inputs
+  const query = event.query || {};
+  const context = event.context || {};
 
-      // 2. Build response data
-      const profile = {
-        name: query.name || "Anonymous",
-        role: query.role || "Viewer",
-        request_id: context.request_id
-      };
+  // 2. Build response data
+  const profile = {
+    name: query.name || "Anonymous",
+    role: query.role || "Viewer",
+    request_id: context.request_id
+  };
 
-      // 3. Return response object
-      return {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(profile)
-      };
-    };
-    ```
+  // 3. Return response object
+  return {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(profile)
+  };
+};
+```
 
-=== "Python (`main.py`)"
+### Python (`main.py`)
 
-    ```python
-    from typing import Any, Dict
+```python
+from typing import Any, Dict
 
-    def handler(event: Dict[str, Any]) -> Dict[str, Any]:
-        # 1. Extract inputs
-        query = event.get("query", {})
-        context = event.get("context", {})
+def handler(event: Dict[str, Any]) -> Dict[str, Any]:
+    # 1. Extract inputs
+    query = event.get("query", {})
+    context = event.get("context", {})
 
-        # 2. Build response data
-        profile = {
-            "name": query.get("name", "Anonymous"),
-            "role": query.get("role", "Viewer"),
-            "request_id": context.get("request_id")
-        }
-
-        # 3. Return response object
-        return {
-            "status": 200,
-            "headers": {"Content-Type": "application/json"},
-            "body": profile  # Auto-serialized to JSON
-        }
-    ```
-
-=== "PHP (`handler.php`)"
-
-    ```php
-    <?php
-
-    function handler(array $event): array {
-        // 1. Extract inputs
-        $query = $event['query'] ?? [];
-        $context = $event['context'] ?? [];
-
-        // 2. Build response data
-        $profile = [
-            'name' => $query['name'] ?? 'Anonymous',
-            'role' => $query['role'] ?? 'Viewer',
-            'request_id' => $context['request_id'] ?? null
-        ];
-
-        // 3. Return response object
-        return [
-            'status' => 200,
-            'headers' => ['Content-Type' => 'application/json'],
-            'body' => json_encode($profile)
-        ];
+    # 2. Build response data
+    profile = {
+        "name": query.get("name", "Anonymous"),
+        "role": query.get("role", "Viewer"),
+        "request_id": context.get("request_id")
     }
-    ```
 
-=== "Rust (`handler.rs`)"
-
-    ```rust
-    use serde_json::{json, Value};
-
-    pub fn handler(event: Value) -> Value {
-        // 1. Extract inputs (safely with defaults)
-        let query = event.get("query").unwrap_or(&json!({}));
-        let context = event.get("context").unwrap_or(&json!({}));
-
-        let name = query.get("name").and_then(|v| v.as_str()).unwrap_or("Anonymous");
-        let role = query.get("role").and_then(|v| v.as_str()).unwrap_or("Viewer");
-        let req_id = context.get("request_id").and_then(|v| v.as_str()).unwrap_or("");
-
-        // 2. Return response object
-        json!({
-            "status": 200,
-            "headers": { "Content-Type": "application/json" },
-            "body": json!({
-                "name": name,
-                "role": role,
-                "request_id": req_id
-            }).to_string()
-        })
+    # 3. Return response object
+    return {
+        "status": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": profile  # Auto-serialized to JSON
     }
-    ```
+```
+
+### PHP (`handler.php`)
+
+```php
+<?php
+
+function handler(array $event): array {
+    // 1. Extract inputs
+    $query = $event['query'] ?? [];
+    $context = $event['context'] ?? [];
+
+    // 2. Build response data
+    $profile = [
+        'name' => $query['name'] ?? 'Anonymous',
+        'role' => $query['role'] ?? 'Viewer',
+        'request_id' => $context['request_id'] ?? null
+    ];
+
+    // 3. Return response object
+    return [
+        'status' => 200,
+        'headers' => ['Content-Type' => 'application/json'],
+        'body' => json_encode($profile)
+    ];
+}
+```
+
+### Rust (`handler.rs`)
+
+```rust
+use serde_json::{json, Value};
+
+pub fn handler(event: Value) -> Value {
+    // 1. Extract inputs (safely with defaults)
+    let query = event.get("query").unwrap_or(&json!({}));
+    let context = event.get("context").unwrap_or(&json!({}));
+
+    let name = query.get("name").and_then(|v| v.as_str()).unwrap_or("Anonymous");
+    let role = query.get("role").and_then(|v| v.as_str()).unwrap_or("Viewer");
+    let req_id = context.get("request_id").and_then(|v| v.as_str()).unwrap_or("");
+
+    // 2. Return response object
+    json!({
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "body": json!({
+            "name": name,
+            "role": role,
+            "request_id": req_id
+        }).to_string()
+    })
+}
+```
 
 ## 4. Run Locally
 
