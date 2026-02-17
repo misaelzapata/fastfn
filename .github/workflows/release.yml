@@ -12,6 +12,10 @@ jobs:
   goreleaser:
     name: GoReleaser
     runs-on: ubuntu-latest
+    env:
+      # GitHub Actions does not allow `secrets.*` directly in `if:` expressions.
+      # We map the secret to `env` and gate steps based on env presence.
+      HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,7 +30,7 @@ jobs:
           cache-dependency-path: cli/go.sum
 
       - name: Release (with Homebrew tap)
-        if: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN != '' }}
+        if: ${{ env.HOMEBREW_TAP_GITHUB_TOKEN != '' }}
         uses: goreleaser/goreleaser-action@v6
         with:
           version: latest
@@ -34,10 +38,10 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ env.HOMEBREW_TAP_GITHUB_TOKEN }}
 
       - name: Release (skip Homebrew tap)
-        if: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN == '' }}
+        if: ${{ env.HOMEBREW_TAP_GITHUB_TOKEN == '' }}
         uses: goreleaser/goreleaser-action@v6
         with:
           version: latest
@@ -45,4 +49,3 @@ jobs:
           args: release --clean --skip=homebrew
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
