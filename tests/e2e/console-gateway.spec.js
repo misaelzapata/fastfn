@@ -11,7 +11,7 @@ async function assertOk(res, label) {
 
 test.describe('Console Gateway mapping UX', () => {
   test.beforeEach(async ({ request }) => {
-    const cfg = await request.put('/_fn/function-config?runtime=node&name=node-echo', {
+    const cfg = await request.put('/_fn/function-config?runtime=node&name=node-hello', {
       headers: {
         'Content-Type': 'application/json',
         'x-fn-admin-token': ADMIN_TOKEN,
@@ -38,14 +38,19 @@ test.describe('Console Gateway mapping UX', () => {
 
     const row = page.locator('#routeTableBody tr', { hasText: '/api/e2e-node-echo' }).first();
     await expect(row).toBeVisible();
-    await expect(row).toContainText('node/node-echo');
-    await expect(row).toContainText('GET, POST');
+    await expect(row).toContainText('node/node-hello');
+    await expect(row).toContainText(/GET,\s*POST/);
 
-    await row.getByRole('button', { name: 'Edit mapping' }).click();
+    await row.getByRole('button', { name: /Open/i }).click();
 
-    await expect(page).toHaveURL(/\/console\/configuration/);
-    await expect(page).toHaveURL(/runtime=node/);
-    await expect(page).toHaveURL(/name=node-echo/);
-    await expect(page.locator('#cfgRoutes')).toHaveValue(/\/api\/e2e-node-echo/);
+    // Gateway "Open" goes to the function detail view and pre-fills Explorer/Test with the mapped route.
+    await expect(page).toHaveURL(/\/console\/functions\/node\/node-hello/);
+    await expect(page.locator('#detailFnName')).toContainText('node-hello');
+
+    await expect(page.locator('#invokeRoute')).toHaveValue('/api/e2e-node-echo');
+
+    // And the mapping is reflected in the configuration editor.
+    await page.getByRole('button', { name: 'Configuration' }).click();
+    await expect(page.locator('#configRoutes')).toHaveValue(/\/api\/e2e-node-echo/);
   });
 });

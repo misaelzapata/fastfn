@@ -1,7 +1,5 @@
 const { test, expect, request } = require('@playwright/test');
 
-test.use({ baseURL: 'http://127.0.0.1:8080' });
-
 test.describe('Multi-Runtime Function Execution', () => {
 
   test('Node.js function responds correctly', async ({ request }) => {
