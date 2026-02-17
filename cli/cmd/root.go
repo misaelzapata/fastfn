@@ -53,6 +53,9 @@ func Execute() {
 func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "Path to config file (default: ./fastfn.json)")
+	// Enable `fastfn --version` in addition to `fastfn version`.
+	rootCmd.Version = Version
+	rootCmd.SetVersionTemplate("FastFN {{.Version}}\n")
 }
 
 func initConfig() {

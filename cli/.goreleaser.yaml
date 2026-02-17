@@ -3,7 +3,7 @@ project_name: fastfn
 
 before:
   hooks:
-    - go mod tidy
+    - go mod download
 
 builds:
   - id: "fastfn"
@@ -11,6 +11,11 @@ builds:
     main: "./main.go"  # Assuming main.go is at cli/ root
     env:
       - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+      - -X github.com/misaelzapata/fastfn/cli/cmd.Version={{.Tag}}
+      - -X github.com/misaelzapata/fastfn/cli/cmd.Commit={{.FullCommit}}
+      - -X github.com/misaelzapata/fastfn/cli/cmd.Date={{.Date}}
     goos:
       - linux
       - darwin

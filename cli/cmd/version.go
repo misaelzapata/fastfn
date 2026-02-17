@@ -6,11 +6,19 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Populated at build time via -ldflags (see cli/.goreleaser.yaml).
+var (
+	Version = "dev"
+	Commit  = "none"
+	Date    = "unknown"
+)
+
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print the version number",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("fastfn v0.1.0-alpha")
+		// Keep output stable for scripts and Homebrew formula tests.
+		fmt.Printf("FastFN %s\n", Version)
 	},
 }
 
