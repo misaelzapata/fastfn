@@ -112,13 +112,19 @@ warm_heavy_endpoints() {
 }
 
 assert_openapi_examples() {
-  local openapi_json
-  openapi_json="$(curl -sS 'http://127.0.0.1:8080/_fn/openapi.json')"
-  OPENAPI_JSON="$openapi_json" python3 - <<'PY'
+  # Avoid passing OpenAPI as an env var: it can exceed ARG_MAX in CI (E2BIG).
+  #
+  # Use a temp file instead of stdin because python reads the script from stdin.
+  local openapi_path rc
+  openapi_path="$(mktemp -t fastfn-openapi-demos-openapi.XXXXXX.json)"
+  curl -sS 'http://127.0.0.1:8080/_fn/openapi.json' >"$openapi_path"
+  set +e
+  python3 - "$openapi_path" <<'PY'
 import json
-import os
+import sys
 
-obj = json.loads(os.environ["OPENAPI_JSON"])
+with open(sys.argv[1], "r", encoding="utf-8") as f:
+    obj = json.load(f)
 paths = obj.get("paths") or {}
 
 assert "/node/fastfn-types/d" not in paths, "must not expose .d.ts helper files as API routes"
@@ -165,6 +171,10 @@ ip_q = query_param_map(ip_remote)
 for required in ("ip", "mock"):
     assert required in ip_q, f"ip-intel remote missing query param example: {required}"
 PY
+  rc="$?"
+  set -e
+  rm -f "$openapi_path" >/dev/null 2>&1 || true
+  return "$rc"
 }
 
 run_public_sweep() {
