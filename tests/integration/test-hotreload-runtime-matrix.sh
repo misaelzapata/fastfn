@@ -240,7 +240,7 @@ start_stack() {
       FN_UI_ENABLED=0 \
       FN_SCHEDULER_ENABLED=0 \
       FN_OPENAPI_INCLUDE_INTERNAL=0 \
-      ./bin/fastfn dev "$functions_root" >"$STACK_LOG" 2>&1
+      ./bin/fastfn dev --build "$functions_root" >"$STACK_LOG" 2>&1
     echo "$?" >"$STACK_EXIT_FILE"
   ) &
   STACK_PID="$!"

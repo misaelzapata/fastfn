@@ -89,11 +89,11 @@ echo "assistant live smoke mode: ${RUN_MODE} (provider=${provider})"
     FN_ADMIN_API_ENABLED=1 \
     FN_ASSISTANT_ENABLED=1 \
     FN_ASSISTANT_PROVIDER="$provider" \
-    FN_HOST_PORT="$PORT" \
-    COMPOSE_PROJECT_NAME="$PROJECT_NAME" \
-    ./bin/fastfn dev "$TARGET_DIR" >"$LOG_FILE" 2>&1
-  fi
-) &
+	    FN_HOST_PORT="$PORT" \
+	    COMPOSE_PROJECT_NAME="$PROJECT_NAME" \
+	    ./bin/fastfn dev --build "$TARGET_DIR" >"$LOG_FILE" 2>&1
+	  fi
+	) &
 FASTFN_PID="$!"
 
 for _ in $(seq 1 "$WAIT_SECS"); do

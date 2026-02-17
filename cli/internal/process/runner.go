@@ -125,6 +125,15 @@ func RunNative(cfg RunConfig) error {
 	fmt.Printf("Config generated: %s\n", nginxConf)
 
 	// 4. Setup Environment Variables
+	//
+	// Native mode runs OpenResty directly on the host. Keep runtime temp dirs
+	// consistent with the Docker stack (/tmp/fastfn/*) and ensure the parent
+	// exists before OpenResty starts (it will create subdirectories itself).
+	if err := os.MkdirAll("/tmp/fastfn", 0o777); err != nil {
+		return fmt.Errorf("failed to create /tmp/fastfn: %w", err)
+	}
+	_ = os.Chmod("/tmp/fastfn", 0o1777)
+
 	socketDir := filepath.Join(runtimeDir, "sockets")
 	if err := os.MkdirAll(socketDir, 0755); err != nil {
 		return err
@@ -234,6 +243,7 @@ func RunNative(cfg RunConfig) error {
 	// 6. Register Services
 	openrestyDir := filepath.Join(runtimeDir, "openresty")
 	pm.AddService("openresty", "openresty", []string{
+		"-e", "/dev/stderr",
 		"-p", openrestyDir,
 		"-c", filepath.Base(nginxConf),
 		"-g", "daemon off;",

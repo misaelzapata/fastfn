@@ -172,15 +172,38 @@ var devCmd = &cobra.Command{
 		if !ok {
 			log.Fatal("Invalid docker-compose.yml: no services")
 		}
-		openresty, ok := services["openresty"].(map[string]interface{})
-		if !ok {
-			log.Fatal("Invalid docker-compose.yml: no openresty service")
-		}
+			openresty, ok := services["openresty"].(map[string]interface{})
+			if !ok {
+				log.Fatal("Invalid docker-compose.yml: no openresty service")
+			}
 
-		volumes, ok := openresty["volumes"].([]interface{})
-		if !ok {
-			volumes = []interface{}{}
-		}
+			// Run the container as the host user by default.
+			//
+			// Why: Nginx/OpenResty workers can run as an unprivileged user when the
+			// master is started as root. That breaks write flows (console write, ad-hoc
+			// function creation, etc.) on Linux bind mounts where the project directory
+			// is not world-writable (e.g. mktemp() creates 0700 dirs in CI).
+			//
+			// Override knobs:
+			// - FN_DOCKER_USER: explicit docker user value (e.g. "1000:1000")
+			// - FN_DOCKER_RUN_AS_ROOT=1: keep the service user unset
+			if _, hasUser := openresty["user"]; !hasUser {
+				if strings.TrimSpace(os.Getenv("FN_DOCKER_RUN_AS_ROOT")) == "1" {
+					// keep unset
+				} else if u := strings.TrimSpace(os.Getenv("FN_DOCKER_USER")); u != "" {
+					openresty["user"] = u
+				} else {
+					uid, gid := os.Getuid(), os.Getgid()
+					if uid >= 0 && gid >= 0 {
+						openresty["user"] = fmt.Sprintf("%d:%d", uid, gid)
+					}
+				}
+			}
+
+			volumes, ok := openresty["volumes"].([]interface{})
+			if !ok {
+				volumes = []interface{}{}
+			}
 
 		// Filter out existing /app/srv/fn/functions mounts
 		newVolumes := []interface{}{}

@@ -7,7 +7,8 @@ WORKDIR /app
 RUN apk add --no-cache python3 py3-pip nodejs npm git openssh-client php php-phar rust cargo go luarocks5.1 \
   && luarocks-5.1 install luacov 0.17.0-1 \
   && mkdir -p /app/openresty/logs /tmp/fastfn /app/srv/fn/functions /app/docker/openresty \
-  && chmod -R a+rwX /app/srv/fn/functions
+  && chmod -R a+rwX /app/openresty/logs /app/srv/fn/functions \
+  && chmod 1777 /tmp/fastfn 2>/dev/null || true
 
 # Copy embedded resources (Must match embed structure)
 COPY openresty /app/openresty

@@ -152,7 +152,7 @@ echo "== cli init auto-discovery smoke =="
 STACK_LOG="$(mktemp -t fastfn-cli-init-stack.XXXXXX.log)"
 (
   cd "$ROOT_DIR"
-  FN_UI_ENABLED=0 FN_CONSOLE_WRITE_ENABLED=0 ./bin/fastfn dev "$WORK_DIR" >"$STACK_LOG" 2>&1
+  FN_UI_ENABLED=0 FN_CONSOLE_WRITE_ENABLED=0 ./bin/fastfn dev --build "$WORK_DIR" >"$STACK_LOG" 2>&1
 ) &
 STACK_PID="$!"
 

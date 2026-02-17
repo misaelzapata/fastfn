@@ -158,12 +158,12 @@ start_stack() {
   if [[ "$#" -gt 0 ]]; then
     (
       cd "$ROOT_DIR"
-      env FN_HOT_RELOAD=0 "$@" ./bin/fastfn dev "$target_dir" >"$STACK_LOG" 2>&1
+      env FN_HOT_RELOAD=0 "$@" ./bin/fastfn dev --build "$target_dir" >"$STACK_LOG" 2>&1
     ) &
   else
     (
       cd "$ROOT_DIR"
-      env FN_HOT_RELOAD=0 ./bin/fastfn dev "$target_dir" >"$STACK_LOG" 2>&1
+      env FN_HOT_RELOAD=0 ./bin/fastfn dev --build "$target_dir" >"$STACK_LOG" 2>&1
     ) &
   fi
   STACK_PID="$!"

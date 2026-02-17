@@ -74,7 +74,7 @@ start_stack() {
       EDGE_AUTH_TOKEN=dev-token \
       EDGE_FILTER_API_KEY=dev \
       GITHUB_WEBHOOK_SECRET=dev \
-      ./bin/fastfn dev examples/functions >"$STACK_LOG" 2>&1
+      ./bin/fastfn dev --build examples/functions >"$STACK_LOG" 2>&1
   ) &
   STACK_PID="$!"
   wait_for_health

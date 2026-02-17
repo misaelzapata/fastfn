@@ -4,6 +4,19 @@ set -eu
 mkdir -p /tmp/fastfn
 chmod 1777 /tmp/fastfn 2>/dev/null || true
 
+# When the container runs as an arbitrary UID (dev default), tools that rely on
+# $HOME/.cache (Go, npm, cargo, etc.) can fall back to unwritable paths like
+# /.cache or /.cargo. Keep all caches under /tmp/fastfn so builds work as non-root.
+HOME="/tmp/fastfn/home"
+XDG_CACHE_HOME="/tmp/fastfn/cache"
+GOPATH="/tmp/fastfn/go"
+GOCACHE="/tmp/fastfn/go-build-cache"
+NPM_CONFIG_CACHE="/tmp/fastfn/npm-cache"
+CARGO_HOME="/tmp/fastfn/cargo"
+RUSTUP_HOME="/tmp/fastfn/rustup"
+export HOME XDG_CACHE_HOME GOPATH GOCACHE NPM_CONFIG_CACHE CARGO_HOME RUSTUP_HOME
+mkdir -p "$HOME" "$XDG_CACHE_HOME" "$GOPATH" "$GOCACHE" "$NPM_CONFIG_CACHE" "$CARGO_HOME" "$RUSTUP_HOME"
+
 RUNTIMES="${FN_RUNTIMES:-python,node,php,lua}"
 
 has_runtime() {
@@ -86,4 +99,4 @@ cleanup() {
 
 trap cleanup INT TERM EXIT
 
-exec openresty -g "daemon off;" -p /app/openresty -c nginx.conf
+exec openresty -e /dev/stderr -g "daemon off;" -p /app/openresty -c nginx.conf

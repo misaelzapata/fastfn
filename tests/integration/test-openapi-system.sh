@@ -147,7 +147,7 @@ start_stack() {
   if [[ "$#" -gt 0 ]]; then
     cmd+=("$@")
   fi
-  cmd+=(./bin/fastfn dev "$FIXTURES_DIR")
+  cmd+=(./bin/fastfn dev --build "$FIXTURES_DIR")
   (
     cd "$ROOT_DIR"
     "${cmd[@]}" >"$STACK_LOG" 2>&1
@@ -170,7 +170,7 @@ start_stack_with_config() {
   if [[ "$#" -gt 0 ]]; then
     cmd+=("$@")
   fi
-  cmd+=(./bin/fastfn --config "$config_path" dev)
+  cmd+=(./bin/fastfn --config "$config_path" dev --build)
   (
     cd "$ROOT_DIR"
     "${cmd[@]}" >"$STACK_LOG" 2>&1
