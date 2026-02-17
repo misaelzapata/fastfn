@@ -1,5 +1,10 @@
 # Bienvenido a FastFN
 
+[![GitHub](https://img.shields.io/badge/GitHub-misaelzapata%2Ffastfn-181717?logo=github&logoColor=white)](https://github.com/misaelzapata/fastfn)
+[![CI](https://github.com/misaelzapata/fastfn/actions/workflows/ci.yml/badge.svg)](https://github.com/misaelzapata/fastfn/actions/workflows/ci.yml)
+[![Docs](https://github.com/misaelzapata/fastfn/actions/workflows/docs.yml/badge.svg)](https://github.com/misaelzapata/fastfn/actions/workflows/docs.yml)
+[![Coverage](https://codecov.io/gh/misaelzapata/fastfn/graph/badge.svg)](https://codecov.io/gh/misaelzapata/fastfn)
+
 !!! tip "Filosofía: El 'Next.js' para el Backend"
     **FastFN** te da la **Experiencia de Desarrollo de Next.js** pero para **Cualquier Lenguaje de Backend** (Python, Node, PHP, Lua, Go, Rust).
     

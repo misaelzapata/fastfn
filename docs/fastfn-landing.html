@@ -206,14 +206,14 @@ footer{background:var(--bg2);border-top:1px solid var(--border);padding:40px 2re
 <div class="nav-in">
   <div class="nav-logo">
     <svg viewBox="0 0 32 32" fill="none"><path d="M6 22L16 6l4 8 6-4-2 14H6z" fill="#7c3aed"/><path d="M16 6l4 8 6-4" stroke="#f97316" stroke-width="2.5" stroke-linecap="round"/><circle cx="22" cy="10" r="2" fill="#f97316"/></svg>
-    fastfn
+    FastFN
   </div>
   <div class="nav-links">
     <a href="#start">Get Started</a>
     <a href="#how">How It Works</a>
     <a href="#features">Features</a>
     <a href="#runtimes">Runtimes</a>
-    <a href="https://github.com/user/fastfn" target="_blank">GitHub</a>
+    <a href="https://github.com/misaelzapata/fastfn" target="_blank">GitHub</a>
     <a href="#start" class="btn-nav">Install</a>
   </div>
 </div>
@@ -233,11 +233,11 @@ footer{background:var(--bg2);border-top:1px solid var(--border);padding:40px 2re
   </p>
   <div class="hero-btns anim d3">
     <button class="btn-pri" onclick="document.getElementById('start').scrollIntoView({behavior:'smooth'})">Get Started</button>
-    <button class="btn-sec" onclick="window.open('https://github.com/user/fastfn','_blank')">View on GitHub</button>
+    <button class="btn-sec" onclick="window.open('https://github.com/misaelzapata/fastfn','_blank')">View on GitHub</button>
   </div>
   <div class="install-bar anim d4">
-    <span>$</span> <code>brew install fastfn</code>
-    <button onclick="navigator.clipboard.writeText('brew install fastfn')">Copy</button>
+    <span>$</span> <code>brew tap misaelzapata/homebrew-fastfn &amp;&amp; brew install fastfn</code>
+    <button onclick="navigator.clipboard.writeText('brew tap misaelzapata/homebrew-fastfn && brew install fastfn')">Copy</button>
   </div>
 </div>
 </section>
@@ -261,13 +261,12 @@ footer{background:var(--bg2);border-top:1px solid var(--border);padding:40px 2re
           <div class="gs-code-bar"><div class="dots"><span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span></div> Terminal</div>
           <div class="gs-code-body mono">
 <span class="cm"># Homebrew (macOS / Linux)</span><br>
+<span class="op">$</span> <span class="fn">brew</span> <span class="str">tap misaelzapata/homebrew-fastfn</span><br>
 <span class="op">$</span> <span class="fn">brew</span> <span class="str">install fastfn</span><br>
 <br>
-<span class="cm"># or npm (any platform)</span><br>
-<span class="op">$</span> <span class="fn">npm</span> <span class="str">install -g fastfn</span><br>
-<br>
-<span class="cm"># or download the binary directly</span><br>
-<span class="op">$</span> <span class="fn">curl</span> <span class="str">-sSL https://fastfn.dev/install.sh</span> <span class="op">|</span> <span class="fn">sh</span>
+<span class="cm"># From source (Go)</span><br>
+<span class="op">$</span> <span class="fn">git</span> <span class="str">clone https://github.com/misaelzapata/fastfn</span><br>
+<span class="op">$</span> <span class="fn">cd</span> <span class="str">fastfn &amp;&amp; bash cli/build.sh</span>
           </div>
         </div>
       </div>
@@ -277,63 +276,68 @@ footer{background:var(--bg2);border-top:1px solid var(--border);padding:40px 2re
     <div class="gs-step">
       <div class="gs-num"><div class="gs-dot"></div></div>
       <div class="gs-content">
-        <h3>Create a project <span class="step-tag">Step 2</span></h3>
-        <p>One command scaffolds the project with an example function ready to go.</p>
+        <h3>Create a folder <span class="step-tag">Step 2</span></h3>
+        <p>Your folder is your project root. Scaffold a function with the CLI.</p>
         <div class="gs-code">
           <div class="gs-code-bar"><div class="dots"><span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span></div> Terminal</div>
           <div class="gs-code-body mono">
-<span class="op">$</span> <span class="fn">fastfn</span> <span class="str">init my-api</span><br>
-<span class="op">$</span> <span class="fn">cd</span> <span class="str">my-api</span><br>
+<span class="op">$</span> <span class="fn">mkdir</span> <span class="str">my-api</span> <span class="op">&amp;&amp;</span> <span class="fn">cd</span> <span class="str">my-api</span><br>
+<span class="op">$</span> <span class="fn">fastfn</span> <span class="str">init hello -t node</span><br>
 <br>
 <span class="cm"># project structure:</span><br>
 <span class="txt2">my-api/</span><br>
-<span class="txt2">&nbsp;&nbsp;functions/</span><br>
+<span class="txt2">&nbsp;&nbsp;node/</span><br>
 <span class="txt2">&nbsp;&nbsp;&nbsp;&nbsp;hello/</span><br>
-<span class="txt2">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;get.py</span> &nbsp;<span class="cm">&larr; your first function</span><br>
-<span class="txt2">&nbsp;&nbsp;fastfn.toml</span>
+<span class="txt2">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;fn.config.json</span><br>
+<span class="txt2">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;handler.js</span> &nbsp;<span class="cm">&larr; your first function</span>
           </div>
         </div>
       </div>
     </div>
 
     <!-- Step 3: Write -->
-    <div class="gs-step">
-      <div class="gs-num"><div class="gs-dot"></div></div>
-      <div class="gs-content">
-        <h3>Write a function <span class="step-tag">Step 3</span></h3>
-        <p>Just a file with a <code class="mono">main(req)</code> function. No decorators, no imports, no config.</p>
-        <div class="gs-code">
-          <div class="gs-code-bar"><div class="dots"><span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span></div> functions/hello/get.py</div>
-          <div class="gs-code-body mono">
-<span class="ln">1</span><span class="kw">def</span> <span class="fn">main</span>(<span class="par">req</span>):<br>
-<span class="ln">2</span>    <span class="kw">return</span> {<span class="str">"message"</span>: <span class="str">"Hello, world!"</span>}
-          </div>
-        </div>
-      </div>
-    </div>
+	    <div class="gs-step">
+	      <div class="gs-num"><div class="gs-dot"></div></div>
+	      <div class="gs-content">
+	        <h3>Write a function <span class="step-tag">Step 3</span></h3>
+	        <p>Edit a single <code class="mono">handler(event)</code> function. Return JSON and FastFN will serve it.</p>
+	        <div class="gs-code">
+	          <div class="gs-code-bar"><div class="dots"><span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span></div> node/hello/handler.js</div>
+	          <div class="gs-code-body mono">
+<span class="ln">1</span><span class="kw">module</span>.<span class="fn">exports</span>.handler <span class="op">=</span> <span class="kw">async</span> (<span class="par">event</span>) <span class="op">=&gt;</span> {<br>
+<span class="ln">2</span>    <span class="kw">const</span> <span class="par">query</span> <span class="op">=</span> (event <span class="op">&amp;&amp;</span> event.query) <span class="op">||</span> {};<br>
+<span class="ln">3</span>    <span class="kw">return</span> {<br>
+<span class="ln">4</span>        <span class="par">status</span>: <span class="num">200</span>,<br>
+<span class="ln">5</span>        <span class="par">headers</span>: { <span class="str">"Content-Type"</span>: <span class="str">"application/json"</span> },<br>
+<span class="ln">6</span>        <span class="par">body</span>: <span class="fn">JSON.stringify</span>({ <span class="str">"message"</span>: <span class="str">"Hello from FastFN!"</span>, <span class="str">"query"</span>: query }),<br>
+<span class="ln">7</span>    };<br>
+<span class="ln">8</span>};
+	          </div>
+	        </div>
+	      </div>
+	    </div>
 
     <!-- Step 4: Run -->
     <div class="gs-step">
       <div class="gs-num"><div class="gs-dot"></div></div>
-      <div class="gs-content">
-        <h3>Run it <span class="step-tag">Step 4</span></h3>
-        <p>The dev server starts with hot reload. Your function is immediately live.</p>
-        <div class="gs-code">
-          <div class="gs-code-bar"><div class="dots"><span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span></div> Terminal</div>
-          <div class="gs-code-body mono">
+	      <div class="gs-content">
+	        <h3>Run it <span class="step-tag">Step 4</span></h3>
+	        <p>The dev server starts with hot reload. Your function is immediately live.</p>
+	        <div class="gs-code">
+	          <div class="gs-code-bar"><div class="dots"><span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span></div> Terminal</div>
+	          <div class="gs-code-body mono">
 <span class="op">$</span> <span class="fn">fastfn</span> <span class="str">dev .</span><br>
 <br>
-<span class="cm">  FastFN v0.1.0</span><br>
-<span class="cm">  Gateway ready at </span><span class="str">http://localhost:8080</span><br>
-<span class="cm">  Console ready at </span><span class="str">http://localhost:8080/console</span><br>
+<span class="cm">  Gateway ready at </span><span class="str">http://127.0.0.1:8080</span><br>
+<span class="cm">  Swagger ready at </span><span class="str">http://127.0.0.1:8080/_fn/docs</span><br>
 <span class="cm">  Watching for changes...</span><br>
 <br>
-<span class="op">$</span> <span class="fn">curl</span> <span class="str">http://localhost:8080/hello</span><br>
-{<span class="str">"message"</span>: <span class="str">"Hello, world!"</span>}
-          </div>
-        </div>
-        <div class="gs-result">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+<span class="op">$</span> <span class="fn">curl</span> <span class="str">http://localhost:8080/hello?name=World</span><br>
+{<span class="str">"message"</span>: <span class="str">"Hello from FastFN!"</span>, <span class="str">"query"</span>: {<span class="str">"name"</span>: <span class="str">"World"</span>}}
+	          </div>
+	        </div>
+	        <div class="gs-result">
+	          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
           That's it. <code class="mono" style="margin-left:4px">GET /hello</code> is live. No YAML, no deploy, no waiting.
         </div>
       </div>
@@ -598,11 +602,11 @@ functions/report/<span class="par">get</span>.<span class="fn">php</span>
   <p>Install the CLI and start building your API in under a minute.</p>
   <div class="hero-btns" style="margin-bottom:30px">
     <button class="btn-pri" onclick="document.getElementById('start').scrollIntoView({behavior:'smooth'})">Get Started</button>
-    <button class="btn-sec" onclick="window.open('https://github.com/user/fastfn','_blank')">Read the Docs</button>
+    <button class="btn-sec" onclick="window.open('./','_blank')">Read the Docs</button>
   </div>
   <div class="install-bar">
-    <span>$</span> <code>brew install fastfn &amp;&amp; fastfn init my-app &amp;&amp; cd my-app &amp;&amp; fastfn dev .</code>
-    <button onclick="navigator.clipboard.writeText('brew install fastfn && fastfn init my-app && cd my-app && fastfn dev .')">Copy</button>
+    <span>$</span> <code>brew tap misaelzapata/homebrew-fastfn &amp;&amp; brew install fastfn</code>
+    <button onclick="navigator.clipboard.writeText('brew tap misaelzapata/homebrew-fastfn && brew install fastfn')">Copy</button>
   </div>
 </div>
 </section>
@@ -612,13 +616,13 @@ functions/report/<span class="par">get</span>.<span class="fn">php</span>
 <div class="foot-in">
   <div class="nav-logo" style="font-size:1.1rem">
     <svg width="22" height="22" viewBox="0 0 32 32" fill="none"><path d="M6 22L16 6l4 8 6-4-2 14H6z" fill="#7c3aed"/><path d="M16 6l4 8 6-4" stroke="#f97316" stroke-width="2.5" stroke-linecap="round"/><circle cx="22" cy="10" r="2" fill="#f97316"/></svg>
-    fastfn
+    FastFN
   </div>
   <div class="foot-links">
-    <a href="https://github.com/user/fastfn" target="_blank">GitHub</a>
-    <a href="#">Docs</a>
-    <a href="#">Contributing</a>
-    <a href="#">MIT License</a>
+    <a href="https://github.com/misaelzapata/fastfn" target="_blank">GitHub</a>
+    <a href="./">Docs</a>
+    <a href="./en/how-to/contributing/">Contributing</a>
+    <a href="https://github.com/misaelzapata/fastfn/blob/main/LICENSE" target="_blank">MIT License</a>
   </div>
   <div class="foot-copy">Made with the FastFN CLI &amp; lots of coffee.</div>
 </div>
