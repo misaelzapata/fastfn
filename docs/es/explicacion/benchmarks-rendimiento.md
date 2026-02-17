@@ -1,83 +1,75 @@
-# Benchmarks de Rendimiento (carga QR)
+# Benchmarks de Rendimiento
 
-Esta página publica un snapshot reproducible de benchmark QR para el **miércoles 11 de febrero de 2026**.
+Esta página publica snapshots reproducibles de benchmarks para FastFN.
 
-El formato sigue prácticas útiles que también usan plataformas como:
-
-- [docs de n8n](https://docs.n8n.io/)
-- [docs de Windmill](https://www.windmill.dev/docs)
-
-Es decir:
+Objetivos del reporte:
 
 - publicar carga y límites, no solo un número de RPS
 - publicar mezcla de estados (`200`, `429`, `5xx`)
 - publicar comandos reproducibles
 - publicar artefactos crudos
 
-## Perfiles medidos
+## Fast-path (poliglota “Hola Mundo”)
 
-Se corrieron dos perfiles:
+Snapshot: **martes 17 de febrero de 2026**.
 
-1. **Política por defecto (guardrails ON)**  
-   Sin tocar políticas de función (`max_concurrency=4` en ambas QR).
-2. **Perfil de laboratorio sin throttling**  
-   Configuración temporal para benchmark (`max_concurrency=512`) y observar degradación real sin límite de gateway.
+Carga:
 
-## Carga usada
-
-- Endpoints:
-  - `/fn/qr` (Python SVG QR)
-  - `/fn/qr@v2` (Node PNG QR)
-- Dominios enviados en `text`:
-  - `https://github.com/misaelzapata/fastfn`
-  - `https://openai.com`
-  - `https://example.org/path?x=1&y=2`
-  - `https://n8n.io/workflows`
+- Endpoints (tutorial poliglota):
+  - `GET /step-1` (Node)
+  - `GET /step-2` (Python)
+  - `GET /step-3` (PHP)
+  - `GET /step-4` (Rust)
+- Runner:
+  - `tests/stress/benchmark-fastpath.py`
 - Medición:
-  - requests por corrida: `160` (perfil default), `240` (perfil sin throttling)
-  - matriz de concurrencia:
-    - default: `1,2,4,6,8`
-    - sin throttling: `1,2,4,8,16,24,32`
+  - requests por punto: `4000`
+  - matriz de concurrencia: `1,2,4,8,16,20,24,32`
 
-## Resumen de resultados
+Resultados (mejor punto limpio: **solo `200`**):
 
-### Política por defecto (guardrails ON)
+| Runtime | Endpoint | Mejor punto limpio |
+|---|---|---:|
+| Node | `/step-1` | `1772.69 RPS` (`c=16`) |
+| Python | `/step-2` | `878.73 RPS` (`c=16`) |
+| PHP | `/step-3` | `562.90 RPS` (`c=20`) |
+| Rust | `/step-4` | `866.69 RPS` (`c=20`) |
 
-| Endpoint | Primer punto con `429` | Mejor punto limpio (`200` only) |
-|---|---:|---|
-| `/fn/qr` | `c=6` | `155.07 RPS` (`c=2`, dominio `n8n.io`) |
-| `/fn/qr@v2` | `c=6` | `119.14 RPS` (`c=4`, dominio `github.com`) |
+Artefacto crudo:
 
-Interpretación: el throttling aparece exactamente donde se espera por política (`max_concurrency=4`).
+- `tests/stress/results/2026-02-17-fastpath-default.json`
 
-### Perfil sin throttling
+### Cómo reproducir
 
-| Endpoint | Puntos limpios (`200` only) | Pico limpio de RPS en esta corrida |
-|---|---:|---|
-| `/fn/qr` | `28/28` | `171.89 RPS` (`c=8`, `n8n.io`) |
-| `/fn/qr@v2` | `28/28` | `149.58 RPS` (`c=24`, `github.com`) |
-
-Interpretación: con `max_concurrency` alto, ambos endpoints quedaron limpios (`200` únicamente) en todo el rango probado hasta `c=32`.
-
-## Artefactos crudos
-
-- `tests/stress/results/2026-02-11-qr-default-policy.json`
-- `tests/stress/results/2026-02-11-qr-no-throttle.json`
-
-## Cómo reproducir
+Arranca la app del tutorial poliglota:
 
 ```bash
-./scripts/benchmark-qr.sh default
-./scripts/benchmark-qr.sh no-throttle
+bin/fastfn dev examples/functions/polyglot-tutorial
 ```
 
-Ajuste opcional:
+Ejecuta el benchmark:
 
 ```bash
-TOTAL=320 CONCURRENCY_SET=1,2,4,8,16,24,32,48 ./scripts/benchmark-qr.sh no-throttle
+python3 tests/stress/benchmark-fastpath.py \
+  --base-url http://127.0.0.1:8080 \
+  --profile default \
+  --total 4000 \
+  --concurrency-set 1,2,4,8,16,20,24,32
 ```
+
+## Carga QR (CPU-bound)
+
+La generación de QR es intencionalmente más pesada que rutas fast-path de JSON.
+
+Runner:
+
+- `cli/benchmark-qr.sh`
+
+Artefactos crudos:
+
+- `tests/stress/results/` (JSON con fecha)
 
 ## Notas
 
 - Los números dependen del entorno (CPU host, Docker, carga local).
-- Tómalos como baseline técnico y tendencia, no como claim universal.
+- Tómalos como baseline y tendencia, no como claim universal.
