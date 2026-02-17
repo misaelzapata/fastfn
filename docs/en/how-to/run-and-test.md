@@ -90,8 +90,8 @@ curl -sS 'http://127.0.0.1:8080/openapi.json' | head -c 300
 ## 7) QR benchmark snapshots
 
 ```bash
-./scripts/benchmark-qr.sh default
-./scripts/benchmark-qr.sh no-throttle
+./cli/benchmark-qr.sh default
+./cli/benchmark-qr.sh no-throttle
 ```
 
 Results are stored in `tests/stress/results/`.
