@@ -1,6 +1,7 @@
-# Estado de la documentacion vs estandar FastAPI
+# Estado de la documentación (interno)
 
-Este documento deja claro donde estamos y que falta para una experiencia tipo FastAPI.
+Este documento deja claro dónde estamos y qué falta.
+No está pensado para el sitio público de documentación.
 
 ## Lo que ya esta fuerte
 
@@ -10,7 +11,7 @@ Este documento deja claro donde estamos y que falta para una experiencia tipo Fa
 - Contrato runtime documentado con payloads reales.
 - Catalogo de funciones incluidas con ejemplos concretos.
 
-## Lo que todavia falta para "igual o mejor que FastAPI"
+## Lo que todavía falta (backlog)
 
 - mas diagramas de flujo por escenario (errores, auth, concurrencia)
 - tutoriales "task-driven" mas largos (ej: construir API completa de principio a fin)
@@ -27,5 +28,5 @@ Este documento deja claro donde estamos y que falta para una experiencia tipo Fa
 
 ## Conclusion honesta
 
-La doc ya no esta "basica", pero aun no llega al nivel de profundidad editorial de FastAPI.
-El objetivo es alcanzarlo con la siguiente iteracion de tutoriales largos + recetas + diagramas.
+La doc ya no está "básica", pero todavía no llega al nivel de profundidad editorial que queremos.
+El objetivo es alcanzarlo con la siguiente iteración de tutoriales largos + recetas + diagramas.

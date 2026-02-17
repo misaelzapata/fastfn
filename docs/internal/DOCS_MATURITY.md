@@ -1,6 +1,7 @@
-# Documentation status vs FastAPI-level expectations
+# Documentation maturity (internal)
 
 This page states clearly what is already strong and what is still missing.
+It is not intended for the public docs site.
 
 ## Already strong
 
@@ -10,7 +11,7 @@ This page states clearly what is already strong and what is still missing.
 - Runtime contract documented with realistic payloads.
 - Built-in function catalog with concrete examples.
 
-## Still missing to be "equal or better than FastAPI"
+## Still missing (backlog)
 
 - more scenario-based flow diagrams (errors, auth, concurrency)
 - longer task-driven tutorials (build a complete API end-to-end)
@@ -27,5 +28,5 @@ This page states clearly what is already strong and what is still missing.
 
 ## Honest conclusion
 
-The docs are no longer basic, but they are not yet at FastAPI editorial depth.
+The docs are no longer basic, but they are not yet at the editorial depth we want.
 The next step is long-form tutorials + recipes + diagrams.

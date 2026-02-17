@@ -63,6 +63,11 @@ markdown_extensions:
 plugins:
   - search
 
+# Keep internal planning/coordination docs in the repo, but do not publish them
+# to the public documentation site.
+exclude_docs: |
+  internal/**
+
 nav:
   - Home: index.md
   - Landing Preview: fastfn-landing.html
@@ -125,7 +130,6 @@ nav:
       - Next.js Style Routing: en/explanation/nextjs-style-routing-benefits.md
       - Invocation Lifecycle: en/explanation/invocation-flow.md
       - Performance: en/explanation/performance-benchmarks.md
-      - Docs Methodology: en/explanation/docs-gap-vs-fastapi.md
       - Visual Flows: en/explanation/visual-flows.md
   - Documentación en Español:
     - Introducción: es/index.md
@@ -182,16 +186,4 @@ nav:
       - Modelo de Seguridad: es/explicacion/modelo-seguridad.md
       - Scheduler vs Cron: es/explicacion/scheduler-vs-cron.md
       - Benchmarks: es/explicacion/benchmarks-rendimiento.md
-      - Estado Documentación: es/explicacion/estado-documentacion.md
       - Flujos Visuales: es/explicacion/flujos-visuales.md
-  - Internal:
-    - Task Queue: internal/TASK_QUEUE.md
-    - Docs Workflow: internal/DOCS_WORKFLOW.md
-    - Status Update: internal/STATUS_UPDATE.md
-    - Assets Plan: internal/ASSETS_PLAN.md
-    - Improvement Plan: internal/FASTFN_IMPROVEMENT_PLAN.md
-    - State (2026-02-12): internal/STATE_2026-02-12.md
-    - AI Test Guide: internal/USER_AI_TEST_GUIDE.md
-    - Context Dump: internal/chat_dump_openresty_faas.md
-    - Future Plans: internal/prefork-plan.md
-    - Overview: internal/README.md
