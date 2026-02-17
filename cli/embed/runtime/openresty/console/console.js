@@ -1990,8 +1990,11 @@ class ConsoleApp {
     const methods = Array.isArray(invoke.methods) && invoke.methods.length > 0
       ? invoke.methods
       : (Array.isArray(policy.methods) && policy.methods.length > 0 ? policy.methods : ['GET']);
-    const mappedRoutes = Array.isArray(invoke.mapped_routes) && invoke.mapped_routes.length > 0
-      ? invoke.mapped_routes
+    const mappedRoutes = Array.isArray(invoke.effective_mapped_routes) && invoke.effective_mapped_routes.length > 0
+      ? invoke.effective_mapped_routes
+      : (Array.isArray(invoke.mapped_routes) && invoke.mapped_routes.length > 0 ? invoke.mapped_routes : [])
+    const configuredRoutes = Array.isArray(invoke.routes) && invoke.routes.length > 0
+      ? invoke.routes
       : (Array.isArray(invoke.routes) && invoke.routes.length > 0 ? invoke.routes : (invoke.route ? [invoke.route] : []));
 
     if (timeout) timeout.value = policy.timeout_ms ?? '';
@@ -2002,7 +2005,7 @@ class ConsoleApp {
     } else if (methodsInput) {
       methodsInput.value = methods.join(',');
     }
-    if (routes) routes.value = mappedRoutes.join('\n');
+    if (routes) routes.value = (mappedRoutes.length > 0 ? mappedRoutes : configuredRoutes).join('\n');
 
     const configuredDeps = detail.metadata?.shared_deps?.configured;
     if (deps) deps.value = Array.isArray(configuredDeps) ? configuredDeps.join('\n') : '';
@@ -2094,6 +2097,9 @@ class ConsoleApp {
     }
     if (Array.isArray(invoke.mapped_routes)) {
       for (const route of invoke.mapped_routes) pushRoute(route);
+    }
+    if (Array.isArray(invoke.effective_mapped_routes)) {
+      for (const route of invoke.effective_mapped_routes) pushRoute(route);
     }
     pushRoute(endpoints.preferred_public_route);
     if (Array.isArray(endpoints.public_routes)) {
