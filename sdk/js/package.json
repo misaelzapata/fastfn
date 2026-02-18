@@ -1,7 +1,7 @@
 {
   "name": "@fastfn/runtime",
   "version": "0.1.0",
-  "description": "TypeScript/JavaScript definitions for FastFn serverless runtime",
+  "description": "TypeScript/JavaScript definitions for FastFN serverless runtime",
   "main": "index.js",
   "types": "index.d.ts",
   "scripts": {
@@ -12,6 +12,6 @@
     "fastfn",
     "functions"
   ],
-  "author": "FastFn",
+  "author": "FastFN",
   "license": "MIT"
 }

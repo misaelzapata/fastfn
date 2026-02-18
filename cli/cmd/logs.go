@@ -108,7 +108,7 @@ func runNativeLogs(session *process.NativeSession) error {
 var logsCmd = &cobra.Command{
 	Use:   "logs",
 	Short: "View logs from the running stack",
-	Long: `Stream logs from a running FastFn stack.
+	Long: `Stream logs from a running FastFN stack.
 
 Backend selection:
 - Auto: prefers active native session, then Docker Compose.

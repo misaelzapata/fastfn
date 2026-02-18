@@ -8,7 +8,7 @@ def handler(event: Any, context: Optional[Dict[str, Any]] = None) -> Dict[str, A
         "status": 200,
         "headers": {"Content-Type": "application/json"},
         "body": {
-            "message": "Hello from FastFn Python!",
+            "message": "Hello from FastFN Python!",
             "input": event,
             "context": context,
         }

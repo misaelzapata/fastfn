@@ -668,7 +668,7 @@ local ok, run_err = xpcall(function()
     result.status = status
     result.headers = { ["Content-Type"] = "application/json" }
     if not was_warm then
-      result.headers["X-FastFn-Warming"] = "true"
+      result.headers["X-FastFN-Warming"] = "true"
       result.headers["Retry-After"] = "1"
     end
     result.body = err_body
@@ -748,11 +748,11 @@ if policy.include_debug_headers == true then
   result.headers["X-Fn-Worker-Pool-Max-Queue"] = tostring(pool_max_queue)
 end
 if queued then
-  result.headers["X-FastFn-Queued"] = "true"
+  result.headers["X-FastFN-Queued"] = "true"
 end
-result.headers["X-FastFn-Function-State"] = was_warm and "warm" or "cold"
+result.headers["X-FastFN-Function-State"] = was_warm and "warm" or "cold"
 if (not was_warm) and (result.status or 500) < 500 then
-  result.headers["X-FastFn-Warmed"] = "true"
+  result.headers["X-FastFN-Warmed"] = "true"
 end
 
 write_response(result.status, result.headers, result.body)

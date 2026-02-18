@@ -8,7 +8,7 @@ function escapeHtml(input) {
 }
 
 exports.handler = async (event) => {
-  const name = escapeHtml(event.query?.name || 'FastFn');
+  const name = escapeHtml(event.query?.name || 'FastFN');
 
   return {
     status: 200,
@@ -18,7 +18,7 @@ exports.handler = async (event) => {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>FastFn HTML Demo</title>
+    <title>FastFN HTML Demo</title>
     <style>
       body { font-family: ui-sans-serif, -apple-system, Segoe UI, sans-serif; margin: 0; background: #f7f9fc; color: #101828; }
       main { max-width: 760px; margin: 48px auto; padding: 0 20px; }

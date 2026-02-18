@@ -5,7 +5,7 @@ pub fn handler(event: Value) -> Value {
         "status": 200,
         "headers": { "Content-Type": "application/json" },
         "body": json!({
-            "message": "Hello from FastFn Rust!",
+            "message": "Hello from FastFN Rust!",
             "input": event
         }).to_string()
     })

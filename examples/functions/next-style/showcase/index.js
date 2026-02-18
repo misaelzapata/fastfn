@@ -6,7 +6,7 @@ exports.handler = async () => ({
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>FastFn Visual Showcase</title>
+    <title>FastFN Visual Showcase</title>
     <style>
       :root {
         --bg-a: #0b1020;
@@ -185,7 +185,7 @@ exports.handler = async () => ({
   </head>
   <body>
     <main>
-      <h1>FastFn Visual Showcase</h1>
+      <h1>FastFN Visual Showcase</h1>
       <p class="lead">
         HTML and CSS can be served directly from function files, with the same routing model used for JSON APIs.
       </p>
@@ -222,13 +222,13 @@ exports.handler = async () => ({
           </label>
           <label class="field wide">
             <span>Message</span>
-            <textarea id="messageInput">This preview is rendered from a FastFn function endpoint.</textarea>
+            <textarea id="messageInput">This preview is rendered from a FastFN function endpoint.</textarea>
           </label>
         </div>
         <article class="preview" id="previewCard">
           <p class="kicker">Preview</p>
           <h3 id="previewTitle">Hello Builder</h3>
-          <p id="previewMessage">This preview is rendered from a FastFn function endpoint.</p>
+          <p id="previewMessage">This preview is rendered from a FastFN function endpoint.</p>
         </article>
         <div class="share">Share URL: <span id="shareUrl"></span></div>
         <div class="actions">
@@ -237,7 +237,7 @@ exports.handler = async () => ({
           <span class="status" id="saveStatus">Loading /showcase/form...</span>
         </div>
       </section>
-      <div class="badge">Live from FastFn function runtime</div>
+      <div class="badge">Live from FastFN function runtime</div>
       <div class="code">Try also: <a href="/html?name=Designer">/html?name=Designer</a></div>
     </main>
     <script>

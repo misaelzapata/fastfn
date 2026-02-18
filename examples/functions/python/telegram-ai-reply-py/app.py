@@ -323,9 +323,9 @@ def _call_internal_function(base_url, target, method, timeout_ms):
     elif route.startswith("/"):
         url = base_url.rstrip("/") + route
     elif route.startswith("fn/"):
-        url = base_url.rstrip("/") + "/" + route
+        url = base_url.rstrip("/") + "/" + route[3:]
     else:
-        url = base_url.rstrip("/") + "/fn/" + route
+        url = base_url.rstrip("/") + "/" + route
     return _http_request_json(url=url, method=method, timeout_ms=timeout_ms)
 
 

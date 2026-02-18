@@ -75,11 +75,11 @@ async function run() {
     assert.equal(body.message, "hello works");
   });
   await checkHtmlEndpoint("/html?name=Developer", (body) => {
-    assert.ok(body.includes("<title>FastFn HTML Demo</title>"));
+    assert.ok(body.includes("<title>FastFN HTML Demo</title>"));
     assert.ok(body.includes("Hello Developer"));
   });
   await checkHtmlEndpoint("/showcase", (body) => {
-    assert.ok(body.includes("<title>FastFn Visual Showcase</title>"));
+    assert.ok(body.includes("<title>FastFN Visual Showcase</title>"));
     assert.ok(body.includes("HTML and CSS can be served directly"));
     assert.ok(body.includes("Save with POST"));
     assert.ok(body.includes("Update with PUT"));

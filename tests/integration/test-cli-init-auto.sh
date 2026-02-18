@@ -132,7 +132,7 @@ obj = json.loads(os.environ["INVOKE_JSON"])
 assert obj.get("status") == 200, obj
 raw_body = obj.get("body") or ""
 payload = json.loads(raw_body)
-assert payload.get("message") == "Hello from FastFn Node!", payload
+assert payload.get("message") == "Hello from FastFN Node!", payload
 assert payload.get("input", {}).get("query", {}).get("name") == os.environ["EXPECTED"], payload
 PY
 }
@@ -260,5 +260,33 @@ cat > "$WORK_DIR/routes-override/fn.routes.json" <<'JSON'
 JSON
 wait_for_status GET "/routes-override/ping" 200
 assert_body_contains GET "/routes-override/ping" "\"source\":\"manifest-route\""
+
+echo "== method-only file routes (simple style) =="
+mkdir -p "$WORK_DIR/method-only"
+cat > "$WORK_DIR/method-only/get.py" <<'PY'
+def main(req):
+    return {"ok": True, "mode": "method-only"}
+PY
+wait_for_status GET "/method-only" 200
+assert_body_contains GET "/method-only" "\"mode\":\"method-only\""
+
+echo "== fn.config.json overlay should not suppress file routes =="
+mkdir -p "$WORK_DIR/config-overlay"
+cat > "$WORK_DIR/config-overlay/fn.config.json" <<'JSON'
+{
+  "group": "integration",
+  "timeout_ms": 1200,
+  "invoke": { "methods": ["GET"] }
+}
+JSON
+cat > "$WORK_DIR/config-overlay/get.js" <<'JS'
+exports.handler = async () => ({
+  status: 200,
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ ok: true, mode: "config-overlay" }),
+});
+JS
+wait_for_status GET "/config-overlay" 200
+assert_body_contains GET "/config-overlay" "\"mode\":\"config-overlay\""
 
 echo "PASS test-cli-init-auto.sh"

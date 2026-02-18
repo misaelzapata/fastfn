@@ -14,6 +14,7 @@ export PYTHONPATH="$ROOT"
 python3 - <<'PY'
 from sdk.python.fastfn.types import Request, Response as ResponseDict
 from sdk.python.fastfn.response import Response
+from sdk.python.fastfn.extras import json_response, validate
 
 event: Request = {
     "id": "req-sdk-1",
@@ -42,6 +43,24 @@ assert txt["body"] == "hello"
 assert pxy["proxy"]["path"] == "/request-inspector"
 assert pxy["proxy"]["method"] == "POST"
 assert pxy["proxy"]["headers"]["X-Trace"] == "abc"
+
+jr = json_response({"ok": True}, status=201, headers={"X-Test": "1"})
+assert jr["status"] == 201
+assert jr["headers"]["Content-Type"] == "application/json"
+
+try:
+    from pydantic import BaseModel
+except Exception:
+    # validate() is optional and should fail clearly when pydantic is missing.
+    try:
+        validate(None, {})  # type: ignore[arg-type]
+    except ImportError:
+        pass
+else:
+    class Demo(BaseModel):
+        x: int
+    demo = validate(Demo, {"x": 1})
+    assert demo.x == 1
 print("Python SDK: OK")
 PY
 
@@ -57,14 +76,14 @@ echo "== sdk: php =="
 if command -v php >/dev/null 2>&1; then
   ROOT_DIR="$ROOT" php <<'PHP'
 <?php
-require getenv('ROOT_DIR') . '/sdk/php/FastFn.php';
+require getenv('ROOT_DIR') . '/sdk/php/FastFN.php';
 
-if (!class_exists('FastFn\\Request')) {
-    fwrite(STDERR, "FastFn\\Request not found\n");
+if (!class_exists('FastFN\\Request')) {
+    fwrite(STDERR, "FastFN\\Request not found\n");
     exit(1);
 }
 
-$req = new FastFn\Request([
+$req = new FastFN\Request([
     'id' => 'req-sdk-php-1',
     'method' => 'POST',
     'path' => '/php',
@@ -77,45 +96,45 @@ $req = new FastFn\Request([
 ]);
 
 if ($req->id !== 'req-sdk-php-1' || $req->method !== 'POST') {
-    fwrite(STDERR, "FastFn\\Request shape mismatch\n");
+    fwrite(STDERR, "FastFN\\Request shape mismatch\n");
     exit(1);
 }
 
-$jsonResp = FastFn\Response::json(['ok' => true], 201, ['X-Test' => '1']);
+$jsonResp = FastFN\Response::json(['ok' => true], 201, ['X-Test' => '1']);
 if (($jsonResp['status'] ?? 0) !== 201) {
-    fwrite(STDERR, "FastFn\\Response::json status mismatch\n");
+    fwrite(STDERR, "FastFN\\Response::json status mismatch\n");
     exit(1);
 }
 if (($jsonResp['headers']['Content-Type'] ?? '') !== 'application/json') {
-    fwrite(STDERR, "FastFn\\Response::json content-type mismatch\n");
+    fwrite(STDERR, "FastFN\\Response::json content-type mismatch\n");
     exit(1);
 }
 
-$textResp = FastFn\Response::text('hello', 202, ['X-Test' => '2']);
+$textResp = FastFN\Response::text('hello', 202, ['X-Test' => '2']);
 if (($textResp['status'] ?? 0) !== 202) {
-    fwrite(STDERR, "FastFn\\Response::text status mismatch\n");
+    fwrite(STDERR, "FastFN\\Response::text status mismatch\n");
     exit(1);
 }
 if (strpos(($textResp['headers']['Content-Type'] ?? ''), 'text/plain') !== 0) {
-    fwrite(STDERR, "FastFn\\Response::text content-type mismatch\n");
+    fwrite(STDERR, "FastFN\\Response::text content-type mismatch\n");
     exit(1);
 }
 if (($textResp['body'] ?? '') !== 'hello') {
-    fwrite(STDERR, "FastFn\\Response::text body mismatch\n");
+    fwrite(STDERR, "FastFN\\Response::text body mismatch\n");
     exit(1);
 }
 
-$proxyResp = FastFn\Response::proxy('/request-inspector', 'GET', ['X-Trace' => 'abc']);
+$proxyResp = FastFN\Response::proxy('/request-inspector', 'GET', ['X-Trace' => 'abc']);
 if (($proxyResp['proxy']['path'] ?? '') !== '/request-inspector') {
-    fwrite(STDERR, "FastFn\\Response::proxy path mismatch\n");
+    fwrite(STDERR, "FastFN\\Response::proxy path mismatch\n");
     exit(1);
 }
 if (($proxyResp['proxy']['method'] ?? '') !== 'GET') {
-    fwrite(STDERR, "FastFn\\Response::proxy method mismatch\n");
+    fwrite(STDERR, "FastFN\\Response::proxy method mismatch\n");
     exit(1);
 }
 if (($proxyResp['proxy']['headers']['X-Trace'] ?? '') !== 'abc') {
-    fwrite(STDERR, "FastFn\\Response::proxy headers mismatch\n");
+    fwrite(STDERR, "FastFN\\Response::proxy headers mismatch\n");
     exit(1);
 }
 

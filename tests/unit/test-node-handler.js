@@ -377,7 +377,7 @@ async function testEdgeFilterAuthAndRewrite() {
 async function testRequestInspector() {
   const resp = await requestInspectorHandler({
     method: "POST",
-    path: "/fn/request-inspector",
+    path: "/request-inspector",
     query: { key: "v" },
     headers: { "x-test": "1", "Content-Type": "text/plain" },
     body: "hello",
@@ -441,7 +441,7 @@ async function testToolboxBotExecuteManualPlan() {
   global.fetch = async (url, opts = {}) => {
     calls.push({ url: String(url), method: String(opts.method || "GET") });
     const u = String(url);
-    if (u.includes("/fn/request-inspector")) {
+    if (u.includes("/request-inspector")) {
       return {
         ok: true,
         status: 200,
@@ -487,7 +487,7 @@ async function testToolboxBotExecuteManualPlan() {
     assert.equal(body.results[1].ok, true);
     assert.equal(body.results[1].status, 200);
     assert.equal(calls.length, 2);
-    assert.ok(calls[0].url.includes("/fn/request-inspector?key=demo"));
+    assert.ok(calls[0].url.includes("/request-inspector?key=demo"));
     assert.equal(calls[0].method, "GET");
     assert.ok(calls[1].url.startsWith("https://api.ipify.org/?format=json"));
   } finally {
@@ -657,7 +657,7 @@ async function testAiToolAgentToolCallingLoopAndMemory() {
       };
     }
 
-    if (u.includes("/fn/request-inspector")) {
+    if (u.includes("/request-inspector")) {
       return {
         ok: true,
         status: 200,
@@ -719,7 +719,7 @@ async function testAiToolAgentToolCallingLoopAndMemory() {
 
     assert.ok(seenUrls.some((u) => u.includes("/chat/completions")));
     assert.ok(seenUrls.some((u) => u.startsWith("https://api.ipify.org")));
-    assert.ok(seenUrls.some((u) => u.includes("/fn/request-inspector")));
+    assert.ok(seenUrls.some((u) => u.includes("/request-inspector")));
   } finally {
     global.fetch = prevFetch;
     if (prevMem === undefined) delete process.env.FASTFN_AGENT_MEMORY_PATH; else process.env.FASTFN_AGENT_MEMORY_PATH = prevMem;
@@ -1292,7 +1292,7 @@ async function testTelegramAiReplyToolsContext() {
 
   global.fetch = async (url, opts = {}) => {
     const u = String(url);
-    if (u.includes("/fn/request-inspector")) {
+    if (u.includes("/request-inspector")) {
       return {
         ok: true,
         status: 200,
@@ -1637,10 +1637,10 @@ async function testTelegramAiReplyToolsFailureAndCapabilityBranches() {
   const openaiPayloads = [];
   global.fetch = async (url, opts = {}) => {
     const u = String(url);
-    if (u.includes("/fn/request-inspector")) {
+    if (u.includes("/request-inspector")) {
       throw new Error("fetch failed tool fn");
     }
-    if (u.includes("/fn/telegram-ai-digest")) {
+    if (u.includes("/telegram-ai-digest")) {
       return {
         ok: true,
         status: 200,
@@ -2418,7 +2418,7 @@ async function testWhatsappChatToolsContext() {
 
   global.fetch = async (url, opts = {}) => {
     const u = String(url);
-    if (u.includes("/fn/request-inspector")) {
+    if (u.includes("/request-inspector")) {
       return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, source: "wa-fn" }) };
     }
     if (u.includes("api.ipify.org")) {
@@ -2741,10 +2741,10 @@ async function testWhatsappToolDirectiveFailureAndAutoNewsBranches() {
 
   global.fetch = async (url, opts = {}) => {
     const u = String(url);
-    if (u.includes("/fn/request-inspector")) {
+    if (u.includes("/request-inspector")) {
       throw new Error("tool fn boom");
     }
-    if (u.includes("/fn/telegram-ai-digest")) {
+    if (u.includes("/telegram-ai-digest")) {
       return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, digest: "ok" }) };
     }
     if (u.includes("api.ipify.org")) {
@@ -2826,7 +2826,7 @@ async function testWhatsappConnectQrLifecycleWithMocks() {
     fetchLatestBaileysVersion: async () => ({ version: [2, 3000, 999999] }),
     makeWASocket: () => fakeSocket,
     Browsers: {
-      macOS: () => "FastFnTest",
+      macOS: () => "FastFNTest",
     },
   };
   const fakeQr = {

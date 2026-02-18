@@ -86,7 +86,10 @@ func createNodeFunction(name, dirPath string) {
   "runtime": "node",
   "name": "` + name + `",
   "version": "1.0.0",
-  "entrypoint": "handler.js"
+  "entrypoint": "handler.js",
+  "timeout_ms": 2500,
+  "max_concurrency": 20,
+  "max_body_bytes": 1048576
 }`
 	writeFile(filepath.Join(dirPath, "fn.config.json"), configContent)
 
@@ -100,9 +103,8 @@ module.exports.handler = async (event) => {
     status: 200,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      message: "Hello from FastFn Node!",
-      input: { query },
-      debug: "You can return objects directly and they will be JSON responses!"
+      message: "Hello from FastFN Node!",
+      input: { query }
     })
   };
 };
@@ -116,21 +118,20 @@ func createPythonFunction(name, dirPath string) {
   "runtime": "python",
   "name": "` + name + `",
   "version": "1.0.0",
-  "entrypoint": "main.py"
+  "entrypoint": "main.py",
+  "timeout_ms": 2500,
+  "max_concurrency": 20,
+  "max_body_bytes": 1048576
 }`
 	writeFile(filepath.Join(dirPath, "fn.config.json"), configContent)
 
 	// main.py
-	mainContent := `def handler(context):
-    """
-    Handle the request.
-    Valid returns: dict (JSON), str (Text), or {"status": 200, "body": ...}
-    """
-    name = context.request.args.get("name", "World")
-    
+	mainContent := `def main(req):
+    query = (req.get("query") or {})
+    name = query.get("name", "World")
     return {
-        "message": f"Hello, {name} from FastFn Python!",
-        "input_args": context.request.args
+        "message": f"Hello, {name} from FastFN Python!",
+        "query": query,
     }
 `
 	writeFile(filepath.Join(dirPath, "main.py"), mainContent)
@@ -155,7 +156,7 @@ func createPhpFunction(name, dirPath string) {
 function handler(array $context): array {
     // Return array -> JSON automatically
     return [
-        'message' => 'Hello from FastFn PHP!',
+        'message' => 'Hello from FastFN PHP!',
         'input' => $context
     ];
 }
@@ -183,7 +184,7 @@ function handler(event)
         status = 200,
         headers = { ["Content-Type"] = "application/json" },
         body = cjson.encode({
-            message = "Hello, " .. tostring(name) .. " from FastFn Lua!",
+            message = "Hello, " .. tostring(name) .. " from FastFN Lua!",
             input_query = query
         })
     }
@@ -208,7 +209,7 @@ func createRustFunction(name, dirPath string) {
 pub fn handler(context: Value) -> Value {
     // Return JSON value directly
     json!({
-        "message": "Hello from FastFn Rust!",
+        "message": "Hello from FastFN Rust!",
         "input": context
     })
 }

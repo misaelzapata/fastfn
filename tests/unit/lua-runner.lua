@@ -237,8 +237,12 @@ local function test_gateway_utils()
   assert_eq(name2, "hello", "parse versioned name")
   assert_eq(version2, "v2", "parse version")
 
-  local n3 = utils.parse_fn_compat_target("/bad/path")
-  assert_eq(n3, nil, "parse invalid")
+  local name3, version3 = utils.parse_fn_compat_target("/hello@v2")
+  assert_eq(name3, "hello", "parse versioned name without /fn")
+  assert_eq(version3, "v2", "parse version without /fn")
+
+  local n4 = utils.parse_fn_compat_target("/bad/path")
+  assert_eq(n4, nil, "parse invalid")
 
   assert_eq(utils.resolve_numeric("1500", nil, 2500, 999), 1500, "resolve version")
   assert_eq(utils.resolve_numeric(nil, "2200", 2500, 999), 2200, "resolve runtime")

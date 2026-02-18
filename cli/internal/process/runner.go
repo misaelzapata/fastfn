@@ -299,7 +299,7 @@ func RunNative(cfg RunConfig) error {
 		}
 	}
 
-	fmt.Printf("\nFastFn is running at http://localhost:%s\n", hostPort)
+	fmt.Printf("\nFastFN is running at http://localhost:%s\n", hostPort)
 	fmt.Println("Logs are streaming below. Press Ctrl+C to stop.")
 
 	// 8. Wait for Interrupt

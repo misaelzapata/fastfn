@@ -1,7 +1,7 @@
 const DEFAULT_STATE = {
   name: 'Builder',
   accent: '#22c55e',
-  message: 'This preview is rendered from a FastFn function endpoint.',
+  message: 'This preview is rendered from a FastFN function endpoint.',
 };
 
 const ALLOWED_ACCENTS = new Set(['#22c55e', '#38bdf8', '#f59e0b', '#f472b6']);

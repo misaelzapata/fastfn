@@ -92,6 +92,13 @@ function isLocalHostname(hostname) {
   return false;
 }
 
+function canonicalSegment(name) {
+  return String(name || "")
+    .trim()
+    .toLowerCase()
+    .replace(/_+/g, "-");
+}
+
 function toolConfig(env, query, bodyObj) {
   const fnBaseUrl = String(
     query.fn_base_url ??
@@ -284,7 +291,7 @@ async function executeToolCall(name, args, cfg) {
       return { ok: false, tool: "fn_get", name: fnName, error: "function not allowed", elapsed_ms: Date.now() - started };
     }
     const q = args && args.query && typeof args.query === "object" ? args.query : {};
-    const url = new URL(`${cfg.fnBaseUrl}/fn/${fnName}`);
+    const url = new URL(`${cfg.fnBaseUrl}/${canonicalSegment(fnName)}`);
     for (const key of Object.keys(q || {})) {
       const k = String(key || "").trim();
       if (!k) continue;
@@ -493,4 +500,3 @@ exports.handler = async (event) => {
     });
   }
 };
-

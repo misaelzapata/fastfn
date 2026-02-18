@@ -7,7 +7,7 @@ from .types import ProxyDirective, Response as ResponseDict
 
 
 class Response:
-    """Helpers to build FastFn-compatible response payloads."""
+    """Helpers to build FastFN-compatible response payloads."""
 
     @staticmethod
     def json(

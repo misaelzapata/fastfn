@@ -91,9 +91,10 @@ var (
 
 var doctorCmd = &cobra.Command{
 	Use:          "doctor",
+	Aliases:      []string{"check"},
 	Short:        "Run local environment and project diagnostics",
 	SilenceUsage: true,
-	Long: `Run diagnostics for local FastFn development and CI.
+	Long: `Run diagnostics for local FastFN development and CI.
 
 Use this command to validate Docker, runtime binaries, config files, and local port readiness.
 Use 'fastfn doctor domains' for domain-specific checks (DNS/TLS/HTTP).`,
@@ -118,7 +119,7 @@ var doctorDomainsCmd = &cobra.Command{
 	Use:          "domains",
 	Short:        "Validate domain DNS/TLS/HTTP readiness",
 	SilenceUsage: true,
-	Long: `Validate domains used by FastFn for production-style serving.
+	Long: `Validate domains used by FastFN for production-style serving.
 
 Checks include:
 - domain format
@@ -639,7 +640,7 @@ func printDoctorReport(report doctorReport, asJSON bool) error {
 		return enc.Encode(report)
 	}
 
-	fmt.Printf("FastFn Doctor (%s)\n", report.Scope)
+	fmt.Printf("FastFN Doctor (%s)\n", report.Scope)
 	for _, check := range report.Checks {
 		prefix := statusPrefix(check.Status)
 		target := ""

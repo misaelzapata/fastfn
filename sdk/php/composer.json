@@ -1,10 +1,10 @@
 {
     "name": "fastfn/runtime",
-    "description": "PHP Helper classes for FastFn serverless runtime",
+    "description": "PHP Helper classes for FastFN serverless runtime",
     "type": "library",
     "license": "MIT",
     "autoload": {
-        "classmap": ["FastFn.php"]
+        "classmap": ["FastFN.php"]
     },
     "require": {}
 }

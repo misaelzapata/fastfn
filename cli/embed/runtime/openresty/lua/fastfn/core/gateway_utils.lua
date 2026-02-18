@@ -10,6 +10,13 @@ function M.parse_fn_compat_target(uri)
     return name, version
   end
 
+  -- Also accept versioned targets without the /fn prefix:
+  --   /hello@v2 (useful for public docs while keeping the compat behavior).
+  name, version = uri:match("^/([%w_-]+)@([%w_.-]+)$")
+  if name then
+    return name, version
+  end
+
   name = uri:match("^/fn/([%w_-]+)$")
   if name then
     return name, nil

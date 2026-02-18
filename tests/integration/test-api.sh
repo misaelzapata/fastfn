@@ -894,7 +894,9 @@ def one_call():
     return {
         "ok": True,
         "status": code,
-        "queued": str(headers.get("X-FastFn-Queued", "")).lower() == "true",
+        # headers from urllib are case-insensitive, but after dict() conversion, lookups are not.
+        # Normalize keys for reliable tests.
+        "queued": str({k.lower(): v for (k, v) in headers.items()}.get("x-fastfn-queued", "")).lower() == "true",
         "ms": int((time.time() - started) * 1000),
         "body": body,
     }
@@ -1338,9 +1340,9 @@ assert_status GET "/rust/health" "200"
 assert_body_contains GET "/users" "\"runtime\":\"node\""
 assert_body_contains GET "/users/123" "\"id\":\"123\""
 assert_body_contains GET "/hello" "\"message\":\"hello works\""
-assert_body_contains GET "/html?name=api" "<title>FastFn HTML Demo</title>"
+assert_body_contains GET "/html?name=api" "<title>FastFN HTML Demo</title>"
 assert_body_contains GET "/html?name=api" "Hello api"
-assert_body_contains GET "/showcase" "<title>FastFn Visual Showcase</title>"
+assert_body_contains GET "/showcase" "<title>FastFN Visual Showcase</title>"
 assert_body_contains GET "/showcase/form" "\"route\":\"GET /showcase/form\""
 assert_body_contains GET "/showcase/form" "\"name\":\"API2\""
 assert_body_contains GET "/hello-demo/Juan" "\"route\":\"GET /hello-demo/:name\""

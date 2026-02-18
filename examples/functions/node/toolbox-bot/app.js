@@ -57,6 +57,13 @@ function isLocalHostname(hostname) {
   return false;
 }
 
+function canonicalSegment(name) {
+  return String(name || "")
+    .trim()
+    .toLowerCase()
+    .replace(/_+/g, "-");
+}
+
 async function fetchWithTimeout(url, opts, timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), Math.max(1, Number(timeoutMs) || 5000));
@@ -218,7 +225,7 @@ async function executeTool(tool, cfg) {
     if (!["GET", "POST", "PUT", "PATCH", "DELETE"].includes(tool.method)) {
       return { ok: false, type: "fn", name: tool.name, error: "method not allowed", elapsed_ms: Date.now() - started };
     }
-    const url = `${cfg.baseUrl}/fn/${tool.name}${tool.query || ""}`;
+    const url = `${cfg.baseUrl}/${canonicalSegment(tool.name)}${tool.query || ""}`;
     const res = await fetchWithTimeout(url, { method: tool.method }, cfg.timeoutMs);
     const body = await res.text();
     const raw = body.slice(0, 4000);

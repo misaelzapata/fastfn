@@ -818,27 +818,78 @@ end
 
 local function parse_method_and_tokens(base_no_ext)
   local method = "GET"
+  local explicit = false
   local parts = split_file_tokens(base_no_ext)
-  if #parts > 1 then
+  if #parts >= 1 then
     local head = string.lower(parts[1])
     if head == "get" then
       method = "GET"
+      explicit = true
       table.remove(parts, 1)
     elseif head == "post" then
       method = "POST"
+      explicit = true
       table.remove(parts, 1)
     elseif head == "put" then
       method = "PUT"
+      explicit = true
       table.remove(parts, 1)
     elseif head == "patch" then
       method = "PATCH"
+      explicit = true
       table.remove(parts, 1)
     elseif head == "delete" then
       method = "DELETE"
+      explicit = true
       table.remove(parts, 1)
     end
   end
-  return method, parts
+  return method, parts, explicit
+end
+
+local function is_explicit_fn_config(cfg)
+  if type(cfg) ~= "table" or next(cfg) == nil then
+    return false
+  end
+  if type(cfg.runtime) == "string" and cfg.runtime ~= "" then
+    return true
+  end
+  if type(cfg.name) == "string" and cfg.name ~= "" then
+    return true
+  end
+  if type(cfg.entrypoint) == "string" and cfg.entrypoint ~= "" then
+    return true
+  end
+  local invoke = cfg.invoke
+  if type(invoke) == "table" and type(invoke.routes) == "table" and #invoke.routes > 0 then
+    return true
+  end
+  return false
+end
+
+local function resolve_inherited_allow_hosts(abs_dir, rel_dir)
+  local cur_abs = abs_dir
+  local cur_rel = rel_dir or "."
+  while true do
+    local cfg = read_json_file(cur_abs .. "/fn.config.json")
+    if type(cfg) == "table" and next(cfg) ~= nil and not is_explicit_fn_config(cfg) then
+      local invoke = cfg.invoke
+      if type(invoke) == "table" and invoke.allow_hosts ~= nil then
+        local hosts = normalize_allow_hosts(invoke.allow_hosts)
+        if hosts then
+          return hosts
+        end
+      end
+    end
+
+    if cur_rel == "." or cur_rel == "" then
+      break
+    end
+
+    cur_abs = cur_abs:match("^(.*)/[^/]+$") or cur_abs
+    cur_rel = cur_rel:match("^(.*)/[^/]+$") or "."
+  end
+  return nil
 end
 
 local function normalize_route_token(segment)
@@ -962,8 +1013,17 @@ end
 
 local function detect_file_based_routes_in_dir(abs_dir, rel_dir)
   local cfg = read_json_file(abs_dir .. "/fn.config.json")
-  if type(cfg) == "table" and next(cfg) ~= nil then
+  if is_explicit_fn_config(cfg) then
     return {}
+  end
+
+  local allow_hosts = resolve_inherited_allow_hosts(abs_dir, rel_dir)
+  local overlay_methods = nil
+  if type(cfg) == "table" then
+    local invoke = cfg.invoke
+    if type(invoke) == "table" then
+      overlay_methods = parse_methods(invoke.methods)
+    end
   end
 
   local discovered = {}
@@ -975,7 +1035,11 @@ local function detect_file_based_routes_in_dir(abs_dir, rel_dir)
       if runtime then
         local base_no_ext = filename:gsub("%.[^.]+$", "")
         if not should_ignore_file_base(base_no_ext) then
-          local method, file_tokens = parse_method_and_tokens(base_no_ext)
+          local method, file_tokens, method_explicit = parse_method_and_tokens(base_no_ext)
+          local methods = { method }
+          if not method_explicit and overlay_methods then
+            methods = overlay_methods
+          end
           local segments = split_rel_segments(rel_dir)
           for _, t in ipairs(file_tokens) do
             local normalized = normalize_route_token(t)
@@ -994,7 +1058,8 @@ local function detect_file_based_routes_in_dir(abs_dir, rel_dir)
               route = route,
               runtime = runtime,
               target = rel_file,
-              methods = { method },
+              methods = methods,
+              allow_hosts = allow_hosts,
             }
 
             if #file_tokens > 0 and is_optional_catchall_token(file_tokens[#file_tokens]) then
@@ -1007,18 +1072,19 @@ local function detect_file_based_routes_in_dir(abs_dir, rel_dir)
               end
               local base_route = "/" .. table.concat(base_segments, "/")
               base_route = normalize_single_route(base_route)
-              if base_route and base_route ~= "/" then
-                discovered[#discovered + 1] = {
-                  route = base_route,
-                  runtime = runtime,
-                  target = rel_file,
-                  methods = { method },
-                }
+                if base_route and base_route ~= "/" then
+                  discovered[#discovered + 1] = {
+                    route = base_route,
+                    runtime = runtime,
+                    target = rel_file,
+                    methods = methods,
+                    allow_hosts = allow_hosts,
+                  }
+                end
               end
             end
           end
         end
-      end
     end
   end
   return discovered
@@ -1708,16 +1774,16 @@ function M.discover_functions(force)
 
     local file_routes = detect_file_based_routes_in_dir(abs_dir, rel_dir)
     for _, item in ipairs(file_routes) do
-      register_route(item.route, item.runtime, item.target, nil, item.methods, 1)
+      register_route(item.route, item.runtime, item.target, nil, item.methods, 1, item.allow_hosts)
     end
 	
 	    local fn_cfg = read_json_file(abs_dir .. "/fn.config.json")
-	    local has_explicit_cfg = type(fn_cfg) == "table" and next(fn_cfg) ~= nil
+	    local has_explicit_cfg = is_explicit_fn_config(fn_cfg)
 	    local is_leaf = has_manifest or has_explicit_cfg
 	
 	    if depth == 2 then
 	      return
-	    end
+    end
 	    if is_leaf and rel_dir ~= "." then
 	      return
 	    end
@@ -1943,12 +2009,34 @@ function M.resolve_function_policy(runtime, fn_name, version)
   if not fn_entry then
     -- Check if it's a direct file path (Zero-Config / fn.routes.json)
     if fn_name:find("/") or fn_name:match("%.[a-z0-9]+$") then
+       local dir_rel = fn_name:match("^(.*)/[^/]+$") or "."
+       local overlay_stack = {}
+       local cur_rel = dir_rel
+       while true do
+         local abs_dir = (catalog.functions_root or "") .. ((cur_rel == "." or cur_rel == "") and "" or ("/" .. cur_rel))
+         local cfg_obj = read_json_file(abs_dir .. "/fn.config.json")
+         if type(cfg_obj) == "table" and next(cfg_obj) ~= nil and not is_explicit_fn_config(cfg_obj) then
+           local overlay = normalize_policy(cfg_obj)
+           if type(overlay) == "table" and next(overlay) ~= nil then
+             overlay_stack[#overlay_stack + 1] = overlay
+           end
+         end
+         if cur_rel == "." or cur_rel == "" then
+           break
+         end
+         cur_rel = cur_rel:match("^(.*)/[^/]+$") or "."
+       end
+
+       local policy = { methods = ALL_METHODS }
+       for i = #overlay_stack, 1, -1 do
+         for k, v in pairs(overlay_stack[i]) do
+           policy[k] = v
+         end
+       end
        -- Synthetic entry
        fn_entry = {
          has_default = true,
-         policy = {
-           methods = ALL_METHODS,
-         }
+         policy = policy,
        }
      else
        return nil, "unknown function"

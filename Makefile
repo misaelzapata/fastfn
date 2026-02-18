@@ -1,4 +1,4 @@
-# FastFn Makefile
+# FastFN Makefile
 # Convenience wrapper around the repo's canonical CI scripts.
 #
 # Notes:
@@ -9,9 +9,9 @@
 .PHONY: help up down logs restart clean dev build-cli test test-core test-unit test-unit-lua test-integration test-e2e
 
 help:
-	@echo "FastFn Management Commands"
+	@echo "FastFN Management Commands"
 	@echo "--------------------------"
-	@echo "make dev           - Run FastFn dev in the current directory"
+	@echo "make dev           - Run FastFN dev in the current directory"
 	@echo "make up            - Start the Docker stack (detach mode)"
 	@echo "make down          - Stop the Docker stack"
 	@echo "make logs          - Follow OpenResty logs"

@@ -363,6 +363,13 @@ function isLocalHostname(hostname) {
   return false;
 }
 
+function canonicalSegment(name) {
+  return String(name || "")
+    .trim()
+    .toLowerCase()
+    .replace(/_+/g, "-");
+}
+
 async function executeTool(tool, cfg) {
   if (tool.type === "fn") {
     if (!cfg.allowedFns.includes(tool.name)) {
@@ -371,7 +378,7 @@ async function executeTool(tool, cfg) {
     if (!["GET", "POST", "PUT", "PATCH", "DELETE"].includes(tool.method)) {
       return { ok: false, type: "fn", name: tool.name, error: "method not allowed" };
     }
-    const url = `${cfg.baseUrl}/fn/${tool.name}${tool.query || ""}`;
+    const url = `${cfg.baseUrl}/${canonicalSegment(tool.name)}${tool.query || ""}`;
     const res = await fetchWithTimeout(url, { method: tool.method }, cfg.timeoutMs);
     const body = await res.text();
     return {
@@ -843,7 +850,7 @@ exports.handler = async (event) => {
   const hasWebhookUpdate = !!update;
 
   // Optional: full loop mode (self-contained)
-  // POST /fn/telegram-ai-reply?mode=loop&chat_id=123&prompt=Hola
+  // POST /telegram-ai-reply?mode=loop&chat_id=123&prompt=Hola
   // If no webhook update is provided and chat_id is present, we default to loop mode.
   const modeRaw = String(query.mode || query.action || "").trim().toLowerCase();
   const wantsSingle = modeRaw === "reply" || modeRaw === "single" || modeRaw === "once";
@@ -1131,7 +1138,7 @@ exports.handler = async (event) => {
 
   // Accept a real Telegram update via body (webhook style),
   // or a simple query-mode for manual E2E without setting a webhook:
-  //   POST /fn/telegram-ai-reply?chat_id=123&text=Hola
+  //   POST /telegram-ai-reply?chat_id=123&text=Hola
   let t = null;
   if (update) {
     t = extractTelegram(update);

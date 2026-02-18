@@ -18,7 +18,7 @@ async function testUsuariosApi() {
   assert.equal(resp.headers["Content-Type"], "application/json");
   
   const body = JSON.parse(resp.body);
-  assert.equal(body.message, "Hello from FastFn Node!");
+  assert.equal(body.message, "Hello from FastFN Node!");
   assert.deepEqual(body.input, event);
   
   console.log("testUsuariosApi passed");

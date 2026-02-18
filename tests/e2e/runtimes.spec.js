@@ -6,9 +6,9 @@ test.describe('Multi-Runtime Function Execution', () => {
     const res = await request.get('/fn/node-hello');
     expect(res.ok()).toBeTruthy();
     const body = await res.json();
-    // The current templates might say "Hello from X" or "FastFn X". Adjusting expectation to pass current state.
+    // The current templates might say "Hello from X" or "FastFN X". Adjusting expectation to pass current state.
     // If the template changes, we can update this.
-    expect(body.message).toMatch(/Hello from Node!|FastFn Node/);
+    expect(body.message).toMatch(/Hello from Node!|FastFN Node/);
     expect(body.runtime).toBe('node');
   });
 
@@ -16,7 +16,7 @@ test.describe('Multi-Runtime Function Execution', () => {
     const res = await request.get('/fn/python-hello');
     expect(res.ok()).toBeTruthy();
     const body = await res.json();
-    expect(body.message).toMatch(/Hello from Python!|FastFn Python/);
+    expect(body.message).toMatch(/Hello from Python!|FastFN Python/);
     expect(body.runtime).toBe('python');
   });
 
@@ -24,7 +24,7 @@ test.describe('Multi-Runtime Function Execution', () => {
     const res = await request.get('/fn/php-hello');
     expect(res.ok()).toBeTruthy();
     const body = await res.json();
-    expect(body.message).toMatch(/Hello from PHP!|FastFn PHP/);
+    expect(body.message).toMatch(/Hello from PHP!|FastFN PHP/);
     expect(body.runtime).toBe('php');
   });
 
@@ -32,7 +32,7 @@ test.describe('Multi-Runtime Function Execution', () => {
     const res = await request.get('/fn/rust-hello');
     expect(res.ok()).toBeTruthy();
     const body = await res.json();
-    expect(body.message).toMatch(/Hello from Rust!|FastFn Rust/);
+    expect(body.message).toMatch(/Hello from Rust!|FastFN Rust/);
     // Rust template often returns string "rust" manually
     expect(body.runtime).toBe('rust');
   });

@@ -95,6 +95,13 @@ func Scan(root string, logFn Logger) ([]Function, error) {
 		// Level 1 check
 		if fns, ok := detectFunction(path, root, logFn); ok {
 			appendUnique("L1", fns)
+		}
+
+		// Even when a directory has its own file routes (Next.js-style),
+		// it may still contain nested routes. Only stop descending when the
+		// directory is explicitly declared as a single function (fn.config.json
+		// identity) or when fn.routes.json is present with non-empty routes.
+		if isLeafFunctionDir(path) {
 			continue
 		}
 
@@ -117,34 +124,58 @@ func Scan(root string, logFn Logger) ([]Function, error) {
 	return functions, nil
 }
 
+func isLeafFunctionDir(path string) bool {
+	manifestPath := filepath.Join(path, "fn.routes.json")
+	if raw, err := os.ReadFile(manifestPath); err == nil {
+		var manifest RoutesManifest
+		if json.Unmarshal(raw, &manifest) == nil && len(manifest.Routes) > 0 {
+			return true
+		}
+	}
+
+	configPath := filepath.Join(path, "fn.config.json")
+	rawCfg, ok := readRawJSONConfig(configPath)
+	if ok && isExplicitFunctionConfig(rawCfg) {
+		return true
+	}
+
+	return false
+}
+
 // detectFunction checks if a directory contains a valid function
 func detectFunction(path string, root string, logFn Logger) ([]Function, bool) {
 	// 1. Check for fn.config.json (Highest Priority)
 	configPath := filepath.Join(path, "fn.config.json")
+	hasOverlayConfig := false
 	if _, err := os.Stat(configPath); err == nil {
-		if !isNonEmptyJSONConfig(configPath) {
+		rawCfg, ok := readRawJSONConfig(configPath)
+		if !ok || len(rawCfg) == 0 {
 			logFn("  -> ignoring empty/invalid fn.config.json in: %s", filepath.Base(path))
 		} else {
-			rt, name := parseConfig(configPath)
-			// Fallback for missing fields in config
-			if rt == "" {
-				rt = detectRuntimeFromFiles(path)
+			if isExplicitFunctionConfig(rawCfg) {
+				rt, name := parseConfig(configPath)
+				// Fallback for missing fields in config
+				if rt == "" {
+					rt = detectRuntimeFromFiles(path)
+				}
+				if name == "" {
+					name = filepath.Base(path)
+				}
+				// If runtime is still unknown, default to node? Or fail?
+				// Existing logic defaulted to node.
+				if rt == "" {
+					rt = "node"
+				}
+				logFn("  -> detected via config: %s (runtime: %s)", name, rt)
+				return []Function{{
+					Name:      name,
+					Runtime:   rt,
+					Path:      path,
+					HasConfig: true,
+				}}, true
 			}
-			if name == "" {
-				name = filepath.Base(path)
-			}
-			// If runtime is still unknown, default to node? Or fail?
-			// Existing logic defaulted to node.
-			if rt == "" {
-				rt = "node"
-			}
-			logFn("  -> detected via config: %s (runtime: %s)", name, rt)
-			return []Function{{
-				Name:      name,
-				Runtime:   rt,
-				Path:      path,
-				HasConfig: true,
-			}}, true
+			// Non-empty config without identity fields is treated as an overlay for file-based routes.
+			hasOverlayConfig = true
 		}
 	}
 
@@ -154,6 +185,11 @@ func detectFunction(path string, root string, logFn Logger) ([]Function, bool) {
 	if hasManifest {
 		merged := mergeRouteFunctions(manifestFns, fileBasedFns)
 		if len(merged) > 0 {
+			if hasOverlayConfig {
+				for i := range merged {
+					merged[i].HasConfig = true
+				}
+			}
 			logFn("  -> merged manifest + file routes: %s (%d routes)", filepath.Base(path), len(merged))
 			return merged, true
 		}
@@ -161,6 +197,11 @@ func detectFunction(path string, root string, logFn Logger) ([]Function, bool) {
 
 	// 3. Zero-Config Detection
 	if len(fileBasedFns) > 0 {
+		if hasOverlayConfig {
+			for i := range fileBasedFns {
+				fileBasedFns[i].HasConfig = true
+			}
+		}
 		logFn("  -> detected via file routes: %s (%d routes)", filepath.Base(path), len(fileBasedFns))
 		return fileBasedFns, true
 	}
@@ -358,7 +399,7 @@ func shouldIgnoreFile(base string) bool {
 func parseMethodAndRouteTokens(base string) (string, []string) {
 	method := "GET"
 	parts := splitFileTokens(base)
-	if len(parts) > 1 {
+	if len(parts) > 0 {
 		if m, ok := httpMethodPrefix[strings.ToLower(parts[0])]; ok {
 			method = m
 			parts = parts[1:]
@@ -534,6 +575,41 @@ func isNonEmptyJSONConfig(path string) bool {
 		return false
 	}
 	return len(raw) > 0
+}
+
+func readRawJSONConfig(path string) (map[string]interface{}, bool) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, false
+	}
+	var raw map[string]interface{}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, false
+	}
+	return raw, true
+}
+
+func isExplicitFunctionConfig(raw map[string]interface{}) bool {
+	if len(raw) == 0 {
+		return false
+	}
+
+	if v, ok := raw["runtime"].(string); ok && strings.TrimSpace(v) != "" {
+		return true
+	}
+	if v, ok := raw["name"].(string); ok && strings.TrimSpace(v) != "" {
+		return true
+	}
+	if v, ok := raw["entrypoint"].(string); ok && strings.TrimSpace(v) != "" {
+		return true
+	}
+
+	invoke, ok := raw["invoke"].(map[string]interface{})
+	if !ok {
+		return false
+	}
+	routes, ok := invoke["routes"].([]interface{})
+	return ok && len(routes) > 0
 }
 
 func detectRuntimeFromFiles(dir string) string {

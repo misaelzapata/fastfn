@@ -188,6 +188,13 @@ async function fetchWithTimeout(url, opts, timeoutMs) {
   }
 }
 
+function canonicalSegment(name) {
+  return String(name || "")
+    .trim()
+    .toLowerCase()
+    .replace(/_+/g, "-");
+}
+
 async function executeTool(tool, cfg) {
   if (tool.type === "fn") {
     if (!cfg.allowedFns.includes(tool.name)) {
@@ -196,7 +203,7 @@ async function executeTool(tool, cfg) {
     if (!["GET", "POST", "PUT", "PATCH", "DELETE"].includes(tool.method)) {
       return { ok: false, type: "fn", name: tool.name, error: "method not allowed" };
     }
-    const url = `${cfg.baseUrl}/fn/${tool.name}${tool.query || ""}`;
+    const url = `${cfg.baseUrl}/${canonicalSegment(tool.name)}${tool.query || ""}`;
     const res = await fetchWithTimeout(url, { method: tool.method }, cfg.timeoutMs);
     const body = await res.text();
     return { ok: res.ok, type: "fn", name: tool.name, status: res.status, body: body.slice(0, 4000) };
@@ -379,7 +386,7 @@ async function startConnection() {
       version,
       auth: state,
       printQRInTerminal: false,
-      browser: lib.Browsers.macOS("FastFn"),
+      browser: lib.Browsers.macOS("FastFN"),
       markOnlineOnConnect: false,
       syncFullHistory: false,
     });
@@ -617,16 +624,16 @@ exports.handler = async (event) => {
       mode: "demo-start",
       message: "WhatsApp demo ready. Start with qr, scan, then send.",
       quickstart: [
-        "GET /fn/whatsapp?action=qr",
-        "GET /fn/whatsapp?action=status",
-        "POST /fn/whatsapp?action=send",
-        "GET /fn/whatsapp?action=inbox",
+        "GET /whatsapp?action=qr",
+        "GET /whatsapp?action=status",
+        "POST /whatsapp?action=send",
+        "GET /whatsapp?action=inbox",
       ],
       examples: {
-        qr_autostart: "curl 'http://127.0.0.1:8080/fn/whatsapp?action=qr&format=raw'",
-        qr_png: "curl 'http://127.0.0.1:8080/fn/whatsapp?action=qr' --output /tmp/wa-qr.png",
-        connect_optional: "curl -X POST 'http://127.0.0.1:8080/fn/whatsapp?action=connect' -H 'Content-Type: application/json' --data '{}'",
-        send: "curl -X POST 'http://127.0.0.1:8080/fn/whatsapp?action=send' -H 'Content-Type: application/json' --data '{\"to\":\"15551234567\",\"text\":\"hola\"}'",
+        qr_autostart: "curl 'http://127.0.0.1:8080/whatsapp?action=qr&format=raw'",
+        qr_png: "curl 'http://127.0.0.1:8080/whatsapp?action=qr' --output /tmp/wa-qr.png",
+        connect_optional: "curl -X POST 'http://127.0.0.1:8080/whatsapp?action=connect' -H 'Content-Type: application/json' --data '{}'",
+        send: "curl -X POST 'http://127.0.0.1:8080/whatsapp?action=send' -H 'Content-Type: application/json' --data '{\"to\":\"15551234567\",\"text\":\"hola\"}'",
       },
       actions: ["intro", "status", "connect", "disconnect", "reset-session", "qr", "inbox", "outbox", "send", "chat"],
     });

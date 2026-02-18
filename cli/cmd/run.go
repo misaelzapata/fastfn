@@ -26,7 +26,7 @@ func resolveRunTargetDir(args []string) string {
 var runCmd = &cobra.Command{
 	Use:   "run [dir]",
 	Short: "Run with production defaults (no hot reload)",
-	Long: `Start FastFn with production-oriented defaults:
+	Long: `Start FastFN with production-oriented defaults:
 - hot reload disabled
 - file watcher disabled
 - TLS verification enabled
@@ -65,7 +65,7 @@ At the moment, production mode is supported through --native.`,
 		}
 
 		if runNativeMode {
-			fmt.Println("Starting FastFn in PRODUCTION (Native) mode...")
+			fmt.Println("Starting FastFN in PRODUCTION (Native) mode...")
 			fmt.Printf("Functions root: %s\n", absPath)
 
 			err := process.RunNative(process.RunConfig{

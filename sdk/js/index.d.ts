@@ -1,8 +1,8 @@
 /**
- * FastFn Runtime Types
+ * FastFN Runtime Types
  * 
  * To use in your handler:
- * /** @type {import('fastfn').Handler} */
+ * /** @type {import('@fastfn/runtime').Handler} */
  * exports.handler = async (req) => { ... }
  */
 
@@ -101,6 +101,6 @@ export interface ResponseBody {
 }
 
 /** 
- * FastFn Handler Function
+ * FastFN Handler Function
  */
 export type Handler = (req: Request) => Promise<ResponseBody | object> | ResponseBody | object;

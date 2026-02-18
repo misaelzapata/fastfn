@@ -168,6 +168,111 @@ func TestScanNextStyleRoutes(t *testing.T) {
 	}
 }
 
+func TestScanMethodOnlyFilesMapToDirRoot(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "fastfn-discovery-method-only")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	helloDir := filepath.Join(tmpDir, "hello")
+	if err := os.Mkdir(helloDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(helloDir, "get.py"), []byte(`...`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(helloDir, "post.js"), []byte(`...`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	funcs, err := Scan(tmpDir, nil)
+	if err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+
+	type key struct {
+		route   string
+		runtime string
+	}
+	expected := map[key]bool{
+		{route: "GET /hello", runtime: "python"}:  false,
+		{route: "POST /hello", runtime: "node"}:  false,
+		{route: "GET /hello/get", runtime: "python"}: false,
+	}
+
+	for _, fn := range funcs {
+		k := key{route: fn.OriginalRoute, runtime: fn.Runtime}
+		if _, ok := expected[k]; ok {
+			expected[k] = true
+		}
+	}
+
+	if !expected[key{route: "GET /hello", runtime: "python"}] {
+		t.Fatal("expected GET /hello from hello/get.py")
+	}
+	if !expected[key{route: "POST /hello", runtime: "node"}] {
+		t.Fatal("expected POST /hello from hello/post.js")
+	}
+	if expected[key{route: "GET /hello/get", runtime: "python"}] {
+		t.Fatal("did not expect GET /hello/get for hello/get.py (method-only should map to dir root)")
+	}
+}
+
+func TestScanConfigOverlayDoesNotSuppressFileRoutes(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "fastfn-discovery-config-overlay")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	dir := filepath.Join(tmpDir, "overlay")
+	if err := os.Mkdir(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "fn.config.json"), []byte(`{
+  "group": "demo",
+  "timeout_ms": 1200,
+  "invoke": { "methods": ["GET"] }
+}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "get.js"), []byte(`...`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Nested route directory should still be discovered.
+	nested := filepath.Join(dir, "[id]")
+	if err := os.Mkdir(nested, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nested, "get.py"), []byte(`...`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	funcs, err := Scan(tmpDir, nil)
+	if err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+
+	foundRoot := false
+	foundNested := false
+	for _, fn := range funcs {
+		if fn.OriginalRoute == "GET /overlay" && fn.Runtime == "node" && fn.HasConfig {
+			foundRoot = true
+		}
+		if fn.OriginalRoute == "GET /overlay/:id" && fn.Runtime == "python" {
+			foundNested = true
+		}
+	}
+
+	if !foundRoot {
+		t.Fatal("expected overlay get.js route to be discovered and marked HasConfig=true")
+	}
+	if !foundNested {
+		t.Fatal("expected overlay/[id]/get.py route to be discovered")
+	}
+}
+
 func TestScanRootAndNestedRoutesTogether(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "fastfn-discovery-root-and-nested")
 	if err != nil {

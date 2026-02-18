@@ -184,9 +184,9 @@ def handler(event):
                     "data": {
                         "message": "Provide text=... or tool=ip_lookup,weather. Use dry_run=false to execute.",
                         "examples": [
-                            "/fn/tools-loop?text=quiero%20mi%20ip%20y%20clima&dry_run=true",
-                            "/fn/tools-loop?tool=ip_lookup,weather&city=Buenos%20Aires&dry_run=false",
-                            "/fn/tools-loop?tool=ip_lookup,weather&city=Buenos%20Aires&dry_run=false&mock=true",
+                            "/tools-loop?text=quiero%20mi%20ip%20y%20clima&dry_run=true",
+                            "/tools-loop?tool=ip_lookup,weather&city=Buenos%20Aires&dry_run=false",
+                            "/tools-loop?tool=ip_lookup,weather&city=Buenos%20Aires&dry_run=false&mock=true",
                         ],
                     },
                 }

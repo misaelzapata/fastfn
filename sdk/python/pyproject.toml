@@ -5,9 +5,9 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "fastfn-runtime"
 version = "0.1.0"
-description = "Python type definitions for FastFn serverless runtime"
+description = "Python type definitions for FastFN serverless runtime"
 authors = [
-  { name="FastFn Team", email="team@fastfn.dev" },
+  { name="FastFN Team", email="team@fastfn.dev" },
 ]
 readme = "README.md"
 requires-python = ">=3.7"

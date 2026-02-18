@@ -14,7 +14,7 @@ exports.handler = async (event, context) => {
   return {
     status: 200,
     body: {
-      message: "Hello from FastFn!",
+      message: "Hello from FastFN!",
       input: event
     }
   };

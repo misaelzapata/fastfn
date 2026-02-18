@@ -344,11 +344,11 @@ for path in sorted(paths.keys()):
             headers["content-type"] = "application/json"
             body_data = json.dumps({"name": "demo-item-updated"}).encode("utf-8")
 
-        if route.startswith("/edge-auth-gateway"):
+        if route.startswith("/edge-auth-gateway") or route.startswith("/node/edge-auth-gateway"):
             headers["authorization"] = "Bearer dev-token"
-        if route.startswith("/edge-filter"):
+        if route.startswith("/edge-filter") or route.startswith("/node/edge-filter"):
             headers["x-api-key"] = "dev"
-        if route.startswith("/github-webhook-guard") and method == "post":
+        if (route.startswith("/github-webhook-guard") or route.startswith("/node/github-webhook-guard")) and method == "post":
             payload = json.dumps({"zen": "Keep it logically awesome.", "hook_id": 123}, separators=(",", ":"))
             headers["content-type"] = "application/json"
             headers["x-hub-signature-256"] = sign_github(payload)
@@ -392,7 +392,7 @@ def is_expected_warn(item):
     code = item["code"]
 
     # WhatsApp "status" flow is GET-only by design.
-    if path.startswith("/whatsapp") and method in ("POST", "DELETE") and code == 405:
+    if (path.startswith("/whatsapp") or path.startswith("/node/whatsapp")) and method in ("POST", "DELETE") and code == 405:
         return True
 
     # Polyglot item update/delete can return not-found for synthetic ids from OpenAPI examples.
@@ -434,6 +434,17 @@ echo "== openapi demo examples =="
 start_stack
 assert_openapi_examples
 warm_heavy_endpoints
+
+echo "== versioned compat route (/hello@v2) =="
+code="$(curl -sS -o /tmp/fastfn-openapi-demos-hello-v2.out -w '%{http_code}' 'http://127.0.0.1:8080/hello@v2?name=World' 2>/dev/null || true)"
+if [[ "$code" != "200" ]]; then
+  echo "FAIL /hello@v2 expected=200 got=$code"
+  cat /tmp/fastfn-openapi-demos-hello-v2.out || true
+  if [[ -n "$STACK_LOG" && -f "$STACK_LOG" ]]; then
+    tail -n 220 "$STACK_LOG" || true
+  fi
+  exit 1
+fi
 
 echo "== openapi demo public sweep (all methods) =="
 if ! run_public_sweep; then

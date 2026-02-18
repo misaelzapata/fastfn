@@ -17,7 +17,7 @@ module.exports.handler = async (event, context) => {
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      message: "Hello from FastFn Node!",
+      message: "Hello from FastFN Node!",
       input: event
     })
   };

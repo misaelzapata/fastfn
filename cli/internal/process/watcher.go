@@ -32,7 +32,8 @@ func NewWatcher(root string, onChange func(fsnotify.Event)) (*Watcher, error) {
 
 	return &Watcher{
 		RootPath: resolvedRoot,
-		Ignored:  []string{".git", "__pycache__", "node_modules", ".DS_Store"},
+		// Ignore internal/runtime-generated paths to avoid hot-reload feedback loops.
+		Ignored:  []string{".git", "__pycache__", "node_modules", ".DS_Store", ".fastfn", ".rust-build"},
 		OnChange: onChange,
 		watcher:  w,
 		stop:     make(chan struct{}),

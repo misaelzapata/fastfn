@@ -1,9 +1,9 @@
 <?php
 
-namespace FastFn;
+namespace FastFN;
 
 /**
- * FastFn PHP Runtime SDK.
+ * FastFN PHP Runtime SDK.
  * Include this file to get type hints in your IDE.
  */
 

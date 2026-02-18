@@ -1,3 +1,3 @@
-# FastFn Python SDK
+# FastFN Python SDK
 
-Type definitions for writing FastFn functions in Python.
+Type definitions for writing FastFN functions in Python.

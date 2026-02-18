@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/misaelzapata/fastfn/cli/internal/discovery"
+	"github.com/misaelzapata/fastfn/cli/internal/process"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -172,17 +173,17 @@ var devCmd = &cobra.Command{
 		if !ok {
 			log.Fatal("Invalid docker-compose.yml: no services")
 		}
-			openresty, ok := services["openresty"].(map[string]interface{})
-			if !ok {
-				log.Fatal("Invalid docker-compose.yml: no openresty service")
-			}
+		openresty, ok := services["openresty"].(map[string]interface{})
+		if !ok {
+			log.Fatal("Invalid docker-compose.yml: no openresty service")
+		}
 
-			applyOpenRestyDockerUser(openresty)
+		applyOpenRestyDockerUser(openresty)
 
-			volumes, ok := openresty["volumes"].([]interface{})
-			if !ok {
-				volumes = []interface{}{}
-			}
+		volumes, ok := openresty["volumes"].([]interface{})
+		if !ok {
+			volumes = []interface{}{}
+		}
 
 		// Filter out existing /app/srv/fn/functions mounts
 		newVolumes := []interface{}{}
@@ -227,6 +228,24 @@ var devCmd = &cobra.Command{
 		// Docker mode: ensure Docker is available and the daemon is running.
 		checkSystemRequirements()
 
+		// On Docker Desktop (and some CI setups), bind mount filesystem events do not
+		// reliably propagate into containers. Use a host watcher to trigger reloads so
+		// new functions and edits are discovered without restarting.
+		hostPort := strings.TrimSpace(os.Getenv("FN_HOST_PORT"))
+		if hostPort == "" {
+			hostPort = "8080"
+		}
+		reloadURL := fmt.Sprintf("http://127.0.0.1:%s/_fn/reload", hostPort)
+		watcher, watchErr := process.StartHotReloadWatcher(absPath, reloadURL, func(format string, args ...interface{}) {
+			fmt.Printf(format+"\n", args...)
+		})
+		if watchErr == nil {
+			defer watcher.Stop()
+			fmt.Println("Watching for file changes (host watcher)...")
+		} else {
+			fmt.Printf("Warning: failed to start host watcher: %v\n", watchErr)
+		}
+
 		// 6. Run docker compose
 		dockerArgs := []string{"compose", "-f", "-", "up"}
 		if devBuild {
@@ -240,7 +259,7 @@ var devCmd = &cobra.Command{
 		// Set working dir to where the original compose file is
 		dockerCmd.Dir = filepath.Dir(composePath)
 
-		fmt.Println("Starting FastFn dev server...")
+		fmt.Println("Starting FastFN dev server...")
 		if err := dockerCmd.Run(); err != nil {
 			log.Fatalf("Docker run failed: %v", err)
 		}
