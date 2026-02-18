@@ -366,7 +366,7 @@ curl -sS 'http://127.0.0.1:8080/telegram-ai-reply-py?mode=reply&chat_id=123&text
 Tools (manual directives inside the user text):
 
 ```bash
-curl -sS \
+curl -g -sS \
 "http://127.0.0.1:8080/telegram-ai-reply-py?mode=reply&chat_id=123&dry_run=false&tools=true&tool_allow_fn=tools-loop,request-inspector&text=Use%20[[http:https://api.ipify.org?format=json]]%20and%20[[fn:tools-loop?text=my%20ip%20and%20weather&dry_run=true|GET]]"
 ```
 
@@ -951,14 +951,14 @@ WhatsApp tools (for `action=chat`):
 Plan only (no outbound calls):
 
 ```bash
-curl -sS \
+curl -g -sS \
 "http://127.0.0.1:8080/toolbox-bot?dry_run=true&text=Use%20[[http:https://api.ipify.org?format=json]]%20and%20[[fn:request-inspector?key=demo|GET]]"
 ```
 
 Execute (allowlisted only):
 
 ```bash
-curl -sS \
+curl -g -sS \
 "http://127.0.0.1:8080/toolbox-bot?dry_run=false&text=Use%20[[http:https://api.ipify.org?format=json]]%20and%20[[fn:request-inspector?key=demo|GET]]"
 ```
 

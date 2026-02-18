@@ -103,7 +103,7 @@ See also: [Tools (Function-to-Function + Limited HTTP)](./tools.md)
 Manual tools:
 
 ```bash
-curl -sS \
+curl -g -sS \
 "http://127.0.0.1:8080/telegram-ai-reply?mode=reply&dry_run=false&chat_id=${CHAT_ID}&tools=true&text=Use%20[[http:https://api.ipify.org?format=json]]%20and%20[[fn:request-inspector?key=e2e|GET]]"
 ```
 

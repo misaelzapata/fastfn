@@ -51,10 +51,12 @@ Format:
 - Route: `GET /toolbox-bot`, `POST /toolbox-bot`
 - Source: `examples/functions/node/toolbox-bot/app.js`
 
+Note: `curl` treats `[` and `]` as URL "ranges" (globbing). Examples that include `[[...]]` in the URL use `curl -g` to disable globbing.
+
 ### 3.1 Plan-only (no outbound calls)
 
 ```bash
-curl -sS \
+curl -g -sS \
 "http://127.0.0.1:8080/toolbox-bot?dry_run=true&text=Use%20[[http:https://api.ipify.org?format=json]]%20and%20[[fn:request-inspector?key=demo|GET]]"
 ```
 
@@ -75,7 +77,7 @@ Expected response shape:
 ### 3.2 Execute tools (allowlisted only)
 
 ```bash
-curl -sS \
+curl -g -sS \
 "http://127.0.0.1:8080/toolbox-bot?dry_run=false&text=Use%20[[http:https://api.ipify.org?format=json]]%20and%20[[fn:request-inspector?key=demo|GET]]"
 ```
 
@@ -140,4 +142,3 @@ For production deployments, treat `/_fn/*` like an admin interface:
 
 - restrict it by IP / auth / VPN,
 - do not expose it to the public internet.
-
