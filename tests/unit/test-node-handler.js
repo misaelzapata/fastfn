@@ -16,6 +16,7 @@ const edgeHeaderInjectHandler = require(path.join(root, "examples/functions/node
 const telegramAiReplyHandler = require(path.join(root, "examples/functions/node/telegram-ai-reply/app.js")).handler;
 const telegramAiDigestHandler = require(path.join(root, "examples/functions/node/telegram-ai-digest/app.js")).handler;
 const toolboxBotHandler = require(path.join(root, "examples/functions/node/toolbox-bot/app.js")).handler;
+const aiToolAgentHandler = require(path.join(root, "examples/functions/node/ai-tool-agent/app.js")).handler;
 const whatsappHandler = require(path.join(root, "examples/functions/node/whatsapp/app.js")).handler;
 const ipIntelRemoteHandler = require(path.join(root, "examples/functions/ip-intel/get.remote.js")).handler;
 
@@ -81,6 +82,10 @@ async function main() {
   await testToolboxBotExecuteManualPlan();
   await testToolboxBotDenyHostWithoutFetching();
   await testToolboxBotDenyFnWithoutFetching();
+  await testToolboxBotBlocksLocalHostWithoutFetching();
+  await testAiToolAgentDryRun();
+  await testAiToolAgentToolCallingLoopAndMemory();
+  await testAiToolAgentBlocksLocalHostTool();
   await testEdgeAuthGateway();
   await testGithubWebhookGuard();
   await testEdgeHeaderInject();
@@ -96,6 +101,7 @@ async function main() {
   await testTelegramAiReplyMemoryByChat();
   await testTelegramAiReplyLoopOffsetPersistence();
   await testTelegramAiReplyToolsContext();
+  await testTelegramAiReplyBlocksLocalHostTool();
   await testTelegramAiReplyAutoToolsContext();
   await testTelegramAiReplyAutoToolsWeatherLocation();
   await testTelegramAiReplyMemoryPromptGuard();
@@ -111,6 +117,7 @@ async function main() {
   await testWhatsappSendPathsAndBodyValidation();
   await testWhatsappChatErrorAndNoRecipientPaths();
   await testWhatsappChatToolsContext();
+  await testWhatsappChatBlocksLocalHostTool();
   await testWhatsappChatAutoToolsContext();
   await testWhatsappMethodGuardsParseVariantsAndClosePaths();
   await testWhatsappChatAiOutputFallbacksAndErrors();
@@ -529,6 +536,255 @@ async function testToolboxBotDenyFnWithoutFetching() {
     assert.equal(body.results.length, 1);
     assert.equal(body.results[0].ok, false);
     assert.equal(body.results[0].error, "function not allowed");
+  } finally {
+    global.fetch = prevFetch;
+  }
+}
+
+async function testToolboxBotBlocksLocalHostWithoutFetching() {
+  const prevFetch = global.fetch;
+  let fetchCalls = 0;
+  global.fetch = async (url) => {
+    fetchCalls += 1;
+    throw new Error(`unexpected fetch url=${String(url)}`);
+  };
+  try {
+    const resp = await toolboxBotHandler({
+      method: "GET",
+      query: {
+        dry_run: false,
+        tool_allow_hosts: "127.0.0.1",
+        text: "Use [[http:http://127.0.0.1:8080/_fn/health]]",
+      },
+    });
+    assert.equal(resp.status, 200);
+    const body = JSON.parse(resp.body);
+    assert.equal(body.ok, true);
+    assert.equal(body.dry_run, false);
+    assert.equal(body.results.length, 1);
+    assert.equal(body.results[0].ok, false);
+    assert.equal(body.results[0].error, "local host not allowed");
+    assert.equal(fetchCalls, 0);
+  } finally {
+    global.fetch = prevFetch;
+  }
+}
+
+async function testAiToolAgentDryRun() {
+  const resp = await aiToolAgentHandler({
+    method: "GET",
+    query: { text: "what is my ip?", agent_id: "unit" },
+    env: {},
+    context: { timeout_ms: 1500 },
+  });
+  assert.equal(resp.status, 200);
+  const body = JSON.parse(resp.body);
+  assert.equal(body.ok, true);
+  assert.equal(body.dry_run, true);
+  assert.equal(body.agent_id, "unit");
+  assert.equal(body.text, "what is my ip?");
+  assert.deepEqual(body.tools, ["http_get", "fn_get"]);
+}
+
+async function testAiToolAgentToolCallingLoopAndMemory() {
+  const prevFetch = global.fetch;
+  const os = require("node:os");
+  const fs = require("node:fs");
+  const memPath = path.join(os.tmpdir(), `fastfn-ai-tool-agent-${Date.now()}-${Math.random()}.json`);
+  const prevMem = process.env.FASTFN_AGENT_MEMORY_PATH;
+  const openaiPayloads = [];
+  let openaiCalls = 0;
+  const seenUrls = [];
+
+  global.fetch = async (url, opts = {}) => {
+    const u = String(url);
+    seenUrls.push(u);
+    if (u.includes("/chat/completions")) {
+      openaiCalls += 1;
+      openaiPayloads.push(JSON.parse(String(opts.body || "{}")));
+      if (openaiCalls === 1) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              choices: [
+                {
+                  message: {
+                    content: null,
+                    tool_calls: [
+                      {
+                        id: "call_http",
+                        function: {
+                          name: "http_get",
+                          arguments: JSON.stringify({ url: "https://api.ipify.org?format=json" }),
+                        },
+                      },
+                      {
+                        id: "call_fn",
+                        function: {
+                          name: "fn_get",
+                          arguments: JSON.stringify({ name: "request-inspector", query: { key: "demo" } }),
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            }),
+        };
+      }
+      if (openaiCalls === 2) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ choices: [{ message: { content: "final-1" } }] }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ choices: [{ message: { content: "final-2" } }] }),
+      };
+    }
+
+    if (u.startsWith("https://api.ipify.org")) {
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => "application/json" },
+        text: async () => JSON.stringify({ ip: "203.0.113.10" }),
+      };
+    }
+
+    if (u.includes("/fn/request-inspector")) {
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => "application/json" },
+        text: async () => JSON.stringify({ ok: true, path: "/request-inspector", query: { key: "demo" } }),
+      };
+    }
+
+    return { ok: false, status: 404, text: async () => "not found" };
+  };
+
+  process.env.FASTFN_AGENT_MEMORY_PATH = memPath;
+  try {
+    const env = {
+      OPENAI_API_KEY: "test-openai-key",
+      OPENAI_BASE_URL: "https://api.openai.com/v1",
+    };
+
+    const first = await aiToolAgentHandler({
+      method: "GET",
+      query: { dry_run: "false", agent_id: "unit", text: "ip + inspector" },
+      env,
+      context: { timeout_ms: 2000 },
+    });
+    assert.equal(first.status, 200);
+    const firstBody = JSON.parse(first.body);
+    assert.equal(firstBody.ok, true);
+    assert.equal(firstBody.dry_run, false);
+    assert.equal(firstBody.answer, "final-1");
+    assert.ok(firstBody.trace && Array.isArray(firstBody.trace.steps));
+    const toolSteps = firstBody.trace.steps.filter((s) => s && s.type === "tool");
+    assert.equal(toolSteps.length, 2);
+    assert.equal(toolSteps[0].name, "http_get");
+    assert.equal(toolSteps[1].name, "fn_get");
+
+    const memRaw = fs.readFileSync(memPath, "utf8");
+    const memData = JSON.parse(memRaw);
+    assert.equal(Array.isArray(memData.unit), true);
+    assert.equal(memData.unit.length, 2);
+
+    const second = await aiToolAgentHandler({
+      method: "GET",
+      query: { dry_run: "false", agent_id: "unit", text: "what did you answer before?" },
+      env,
+      context: { timeout_ms: 2000 },
+    });
+    assert.equal(second.status, 200);
+    const secondBody = JSON.parse(second.body);
+    assert.equal(secondBody.answer, "final-2");
+
+    // Second OpenAI request should include previous turns from memory.
+    assert.ok(openaiPayloads.length >= 3);
+    const secondRunPayload = openaiPayloads[2];
+    const msgs = Array.isArray(secondRunPayload.messages) ? secondRunPayload.messages : [];
+    const hasPrevUser = msgs.some((m) => m && m.role === "user" && m.content === "ip + inspector");
+    const hasPrevAssistant = msgs.some((m) => m && m.role === "assistant" && m.content === "final-1");
+    assert.equal(hasPrevUser, true);
+    assert.equal(hasPrevAssistant, true);
+
+    assert.ok(seenUrls.some((u) => u.includes("/chat/completions")));
+    assert.ok(seenUrls.some((u) => u.startsWith("https://api.ipify.org")));
+    assert.ok(seenUrls.some((u) => u.includes("/fn/request-inspector")));
+  } finally {
+    global.fetch = prevFetch;
+    if (prevMem === undefined) delete process.env.FASTFN_AGENT_MEMORY_PATH; else process.env.FASTFN_AGENT_MEMORY_PATH = prevMem;
+    try { require("node:fs").unlinkSync(memPath); } catch (_) {}
+  }
+}
+
+async function testAiToolAgentBlocksLocalHostTool() {
+  const prevFetch = global.fetch;
+  const seenUrls = [];
+  let openaiCalls = 0;
+
+  global.fetch = async (url, opts = {}) => {
+    const u = String(url);
+    seenUrls.push(u);
+    if (u.includes("/chat/completions")) {
+      openaiCalls += 1;
+      if (openaiCalls === 1) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              choices: [
+                {
+                  message: {
+                    content: null,
+                    tool_calls: [
+                      {
+                        id: "call_local",
+                        function: {
+                          name: "http_get",
+                          arguments: JSON.stringify({ url: "http://127.0.0.1:8080/_fn/health" }),
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            }),
+        };
+      }
+      return { ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: "done" } }] }) };
+    }
+    throw new Error(`unexpected fetch url=${u}`);
+  };
+
+  try {
+    const resp = await aiToolAgentHandler({
+      method: "GET",
+      query: {
+        dry_run: "false",
+        text: "try local host",
+        tool_allow_hosts: "127.0.0.1",
+      },
+      env: { OPENAI_API_KEY: "test-openai-key", OPENAI_BASE_URL: "https://api.openai.com/v1" },
+      context: { timeout_ms: 2000 },
+    });
+    assert.equal(resp.status, 200);
+    const body = JSON.parse(resp.body);
+    const toolStep = (body.trace.steps || []).find((s) => s && s.type === "tool");
+    assert.ok(toolStep && toolStep.result);
+    assert.equal(toolStep.result.ok, false);
+    assert.equal(toolStep.result.error, "local host not allowed");
+    assert.equal(seenUrls.some((u) => u.includes("_fn/health")), false);
   } finally {
     global.fetch = prevFetch;
   }
@@ -1095,6 +1351,61 @@ async function testTelegramAiReplyToolsContext() {
     assert.ok(String(last.content).includes("[Tool results]"));
     assert.ok(String(last.content).includes("internal-fn"));
     assert.ok(String(last.content).includes("203.0.113.10"));
+  } finally {
+    global.fetch = prevFetch;
+  }
+}
+
+async function testTelegramAiReplyBlocksLocalHostTool() {
+  const prevFetch = global.fetch;
+  let openaiPayload = null;
+  const seenUrls = [];
+
+  global.fetch = async (url, opts = {}) => {
+    const u = String(url);
+    seenUrls.push(u);
+    if (u.includes("/chat/completions")) {
+      openaiPayload = JSON.parse(String(opts.body || "{}"));
+      return { ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: "ok-local-block" } }] }) };
+    }
+    if (u.includes("_fn/health")) {
+      throw new Error("unexpected local host fetch");
+    }
+    if (u.includes("/sendMessage")) {
+      return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { message_id: 1 } }) };
+    }
+    if (u.includes("/sendChatAction")) {
+      return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: true }) };
+    }
+    return { ok: false, status: 404, text: async () => "not found" };
+  };
+
+  try {
+    const resp = await telegramAiReplyHandler({
+      method: "GET",
+      query: {
+        mode: "reply",
+        dry_run: "false",
+        chat_id: "123",
+        tools: "true",
+        tool_allow_hosts: "127.0.0.1",
+        text: "Use [[http:http://127.0.0.1:8080/_fn/health]]",
+      },
+      body: "",
+      env: {
+        TELEGRAM_BOT_TOKEN: "test-token",
+        OPENAI_API_KEY: "test-key",
+        OPENAI_BASE_URL: "https://api.openai.com/v1",
+      },
+      context: { timeout_ms: 2000 },
+    });
+    assert.equal(resp.status, 200);
+    assert.ok(openaiPayload && Array.isArray(openaiPayload.messages));
+    const last = openaiPayload.messages[openaiPayload.messages.length - 1];
+    assert.equal(last.role, "user");
+    assert.ok(String(last.content).includes("[Tool results]"));
+    assert.ok(String(last.content).includes("local host not allowed"));
+    assert.equal(seenUrls.some((u) => u.includes("_fn/health")), false);
   } finally {
     global.fetch = prevFetch;
   }
@@ -2140,6 +2451,47 @@ async function testWhatsappChatToolsContext() {
     const userItem = responsesPayload.input.find((x) => x && x.role === "user");
     assert.ok(userItem && String(userItem.content).includes("[Tool results]"));
     assert.ok(String(userItem.content).includes("203.0.113.42"));
+  } finally {
+    global.fetch = prevFetch;
+  }
+}
+
+async function testWhatsappChatBlocksLocalHostTool() {
+  const prevFetch = global.fetch;
+  let responsesPayload = null;
+  const seenUrls = [];
+
+  global.fetch = async (url, opts = {}) => {
+    const u = String(url);
+    seenUrls.push(u);
+    if (u.includes("/responses")) {
+      responsesPayload = JSON.parse(String(opts.body || "{}"));
+      return { ok: true, status: 200, json: async () => ({ output_text: "wa-ok-local-block" }) };
+    }
+    if (u.includes("_fn/health")) {
+      throw new Error("unexpected local host fetch");
+    }
+    return { ok: false, status: 404, text: async () => "not found", json: async () => ({}) };
+  };
+
+  try {
+    const resp = await whatsappHandler({
+      method: "POST",
+      query: { action: "chat" },
+      body: JSON.stringify({ text: "Use [[http:http://127.0.0.1:8080/_fn/health]]" }),
+      env: {
+        OPENAI_API_KEY: "test-key",
+        OPENAI_BASE_URL: "https://api.openai.com/v1",
+        WHATSAPP_TOOLS_ENABLED: "true",
+        WHATSAPP_TOOL_ALLOW_HTTP_HOSTS: "127.0.0.1",
+      },
+    });
+    assert.equal(resp.status, 200);
+    assert.ok(responsesPayload && Array.isArray(responsesPayload.input));
+    const userItem = responsesPayload.input.find((x) => x && x.role === "user");
+    assert.ok(userItem && String(userItem.content).includes("[Tool results]"));
+    assert.ok(String(userItem.content).includes("local host not allowed"));
+    assert.equal(seenUrls.some((u) => u.includes("_fn/health")), false);
   } finally {
     global.fetch = prevFetch;
   }

@@ -228,6 +228,43 @@ def test_python_telegram_ai_reply_py_exec_with_mocks():
         mod._resolve_tools = orig_tools
 
 
+def test_python_telegram_ai_reply_py_blocks_local_host_tools():
+    demo_path = ROOT / "examples/functions/python/telegram-ai-reply-py/app.py"
+    if not require_demo(demo_path):
+        return
+    mod = load_module(demo_path)
+
+    calls = {"http": 0, "fn": 0}
+    orig_http = mod._http_request_json
+    orig_fn = mod._call_internal_function
+    try:
+        def boom_http(**_kwargs):
+            calls["http"] += 1
+            raise AssertionError("unexpected http request in tools")
+
+        def boom_fn(*_args, **_kwargs):
+            calls["fn"] += 1
+            raise AssertionError("unexpected fn request in tools")
+
+        mod._http_request_json = boom_http
+        mod._call_internal_function = boom_fn
+
+        tools = mod._resolve_tools(
+            text="Use [[http:http://127.0.0.1:8080/_fn/health]] and [[fn:/_fn/health|GET]]",
+            env={},
+            query={"tools": "true", "tool_allow_hosts": "127.0.0.1", "tool_allow_fn": "_fn/health"},
+        )
+        assert tools["enabled"] is True
+        errors = [r.get("error") for r in (tools.get("results") or []) if isinstance(r, dict)]
+        assert "local host not allowed" in errors
+        assert "invalid function target" in errors
+        assert calls["http"] == 0
+        assert calls["fn"] == 0
+    finally:
+        mod._http_request_json = orig_http
+        mod._call_internal_function = orig_fn
+
+
 def test_python_telegram_ai_reply_py_scheduler_bypass_loop_token():
     demo_path = ROOT / "examples/functions/python/telegram-ai-reply-py/app.py"
     if not require_demo(demo_path):
@@ -606,6 +643,7 @@ def main():
     test_python_tools_loop_dry_run_plan()
     test_python_telegram_ai_reply_py_dry_run()
     test_python_telegram_ai_reply_py_exec_with_mocks()
+    test_python_telegram_ai_reply_py_blocks_local_host_tools()
     test_python_telegram_ai_reply_py_scheduler_bypass_loop_token()
     test_python_gmail_send_dry_run()
     test_python_gmail_send_requires_to()

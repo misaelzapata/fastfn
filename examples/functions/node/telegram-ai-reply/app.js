@@ -353,6 +353,16 @@ function hostAllowed(hostname, allowlist) {
   return false;
 }
 
+function isLocalHostname(hostname) {
+  const h = String(hostname || "").toLowerCase();
+  if (!h) return false;
+  if (h === "localhost") return true;
+  if (h === "127.0.0.1") return true;
+  if (h === "::1") return true;
+  if (h.endsWith(".local")) return true;
+  return false;
+}
+
 async function executeTool(tool, cfg) {
   if (tool.type === "fn") {
     if (!cfg.allowedFns.includes(tool.name)) {
@@ -379,6 +389,9 @@ async function executeTool(tool, cfg) {
       parsed = new URL(tool.url);
     } catch (_) {
       return { ok: false, type: "http", url: tool.url, error: "invalid url" };
+    }
+    if (isLocalHostname(parsed.hostname)) {
+      return { ok: false, type: "http", url: tool.url, error: "local host not allowed" };
     }
     if (!hostAllowed(parsed.hostname, cfg.allowedHosts)) {
       return { ok: false, type: "http", url: tool.url, error: "host not allowed" };

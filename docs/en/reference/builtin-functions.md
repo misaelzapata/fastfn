@@ -962,6 +962,35 @@ curl -g -sS \
 "http://127.0.0.1:8080/toolbox-bot?dry_run=false&text=Use%20[[http:https://api.ipify.org?format=json]]%20and%20[[fn:request-inspector?key=demo|GET]]"
 ```
 
+### `ai-tool-agent` (OpenAI tool-calling agent)
+
+- Route: `/ai-tool-agent`
+- Methods: `GET`, `POST`
+- Goal: OpenAI chooses tools (`http_get`, `fn_get`) and the function executes them with allowlists
+- Default behavior: `dry_run=true`
+- Source: `examples/functions/node/ai-tool-agent/app.js`
+- Docs: [Tools](../how-to/tools.md#61-openai-tool-calling-model-chooses-tools)
+
+Dry run:
+
+```bash
+curl -sS "http://127.0.0.1:8080/ai-tool-agent?dry_run=true&text=what%20is%20my%20ip%20and%20weather%20in%20Buenos%20Aires%3F"
+```
+
+Real run (requires `OPENAI_API_KEY`):
+
+```bash
+curl -sS "http://127.0.0.1:8080/ai-tool-agent?dry_run=false&text=what%20is%20my%20ip%20and%20weather%20in%20Buenos%20Aires%3F"
+```
+
+The response includes a `trace.steps[]` array with tool calls, tool results, and memory info.
+
+Scheduler / cron:
+
+- `ai-tool-agent` ships with an example `schedule` block in `examples/functions/node/ai-tool-agent/fn.config.json` (disabled by default).
+- Enable schedules via the Console API, or by editing `fn.config.json` and reloading.
+- See: [Manage Functions](../how-to/manage-functions.md#4b-add-a-schedule-interval-cron)
+
 ### `request-inspector`
 
 - Route: `/request-inspector`

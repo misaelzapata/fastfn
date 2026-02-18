@@ -270,6 +270,17 @@ def _host_allowed(url, allow_hosts):
     return False
 
 
+def _is_local_host(hostname):
+    h = str(hostname or "").strip().lower()
+    if not h:
+        return False
+    if h in {"localhost", "127.0.0.1", "::1"}:
+        return True
+    if h.endswith(".local"):
+        return True
+    return False
+
+
 def _extract_tool_directives(text):
     calls = []
     for kind, target, method in DIRECTIVE_RE.findall(str(text or "")):
@@ -382,12 +393,24 @@ def _resolve_tools(text, env, query):
         if kind == "fn":
             fn_name = str(target).split("?", 1)[0].strip().lstrip("/")
             fn_name = fn_name[3:] if fn_name.startswith("fn/") else fn_name
+            if not re.match(r"^[A-Za-z0-9_-]+$", fn_name):
+                row["error"] = "invalid function target"
+                results.append(row)
+                continue
             if fn_name not in allow_fn:
                 row["error"] = "fn_not_allowed"
                 results.append(row)
                 continue
             out = _call_internal_function(base_url, target, method, timeout_ms)
         elif kind == "http":
+            try:
+                host = (urllib.parse.urlparse(str(target)).hostname or "").lower()
+            except Exception:
+                host = ""
+            if _is_local_host(host):
+                row["error"] = "local host not allowed"
+                results.append(row)
+                continue
             if not _host_allowed(str(target), allow_hosts):
                 row["error"] = "http_host_not_allowed"
                 results.append(row)

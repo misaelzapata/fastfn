@@ -547,6 +547,35 @@ curl -g -sS \
 "http://127.0.0.1:8080/toolbox-bot?dry_run=false&text=Usa%20[[http:https://api.ipify.org?format=json]]%20y%20[[fn:request-inspector?key=demo|GET]]"
 ```
 
+### `ai-tool-agent` (agent con OpenAI tool-calling)
+
+- Ruta: `/ai-tool-agent`
+- Métodos: `GET`, `POST`
+- Objetivo: OpenAI elige tools (`http_get`, `fn_get`) y la función las ejecuta con allowlists
+- Comportamiento por defecto: `dry_run=true`
+- Código: `examples/functions/node/ai-tool-agent/app.js`
+- Doc: [Herramientas](../como-hacer/herramientas.md#61-openai-tool-calling-el-modelo-elige-tools)
+
+Dry run:
+
+```bash
+curl -sS "http://127.0.0.1:8080/ai-tool-agent?dry_run=true&text=cual%20es%20mi%20ip%20y%20como%20esta%20el%20clima%20en%20Buenos%20Aires%3F"
+```
+
+Ejecución real (requiere `OPENAI_API_KEY`):
+
+```bash
+curl -sS "http://127.0.0.1:8080/ai-tool-agent?dry_run=false&text=cual%20es%20mi%20ip%20y%20como%20esta%20el%20clima%20en%20Buenos%20Aires%3F"
+```
+
+La respuesta incluye `trace.steps[]` con tool calls, resultados, y memoria.
+
+Scheduler / cron:
+
+- `ai-tool-agent` trae un bloque `schedule` de ejemplo en `examples/functions/node/ai-tool-agent/fn.config.json` (desactivado por defecto).
+- Podés activar schedules vía Console API, o editando `fn.config.json` y haciendo reload.
+- Ver: [Gestionar funciones](../como-hacer/gestionar-funciones.md#4b-agregar-un-schedule-interval-cron)
+
 ### Logs (interno)
 
 Tail de logs de OpenResty (requiere API de consola):

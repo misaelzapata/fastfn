@@ -47,6 +47,16 @@ function hostAllowed(hostname, allowlist) {
   return false;
 }
 
+function isLocalHostname(hostname) {
+  const h = String(hostname || "").toLowerCase();
+  if (!h) return false;
+  if (h === "localhost") return true;
+  if (h === "127.0.0.1") return true;
+  if (h === "::1") return true;
+  if (h.endsWith(".local")) return true;
+  return false;
+}
+
 async function fetchWithTimeout(url, opts, timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), Math.max(1, Number(timeoutMs) || 5000));
@@ -236,6 +246,9 @@ async function executeTool(tool, cfg) {
     } catch (_) {
       return { ok: false, type: "http", url: tool.url, error: "invalid url", elapsed_ms: Date.now() - started };
     }
+    if (isLocalHostname(parsed.hostname)) {
+      return { ok: false, type: "http", url: tool.url, error: "local host not allowed", elapsed_ms: Date.now() - started };
+    }
     if (!hostAllowed(parsed.hostname, cfg.allowedHosts)) {
       return { ok: false, type: "http", url: tool.url, error: "host not allowed", elapsed_ms: Date.now() - started };
     }
@@ -341,4 +354,3 @@ exports.handler = async (event) => {
     },
   });
 };
-

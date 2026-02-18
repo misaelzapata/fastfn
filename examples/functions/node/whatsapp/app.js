@@ -82,6 +82,16 @@ function hostAllowed(hostname, allowlist) {
   return false;
 }
 
+function isLocalHostname(hostname) {
+  const h = String(hostname || "").toLowerCase();
+  if (!h) return false;
+  if (h === "localhost") return true;
+  if (h === "127.0.0.1") return true;
+  if (h === "::1") return true;
+  if (h.endsWith(".local")) return true;
+  return false;
+}
+
 function whatsappToolsConfig(query, aiOpts, env) {
   const enabled = asBool(
     query.tools ?? aiOpts.tools ?? env.WHATSAPP_TOOLS_ENABLED ?? process.env.WHATSAPP_TOOLS_ENABLED,
@@ -139,7 +149,7 @@ function inferAutoTools(text, cfg) {
   const addHttp = (url) => {
     try {
       const u = new URL(url);
-      if (hostAllowed(u.hostname, cfg.allowedHosts)) {
+      if (!isLocalHostname(u.hostname) && hostAllowed(u.hostname, cfg.allowedHosts)) {
         picks.push({ type: "http", url: u.toString() });
       }
     } catch (_) {
@@ -197,6 +207,9 @@ async function executeTool(tool, cfg) {
       parsed = new URL(tool.url);
     } catch (_) {
       return { ok: false, type: "http", url: tool.url, error: "invalid url" };
+    }
+    if (isLocalHostname(parsed.hostname)) {
+      return { ok: false, type: "http", url: parsed.toString(), error: "local host not allowed" };
     }
     if (!hostAllowed(parsed.hostname, cfg.allowedHosts)) {
       return { ok: false, type: "http", url: parsed.toString(), error: "host not allowed" };

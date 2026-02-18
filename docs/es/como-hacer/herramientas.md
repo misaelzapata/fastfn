@@ -116,6 +116,10 @@ Solo se aceptan nombres que matchean `[A-Za-z0-9_-]+`.
 
 Solo se hace fetch si el hostname está allowlisted.
 
+Nota: hosts locales siempre se bloquean (aunque estén allowlisted) para evitar acceso a `/_fn/*`:
+
+- `localhost`, `127.0.0.1`, `::1`, `*.local`
+
 ### 5.3 Timeout
 
 - Override por query: `tool_timeout_ms=5000`
@@ -128,6 +132,40 @@ Ejemplos que soportan tools:
 - `telegram-ai-reply` (Node): knobs `TELEGRAM_*`
 - `telegram-ai-reply-py` (Python): query params + allowlists
 - `whatsapp` (Node): `action=chat` + knobs `WHATSAPP_*`
+
+## 6.1 OpenAI tool-calling (el modelo elige tools)
+
+Si querés un flow "mágico" donde **la IA elige tools** (en vez de heurísticas por keywords o directivas manuales), usá:
+
+- `ai-tool-agent` (Node)
+  - Ruta: `GET /ai-tool-agent`
+  - Código: `examples/functions/node/ai-tool-agent/app.js`
+
+Dry run (sin OpenAI, sin llamadas externas):
+
+```bash
+curl -sS "http://127.0.0.1:8080/ai-tool-agent?dry_run=true&text=cual%20es%20mi%20ip%20y%20como%20esta%20el%20clima%20en%20Buenos%20Aires%3F"
+```
+
+Ejecución real (OpenAI + tools):
+
+```bash
+curl -sS "http://127.0.0.1:8080/ai-tool-agent?dry_run=false&text=cual%20es%20mi%20ip%20y%20como%20esta%20el%20clima%20en%20Buenos%20Aires%3F"
+```
+
+La respuesta incluye `trace.steps[]` con:
+
+- cada respuesta de OpenAI (incluye tool calls),
+- cada resultado de ejecución de tool,
+- path del archivo de memoria + contadores.
+
+### Scheduler / cron
+
+`ai-tool-agent` trae un bloque `schedule` de ejemplo en `examples/functions/node/ai-tool-agent/fn.config.json` (desactivado por defecto).
+
+Para activar schedules de forma segura (admin), ver:
+
+- [Gestionar funciones (Console API)](./gestionar-funciones.md#4b-agregar-un-schedule-interval-cron)
 
 Ver también:
 
