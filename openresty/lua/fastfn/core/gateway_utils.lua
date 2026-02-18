@@ -1,25 +1,13 @@
 local M = {}
 
-function M.parse_fn_compat_target(uri)
+function M.parse_versioned_target(uri)
   if type(uri) ~= "string" then
     return nil, nil
   end
 
-  local name, version = uri:match("^/fn/([%w_-]+)@([%w_.-]+)$")
+  local name, version = uri:match("^/([%w_-]+)@([%w_.-]+)$")
   if name then
     return name, version
-  end
-
-  -- Also accept versioned targets without the /fn prefix:
-  --   /hello@v2 (useful for public docs while keeping the compat behavior).
-  name, version = uri:match("^/([%w_-]+)@([%w_.-]+)$")
-  if name then
-    return name, version
-  end
-
-  name = uri:match("^/fn/([%w_-]+)$")
-  if name then
-    return name, nil
   end
 
   return nil, nil

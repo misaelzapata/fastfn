@@ -92,10 +92,6 @@ end
 local spec = openapi.build(catalog, {
   server_url = server_url,
   runtime_order = routes_mod.get_runtime_order(),
-  -- Optional /fn/* compatibility paths are opt-in (default is to expose only
-  -- public function routes).
-  -- We accept both env var names for compatibility.
-  include_fn_paths = env_bool("FN_OPENAPI_INCLUDE_FN_PATHS", env_bool("FN_OPENAPI_INCLUDE_LEGACY", false)),
   include_internal = env_bool("FN_OPENAPI_INCLUDE_INTERNAL", false),
   invoke_meta_lookup = invoke_meta_lookup,
 })

@@ -32,6 +32,47 @@
     - sets `COMPOSE_PROJECT_NAME` for the whole run
   - validated: `bash tests/integration/test-openapi-system.sh`
 
+## Update: 2026-02-18 (Remove `/fn/*` Public Route Prefix)
+
+- [x] Removed `/fn/*` public route prefix support entirely (no more compatibility routing by name):
+  - Nginx: removed the `/fn/*` location:
+    - `openresty/nginx.conf`
+    - `cli/embed/runtime/openresty/nginx.conf`
+  - Gateway: removed `/fn/*` fallback routing by name (kept only versioned direct routes like `/<name>@<version>`):
+    - `openresty/lua/fastfn/http/gateway.lua`
+    - `openresty/lua/fastfn/core/gateway_utils.lua`
+    - `openresty/lua/fastfn/core/routes.lua`
+    - embedded parity copies under `cli/embed/runtime/openresty/...`
+  - OpenAPI: removed `FN_OPENAPI_INCLUDE_FN_PATHS` and the `/fn/*` OpenAPI export path:
+    - `openresty/lua/fastfn/http/openapi_endpoint.lua`
+    - `openresty/lua/fastfn/core/openapi.lua`
+    - `docker-compose.yml`
+    - `docker-compose.integration.yml`
+    - embedded parity copies under `cli/embed/runtime/...`
+  - Console wizard: now prints public routes at `/...` instead of `/fn/...`:
+    - `openresty/console/wizard.js`
+    - `cli/embed/runtime/openresty/console/wizard.js`
+  - Playwright E2E now calls public routes (no `/fn/...`):
+    - `tests/e2e/runtimes.spec.js`
+    - `cli/test-playwright.sh`
+  - Verified:
+    - `bash cli/test-all.sh`
+    - `bash cli/test-playwright.sh`
+
+## Pending (Routing): Pure Filesystem Routing + Static `public/` Priority
+
+- [ ] Make routing behave like “filesystem routing” (Next.js/Vercel style), with deterministic priority:
+  - no hard-coded public function prefix (default is root `/`, but should be configurable)
+  - static: `public/` first
+  - functions: `functions/` mapped routes second
+  - target behavior:
+    - `GET /` serves `public/index.html`
+    - `GET /users` serves `functions/users/get.py`
+    - `GET /logo.png` serves `public/logo.png`
+  - implementation notes (when we take this on):
+    - Nginx should use `try_files` for static before forwarding to the gateway.
+    - Add integration tests to lock the priority behavior (static must win).
+
 ## Runtime/Lua Immediate Queue (user-requested)
 
 - [x] Portable mode now respects runtime toggles and host port overrides:

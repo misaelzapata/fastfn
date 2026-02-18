@@ -81,7 +81,7 @@ domains = [
     "https://example.org/path?x=1&y=2",
     "https://n8n.io/workflows",
 ]
-endpoints = ["/fn/qr", "/fn/qr@v2"]
+endpoints = ["/qr", "/qr@v2"]
 
 def run_case(path: str, concurrency: int, total_requests: int):
     lock = threading.Lock()

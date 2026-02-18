@@ -229,19 +229,17 @@ end
 local function test_gateway_utils()
   local utils = require("fastfn.core.gateway_utils")
 
-  local name, version = utils.parse_fn_compat_target("/fn/hello")
-  assert_eq(name, "hello", "parse name")
-  assert_eq(version, nil, "parse nil version")
+  local name, version = utils.parse_versioned_target("/hello@v2")
+  assert_eq(name, "hello", "parse versioned name")
+  assert_eq(version, "v2", "parse version")
 
-  local name2, version2 = utils.parse_fn_compat_target("/fn/hello@v2")
-  assert_eq(name2, "hello", "parse versioned name")
-  assert_eq(version2, "v2", "parse version")
+  local n2 = utils.parse_versioned_target("/hello")
+  assert_eq(n2, nil, "parse invalid (no version)")
 
-  local name3, version3 = utils.parse_fn_compat_target("/hello@v2")
-  assert_eq(name3, "hello", "parse versioned name without /fn")
-  assert_eq(version3, "v2", "parse version without /fn")
+  local n3 = utils.parse_versioned_target("/fn/hello@v2")
+  assert_eq(n3, nil, "parse invalid (/fn prefix)")
 
-  local n4 = utils.parse_fn_compat_target("/bad/path")
+  local n4 = utils.parse_versioned_target("/bad/path")
   assert_eq(n4, nil, "parse invalid")
 
   assert_eq(utils.resolve_numeric("1500", nil, 2500, 999), 1500, "resolve version")
@@ -418,11 +416,9 @@ local function test_openapi_builder()
   assert_eq(spec.info.title, "Test API", "openapi title")
   assert_eq(spec.info.version, "test", "openapi info version")
 
-  assert_true(spec.paths["/fn/hello"] == nil, "/fn compat path hidden (default hello)")
-  assert_true(spec.paths["/fn/hello@v2"] == nil, "/fn compat path hidden (versioned hello)")
-  assert_true(spec.paths["/fn/risk-score"] == nil, "/fn compat path hidden (risk-score)")
-  assert_true(spec.paths["/fn/php-profile"] == nil, "/fn compat path hidden (php-profile)")
-  assert_true(spec.paths["/fn/rust-profile"] == nil, "/fn compat path hidden (rust-profile)")
+  for p, _ in pairs(spec.paths or {}) do
+    assert_true(type(p) ~= "string" or p:sub(1, 4) ~= "/fn/", "OpenAPI must not export /fn/* routes")
+  end
   assert_true(spec.paths["/api/hello"] ~= nil, "mapped route path")
   assert_true(spec.paths["/api/hello-v2"] ~= nil, "mapped version route path")
   assert_true(spec.paths["/api/dispatch"] ~= nil, "mapped route multi-entry path")
@@ -703,9 +699,9 @@ local function test_routes_discovery_and_host_routing()
     local rt_base = routes.resolve_mapped_target("/blog", "GET", { host = "api.example.com" })
     assert_eq(rt_base, "python", "optional catch-all base route")
 
-    local compat_rt, compat_ver = routes.resolve_fn_compat_target("hello", nil)
-    assert_eq(compat_rt, "node", "/fn compat target uses runtime order")
-    assert_eq(compat_ver, nil, "/fn compat target version default")
+    local resolved_rt, resolved_ver = routes.resolve_named_target("hello", nil)
+    assert_eq(resolved_rt, "node", "resolve named target uses runtime order")
+    assert_eq(resolved_ver, nil, "resolve named target version default")
 
     local file_policy = routes.resolve_function_policy("python", "get.users.[id].py", nil)
     assert_true(type(file_policy) == "table", "file target policy fallback")
@@ -2233,7 +2229,7 @@ local function test_jobs_module_queue_and_result()
 	        -- Ensure job specs/results are written under this test's temp dir rather than shared /tmp paths.
 	        return { functions_root = root, socket_base_dir = root, runtimes = { lua = runtime_cfg } }
 	      end,
-	      resolve_fn_compat_target = function(fn_name, version)
+	      resolve_named_target = function(fn_name, version)
 	        if fn_name == "demo" then
 	          return "lua", version
 	        end
@@ -2544,7 +2540,7 @@ local function test_scheduler_tick_and_snapshot()
 	          runtimes = { lua = runtime_cfg },
 	        }
 	      end,
-	      resolve_fn_compat_target = function(fn_name, version)
+	      resolve_named_target = function(fn_name, version)
 	        if fn_name == "demo" then
 	          return "lua", version
 	        end
@@ -2722,7 +2718,7 @@ local function test_scheduler_cron_and_retry_backoff()
 	      get_config = function()
 	        return { runtimes = { lua = runtime_cfg } }
 	      end,
-	      resolve_fn_compat_target = function(fn_name, version)
+	      resolve_named_target = function(fn_name, version)
 	        if fn_name == "demo" then
 	          return "lua", version
 	        end
@@ -2950,7 +2946,7 @@ local function test_scheduler_cron_timezone_and_invalid_timezone()
 	      get_config = function()
 	        return { runtimes = { lua = runtime_cfg } }
 	      end,
-	      resolve_fn_compat_target = function(fn_name, version)
+	      resolve_named_target = function(fn_name, version)
 	        if fn_name == "offset" or fn_name == "badtz" then
 	          return "lua", version
 	        end
@@ -3078,7 +3074,7 @@ local function test_scheduler_persist_state_roundtrip()
 	      get_config = function()
 	        return { functions_root = root, runtimes = { lua = runtime_cfg } }
 	      end,
-	      resolve_fn_compat_target = function(fn_name, version)
+	      resolve_named_target = function(fn_name, version)
 	        if fn_name == "demo" then
 	          return "lua", version
 	        end

@@ -98,11 +98,11 @@ if ! curl -fsS "$BASE_URL/_fn/health" >/dev/null 2>&1; then
   exit 1
 fi
 
-warm_url "/fn/node-hello"
-warm_url "/fn/python-hello"
-warm_url "/fn/php-hello"
-warm_url "/fn/rust-hello"
-warm_url "/fn/node-deps"
-warm_url "/fn/python-deps"
+warm_url "/node-hello"
+warm_url "/python-hello"
+warm_url "/php-hello"
+warm_url "/rust-hello"
+warm_url "/node-deps"
+warm_url "/python-deps"
 
 run_node_cmd npm run test:e2e:ui

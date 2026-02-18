@@ -45,13 +45,13 @@ assert_status() {
 
 assert_status "$BASE_URL/_fn/health" 200
 assert_status "$BASE_URL/openapi.json" 200
-assert_status "$BASE_URL/fn/hello?name=test" 200
-assert_status "$BASE_URL/fn/hello@v2?name=test" 200
-assert_status "$BASE_URL/fn/risk-score?email=a@example.com" 200
-assert_status "$BASE_URL/fn/php-profile?name=test" 200
-assert_status "$BASE_URL/fn/rust-profile?name=test" 200
-assert_status "$BASE_URL/fn/gmail-send?to=demo@example.com&dry_run=true" 200
-assert_status "$BASE_URL/fn/telegram-send?chat_id=123&dry_run=true" 200
-assert_status "$BASE_URL/fn/does-not-exist" 404
+assert_status "$BASE_URL/hello?name=test" 200
+assert_status "$BASE_URL/hello@v2?name=test" 200
+assert_status "$BASE_URL/risk-score?email=a@example.com" 200
+assert_status "$BASE_URL/php-profile?name=test" 200
+assert_status "$BASE_URL/rust-profile?name=test" 200
+assert_status "$BASE_URL/gmail-send?to=demo@example.com&dry_run=true" 200
+assert_status "$BASE_URL/telegram-send?chat_id=123&dry_run=true" 200
+assert_status "$BASE_URL/does-not-exist" 404
 
 echo "Smoke tests passed"

@@ -1333,11 +1333,8 @@ function M.build(catalog, opts)
 
   local runtimes = (catalog and catalog.runtimes) or {}
   local runtime_order = opts.runtime_order or sorted_keys(runtimes)
-  local include_fn_paths = opts.include_fn_paths == true
   local include_internal = opts.include_internal == true
   local invoke_meta_lookup = opts.invoke_meta_lookup
-  local seen_default = {}
-  local seen_version = {}
 
   if not include_internal then
     for p, _ in pairs(spec.paths) do
@@ -1348,33 +1345,6 @@ function M.build(catalog, opts)
     spec.tags = {
       { name = "functions", description = "Invocable functions" },
     }
-  end
-
-  if include_fn_paths then
-    for _, runtime in ipairs(runtime_order) do
-      local runtime_entry = runtimes[runtime] or {}
-      local functions = runtime_entry.functions or {}
-
-      for _, fn_name in ipairs(sorted_keys(functions)) do
-        local fn_entry = functions[fn_name]
-
-        if fn_entry.has_default and not seen_default[fn_name] then
-          seen_default[fn_name] = runtime
-          local p = string.format("/fn/%s", fn_name)
-          spec.paths[p] = methods_operations(runtime, fn_name, nil, fn_entry.policy and fn_entry.policy.methods, nil, invoke_meta_lookup)
-        end
-
-        for _, ver in ipairs(fn_entry.versions or {}) do
-          local key = fn_name .. "@" .. ver
-          if not seen_version[key] then
-            seen_version[key] = runtime
-            local p = string.format("/fn/%s@%s", fn_name, ver)
-            local ver_policy = (fn_entry.versions_policy or {})[ver] or {}
-            spec.paths[p] = methods_operations(runtime, fn_name, ver, ver_policy.methods or (fn_entry.policy and fn_entry.policy.methods), nil, invoke_meta_lookup)
-          end
-        end
-      end
-    end
   end
 
   local mapped = (catalog and catalog.mapped_routes) or {}

@@ -9,7 +9,6 @@ M.ALLOWED_METHODS = {
   DELETE = true,
 }
 M.RESERVED_ROUTE_PREFIXES = {
-  "/fn",
   "/_fn",
   "/console",
 }

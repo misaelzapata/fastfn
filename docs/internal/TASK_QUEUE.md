@@ -13,7 +13,7 @@ Architecture rule (locked):
   - OpenAPI operations per route/method
   - `/_fn/invoke` pre-validation.
 
-2. Remove legacy response-mode complexity
+2. Remove response-mode switch complexity
 - Status: completed
 - Goal: keep a single response path (no `response.mode` switch).
 - Keep binary support (`is_base64` + `body_base64`) and backward compatibility only where strictly needed.
@@ -35,7 +35,7 @@ Architecture rule (locked):
 - Status: completed
 - Goal:
   - unit (lua): OpenAPI method presence/absence, gateway method policy helpers.
-  - integration: `POST /fn/hello` => `405`, `POST /fn/risk_score` => `200`.
+  - integration: `POST /hello` => `405`, `POST /risk-score` => `200`.
   - integration: OpenAPI path methods match configured methods.
 
 6. Docs from zero (onboarding)
@@ -86,7 +86,7 @@ Architecture rule (locked):
 - Goal:
   - extend `fn_gateway` path resolution:
     - first check explicit mapping table by incoming path
-    - fallback to legacy `/fn/<name>@<version>`.
+    - fallback to versioned direct routes like `/<name>@<version>`.
   - preserve existing policy checks (405/413/429/503/504).
   - guarantee no path traversal and no ambiguous target resolution.
   - include `X-Fn-Mapped-Route` debug header when debug enabled.
@@ -135,7 +135,6 @@ Architecture rule (locked):
 - Status: planned
 - Goal:
   - block collisions against:
-    - `/fn/*` legacy function routes
     - internal routes (`/_fn/*`, `/openapi.json`, `/docs`, `/console`).
   - block duplicate mappings for same `path + method`.
   - prevent delete of function/version while mapping references exist (or require force flag).

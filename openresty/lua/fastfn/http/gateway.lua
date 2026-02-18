@@ -445,14 +445,15 @@ local function host_is_allowed(allowed_hosts)
 end
 
 local request_uri = ngx.var.uri or ""
-local compat_name, compat_version = utils.parse_fn_compat_target(request_uri)
+local versioned_name, versioned_version = utils.parse_versioned_target(request_uri)
 local runtime
 local fn_name
 local requested_version
 local path_params
 local resolve_err
 
--- Prefer mapped routes for normal traffic; fall back to /fn/<name> compat paths if present.
+-- Prefer mapped routes for normal traffic; fall back to versioned direct routes
+-- like /hello@v2 when present.
 runtime, fn_name, requested_version, path_params, resolve_err = routes_mod.resolve_mapped_target(
   request_uri,
   ngx.req.get_method(),
@@ -471,12 +472,12 @@ if not runtime then
     return
   end
 
-  if compat_name then
-    local compat_runtime, compat_resolved_version = routes_mod.resolve_fn_compat_target(compat_name, compat_version)
-    if compat_runtime then
-      runtime = compat_runtime
-      fn_name = compat_name
-      requested_version = compat_resolved_version
+  if versioned_name then
+    local resolved_rt, resolved_ver = routes_mod.resolve_named_target(versioned_name, versioned_version)
+    if resolved_rt then
+      runtime = resolved_rt
+      fn_name = versioned_name
+      requested_version = resolved_ver
       path_params = {}
     end
   end

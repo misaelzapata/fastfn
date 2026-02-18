@@ -160,15 +160,13 @@ if type(name) ~= "string" then
   return
 end
 if runtime == nil then
-  -- Backward-compatible: allow omitting runtime when invoking by name.
-  -- Resolve using the configured runtime order.
-  local resolved_rt, resolved_ver = routes.resolve_fn_compat_target(name, resolved_version)
+  -- Allow omitting runtime when invoking by name. Resolve using the configured
+  -- runtime order.
+  local resolved_rt, resolved_ver = routes.resolve_named_target(name, version)
   if not resolved_rt then
     guard.write_json(404, { error = "unknown function or version" })
     return
   end
-  resolved_runtime = resolved_rt
-  resolved_version = resolved_ver
   runtime = resolved_rt
   version = resolved_ver
 end

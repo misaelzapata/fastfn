@@ -34,9 +34,9 @@ Lee:
   - gateway (`405`)
   - `/_fn/invoke`
   - OpenAPI/Swagger
-- Mantener compatibilidad de rutas:
-  - `/fn/<name>`
-  - `/fn/<name>@<version>`
+- Mantener routing publico consistente:
+  - rutas publicas mapeadas (filesystem/manifest) sin prefijos especiales
+  - versionado por `/<name>@<version>` cuando aplique
 
 ## Checklist de PR
 

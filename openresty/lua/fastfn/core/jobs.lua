@@ -750,9 +750,9 @@ function M.enqueue(payload)
   local runtime_raw = payload.runtime
   local runtime, rerr = ensure_runtime(runtime_raw)
   if runtime == nil then
-    -- Backward-compatible: allow omitting runtime for job enqueue. Resolve using
-    -- configured runtime order.
-    local resolved_rt, resolved_ver = routes.resolve_fn_compat_target(name, version)
+    -- Allow omitting runtime for job enqueue. Resolve using configured runtime
+    -- order.
+    local resolved_rt, resolved_ver = routes.resolve_named_target(name, version)
     if not resolved_rt then
       return nil, 404, "unknown function or version"
     end

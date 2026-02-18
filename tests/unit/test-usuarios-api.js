@@ -7,7 +7,7 @@ const handler = require(handlerPath).handler;
 
 async function testUsuariosApi() {
   const event = {
-    path: "/fn/usuarios-api",
+    path: "/usuarios-api",
     method: "GET"
   };
   const context = { requestId: "test-req" };

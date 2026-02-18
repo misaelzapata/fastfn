@@ -299,7 +299,7 @@ local function run_scheduled_invocation(runtime, name, version, schedule, policy
   local request_id = new_request_id()
   local start = now_s()
 
-  local route = "/fn/" .. name
+  local route = "/" .. name
   if version and version ~= "" then
     route = route .. "@" .. version
   end

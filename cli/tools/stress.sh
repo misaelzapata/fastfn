@@ -8,7 +8,7 @@ CONCURRENCY="${CONCURRENCY:-40}"
 echo "== stress: hello (expect 200 and possible 429 if concurrency exceeds policy) =="
 python3 tests/stress/load-runner.py \
   --base-url "$BASE_URL" \
-  --path '/fn/hello?name=stress' \
+  --path '/hello?name=stress' \
   --total "$TOTAL" \
   --concurrency "$CONCURRENCY" \
   --expect 200 429
@@ -16,7 +16,7 @@ python3 tests/stress/load-runner.py \
 echo "== stress: slow (expect 200 and 429 under pressure) =="
 python3 tests/stress/load-runner.py \
   --base-url "$BASE_URL" \
-  --path '/fn/slow?sleep_ms=120' \
+  --path '/slow?sleep_ms=120' \
   --total "$TOTAL" \
   --concurrency "$CONCURRENCY" \
   --expect 200 429

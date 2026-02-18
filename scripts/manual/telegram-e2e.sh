@@ -23,7 +23,7 @@ if [[ -z "$CHAT_ID" ]]; then
 fi
 
 echo "Sending Telegram message via fastfn (telegram-send)..."
-resp="$(curl -sS "${BASE_URL}/fn/telegram-send?chat_id=${CHAT_ID}&text=$(python3 - <<PY
+resp="$(curl -sS "${BASE_URL}/telegram-send?chat_id=${CHAT_ID}&text=$(python3 - <<PY
 import urllib.parse, os
 print(urllib.parse.quote(os.environ.get("TEXT","")))
 PY

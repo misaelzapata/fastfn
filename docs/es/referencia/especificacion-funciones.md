@@ -327,7 +327,6 @@ Ejemplo:
 ```json
 {
   "API_KEY": {"value": "secret-value", "is_secret": true},
-  "PUBLIC_FLAG": {"value": "on", "is_secret": false},
-  "LEGACY_VALUE": "compatible"
+  "PUBLIC_FLAG": {"value": "on", "is_secret": false}
 }
 ```

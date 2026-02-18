@@ -370,7 +370,7 @@ for path, ops in paths.items():
                 assert "in_" not in p, f"invalid in_ key on path {path}"
 
 assert "/blog/{slug}" in paths, "catch-all mapped path not exported"
-assert "/fn/hello" not in paths, "/fn compat path leaked into OpenAPI"
+assert not any(str(p).startswith("/fn/") for p in paths), "OpenAPI exported /fn/* routes"
 
 
 def route_to_openapi_path(route):

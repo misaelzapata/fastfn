@@ -2116,7 +2116,7 @@ function M.resolve_function_policy(runtime, fn_name, version)
   return resolved
 end
 
-function M.resolve_fn_compat_target(fn_name, version)
+function M.resolve_named_target(fn_name, version)
   local catalog = M.discover_functions(false)
   local order = M.get_runtime_order()
 

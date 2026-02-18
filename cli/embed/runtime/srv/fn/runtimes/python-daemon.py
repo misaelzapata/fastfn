@@ -471,31 +471,31 @@ def _resolve_handler_path(name: str, version: Any) -> Path:
     ):
         raise ValueError("invalid function name")
 
-    # New Logic: Direct file check logic
+    # Direct file check logic
     if not version or version == "":
-         # 0. Next.js style: Check for direct file with extension (e.g. functions/hello.py)
-         # This allows /fn/hello to resolve to functions/hello.py automatically
-         direct_file = FUNCTIONS_DIR / (name + ".py")
-         if direct_file.is_file():
-             return direct_file
+        # 0. Next-style: Check for direct file with extension (e.g. functions/hello.py)
+        # This allows /hello to resolve to functions/hello.py automatically.
+        direct_file = FUNCTIONS_DIR / (name + ".py")
+        if direct_file.is_file():
+            return direct_file
 
-         # 1. From root (e.g. handlers/create.py)
-         root_check = FUNCTIONS_DIR / name
-         if root_check.is_file():
-             return root_check
-         
-         # 2. From runtime dir (e.g. python/create.py)
-         runtime_check = RUNTIME_FUNCTIONS_DIR / name
-         if runtime_check.is_file():
-             return runtime_check
+        # 1. From root (e.g. handlers/create.py)
+        root_check = FUNCTIONS_DIR / name
+        if root_check.is_file():
+            return root_check
+
+        # 2. From runtime dir (e.g. python/create.py)
+        runtime_check = RUNTIME_FUNCTIONS_DIR / name
+        if runtime_check.is_file():
+            return runtime_check
 
     base = FUNCTIONS_DIR / name
-    
+
     # Try falling back to RUNTIME_FUNCTIONS_DIR structure
     if not base.exists():
-         runtime_base = RUNTIME_FUNCTIONS_DIR / name
-         if runtime_base.exists():
-             base = runtime_base
+        runtime_base = RUNTIME_FUNCTIONS_DIR / name
+        if runtime_base.exists():
+            base = runtime_base
 
     target_dir = base
     if version is not None and version != "":

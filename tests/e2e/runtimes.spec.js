@@ -3,7 +3,7 @@ const { test, expect, request } = require('@playwright/test');
 test.describe('Multi-Runtime Function Execution', () => {
 
   test('Node.js function responds correctly', async ({ request }) => {
-    const res = await request.get('/fn/node-hello');
+    const res = await request.get('/node-hello');
     expect(res.ok()).toBeTruthy();
     const body = await res.json();
     // The current templates might say "Hello from X" or "FastFN X". Adjusting expectation to pass current state.
@@ -13,7 +13,7 @@ test.describe('Multi-Runtime Function Execution', () => {
   });
 
   test('Python function responds correctly', async ({ request }) => {
-    const res = await request.get('/fn/python-hello');
+    const res = await request.get('/python-hello');
     expect(res.ok()).toBeTruthy();
     const body = await res.json();
     expect(body.message).toMatch(/Hello from Python!|FastFN Python/);
@@ -21,7 +21,7 @@ test.describe('Multi-Runtime Function Execution', () => {
   });
 
   test('PHP function responds correctly', async ({ request }) => {
-    const res = await request.get('/fn/php-hello');
+    const res = await request.get('/php-hello');
     expect(res.ok()).toBeTruthy();
     const body = await res.json();
     expect(body.message).toMatch(/Hello from PHP!|FastFN PHP/);
@@ -29,7 +29,7 @@ test.describe('Multi-Runtime Function Execution', () => {
   });
 
   test('Rust function responds correctly', async ({ request }) => {
-    const res = await request.get('/fn/rust-hello');
+    const res = await request.get('/rust-hello');
     expect(res.ok()).toBeTruthy();
     const body = await res.json();
     expect(body.message).toMatch(/Hello from Rust!|FastFN Rust/);
@@ -38,7 +38,7 @@ test.describe('Multi-Runtime Function Execution', () => {
   });
 
   test('Node.js function with dependencies (uuid)', async ({ request }) => {
-    const res = await request.get('/fn/node-deps');
+    const res = await request.get('/node-deps');
     expect(res.ok()).toBeTruthy();
     const body = await res.json();
     expect(body.uuid).toBeDefined();
@@ -46,7 +46,7 @@ test.describe('Multi-Runtime Function Execution', () => {
   });
   
   test('Python function with dependencies (requests)', async ({ request }) => {
-    const res = await request.get('/fn/python-deps');
+    const res = await request.get('/python-deps');
     expect(res.ok()).toBeTruthy();
     const body = await res.json();
     expect(body.requests_version).toBeDefined();
