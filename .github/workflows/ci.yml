@@ -33,8 +33,24 @@ jobs:
       - name: Install dependencies
         run: cd cli && go mod download
 
-      - name: Run Go Tests
-        run: cd cli && go test -v ./...
+      - name: Run Go Tests (with coverage)
+        run: ./cli/coverage-go.sh
+
+      - name: Upload Go coverage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-cli-coverage
+          path: |
+            coverage/go-cli-coverage.out
+            coverage/go-cli-coverage.txt
+
+      - name: Publish Go coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/go-cli-coverage.out
+          flags: go-cli
+          fail_ci_if_error: false
 
       - name: Build Binary
         run: cd cli && go build -o ../bin/fastfn
