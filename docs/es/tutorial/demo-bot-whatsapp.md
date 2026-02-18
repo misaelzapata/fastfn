@@ -11,19 +11,19 @@ docker compose up -d --build
 ## 2. Probar primero el demo QR
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/qr?text=HolaQR' -o /tmp/qr.svg
+curl -sS 'http://127.0.0.1:8080/qr?text=HolaQR' -o /tmp/qr.svg
 ```
 
 ## 3. Ver intro del demo WhatsApp
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/whatsapp' | jq .
+curl -sS 'http://127.0.0.1:8080/whatsapp' | jq .
 ```
 
 ## 4. Pedir QR (auto-inicia conexion)
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/whatsapp?action=qr' --output /tmp/wa-qr.png
+curl -sS 'http://127.0.0.1:8080/whatsapp?action=qr' --output /tmp/wa-qr.png
 ```
 
 Escanea `/tmp/wa-qr.png` desde WhatsApp:
@@ -34,7 +34,7 @@ Escanea `/tmp/wa-qr.png` desde WhatsApp:
 ## 5. Ver estado de sesion
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/whatsapp?action=status' | jq .
+curl -sS 'http://127.0.0.1:8080/whatsapp?action=status' | jq .
 ```
 
 Debes ver:
@@ -44,23 +44,23 @@ Debes ver:
 ## 6. Enviar mensaje
 
 ```bash
-curl -sS -X POST 'http://127.0.0.1:8080/fn/whatsapp?action=send' \
+curl -sS -X POST 'http://127.0.0.1:8080/whatsapp?action=send' \
   -H 'Content-Type: application/json' \
-  --data '{"to":"15551234567","text":"hola desde fastfn"}' | jq .
+  --data '{"to":"15551234567","text":"hola desde FastFN"}' | jq .
 ```
 
 ## 7. Leer inbox/outbox
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/whatsapp?action=inbox' | jq .
-curl -sS 'http://127.0.0.1:8080/fn/whatsapp?action=outbox' | jq .
+curl -sS 'http://127.0.0.1:8080/whatsapp?action=inbox' | jq .
+curl -sS 'http://127.0.0.1:8080/whatsapp?action=outbox' | jq .
 ```
 
 ## 8. Respuesta AI (opcional)
 
 Configura `fn.env.json` de la funcion:
 
-`srv/fn/functions/node/whatsapp/fn.env.json`
+`<FN_FUNCTIONS_ROOT>/node/whatsapp/fn.env.json`
 
 ```json
 {
@@ -72,14 +72,16 @@ Configura `fn.env.json` de la funcion:
 Luego:
 
 ```bash
-curl -sS -X POST 'http://127.0.0.1:8080/fn/whatsapp?action=chat' \
+curl -sS -X POST 'http://127.0.0.1:8080/whatsapp?action=chat' \
   -H 'Content-Type: application/json' \
   --data '{"to":"15551234567","text":"Responde breve y amable en espanol"}' | jq .
 ```
 
 ### 8.1 Tools y auto-tools en WhatsApp
 
-Agrega env opcional en `srv/fn/functions/node/whatsapp/fn.env.json`:
+Ver también: [Herramientas (Función-a-Función + HTTP Limitado)](../como-hacer/herramientas.md)
+
+Agrega env opcional en `<FN_FUNCTIONS_ROOT>/node/whatsapp/fn.env.json`:
 
 ```json
 {
@@ -94,7 +96,7 @@ Agrega env opcional en `srv/fn/functions/node/whatsapp/fn.env.json`:
 Directivas manuales:
 
 ```bash
-curl -sS -X POST 'http://127.0.0.1:8080/fn/whatsapp?action=chat' \
+curl -sS -X POST 'http://127.0.0.1:8080/whatsapp?action=chat' \
   -H 'Content-Type: application/json' \
   --data '{"text":"Usa [[http:https://api.ipify.org?format=json]] y [[fn:request-inspector?key=wa|GET]]"}' | jq .
 ```
@@ -102,7 +104,7 @@ curl -sS -X POST 'http://127.0.0.1:8080/fn/whatsapp?action=chat' \
 Auto-tools desde texto natural:
 
 ```bash
-curl -sS -X POST 'http://127.0.0.1:8080/fn/whatsapp?action=chat' \
+curl -sS -X POST 'http://127.0.0.1:8080/whatsapp?action=chat' \
   -H 'Content-Type: application/json' \
   --data '{"text":"Como esta el clima hoy y cual es mi IP?"}' | jq .
 ```
@@ -110,5 +112,5 @@ curl -sS -X POST 'http://127.0.0.1:8080/fn/whatsapp?action=chat' \
 ## 9. Resetear sesion
 
 ```bash
-curl -sS -X DELETE 'http://127.0.0.1:8080/fn/whatsapp?action=reset-session' | jq .
+curl -sS -X DELETE 'http://127.0.0.1:8080/whatsapp?action=reset-session' | jq .
 ```

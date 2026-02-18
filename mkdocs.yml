@@ -93,6 +93,7 @@ nav:
       - Operational Recipes: en/how-to/operational-recipes.md
       - Install (Homebrew): en/how-to/homebrew.md
       - Run & Test: en/how-to/run-and-test.md
+      - Tools: en/how-to/tools.md
       - Zero-Config Routing: en/how-to/zero-config-routing.md
       - Authentication: en/how-to/authentication.md
       - Console Access: en/how-to/console-admin-access.md
@@ -104,6 +105,7 @@ nav:
       - Local Hot Reload: en/articles/local-serverless-hot-reload-openapi.md
       - Practical Auth: en/articles/practical-auth-for-functions.md
       - Polyglot APIs (Next-style): en/articles/polyglot-nextstyle-apis.md
+      - Telegram AI Reply (How It Works): en/articles/telegram-ai-reply-how-it-works.md
       - Telegram Loop: en/articles/telegram-loop.md
       - Telegram AI Memory (Cron): en/articles/telegram-ai-memory-cron.md
       - QR Generator (Python/Node): en/tutorial/qr-in-python-node.md
@@ -159,11 +161,13 @@ nav:
       - "Receta: Digest Telegram (Cron)": es/como-hacer/telegram-digest.md
       - "Receta: Bot E2E": es/como-hacer/telegram-e2e.md
       - Ejecutar y Probar: es/como-hacer/ejecutar-y-probar.md
+      - Herramientas (Tools): es/como-hacer/herramientas.md
       - Contribuir: es/como-hacer/contribuir.md
     - Artículos (Avanzado):
       - Hot Reload Local + OpenAPI: es/articulos/serverless-local-hot-reload-openapi.md
       - Autenticación Práctica: es/articulos/auth-practica-para-funciones.md
       - APIs Poliglotas (Next-style): es/articulos/apis-poliglotas-next-style.md
+      - "Telegram AI Reply (Cómo funciona)": es/articulos/telegram-ai-reply-como-funciona.md
       - Telegram Loop: es/articulos/telegram-loop.md
       - Telegram AI Memoria (Cron): es/articulos/telegram-ai-memoria-cron.md
       - WhatsApp Bot: es/tutorial/demo-bot-whatsapp.md

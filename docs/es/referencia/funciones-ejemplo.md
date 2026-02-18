@@ -524,6 +524,29 @@ Tools para WhatsApp (`action=chat`):
 - `WHATSAPP_TOOL_ALLOW_HTTP_HOSTS=api.ipify.org,wttr.in,ipapi.co`
 - `WHATSAPP_TOOL_TIMEOUT_MS=5000`
 
+### `toolbox-bot` (runner seguro de tools)
+
+- Ruta: `/toolbox-bot`
+- Métodos: `GET`, `POST`
+- Objetivo: ejecutar directivas de tools (`[[http:...]]`, `[[fn:...]]`) y devolver plan + resultados como JSON
+- Comportamiento por defecto: `dry_run=true`
+- Código: `examples/functions/node/toolbox-bot/app.js`
+- Doc: [Herramientas](../como-hacer/herramientas.md)
+
+Solo plan (sin llamadas externas):
+
+```bash
+curl -sS \
+"http://127.0.0.1:8080/toolbox-bot?dry_run=true&text=Usa%20[[http:https://api.ipify.org?format=json]]%20y%20[[fn:request-inspector?key=demo|GET]]"
+```
+
+Ejecutar (solo allowlisted):
+
+```bash
+curl -sS \
+"http://127.0.0.1:8080/toolbox-bot?dry_run=false&text=Usa%20[[http:https://api.ipify.org?format=json]]%20y%20[[fn:request-inspector?key=demo|GET]]"
+```
+
 ### Logs (interno)
 
 Tail de logs de OpenResty (requiere API de consola):

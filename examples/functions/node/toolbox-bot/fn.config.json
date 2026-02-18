@@ -1,0 +1,14 @@
+{
+  "invoke": {
+    "summary": "Toolbox bot (safe tool runner for demos)",
+    "methods": ["GET", "POST"],
+    "query": {
+      "text": "Use [[http:https://api.ipify.org?format=json]] and [[fn:request-inspector?key=demo|GET]]",
+      "dry_run": "true",
+      "auto_tools": "true"
+    },
+    "body": "{\"text\":\"my ip and weather in Buenos Aires\",\"dry_run\":true,\"auto_tools\":true}",
+    "content_type": "application/json"
+  }
+}
+

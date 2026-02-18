@@ -11,13 +11,13 @@ Este articulo explica como `telegram-ai-reply` puede ejecutar un loop E2E comple
 
 Queremos mostrar que fastfn puede manejar un flujo multi-paso sin workers externos ni scripts. Todo pasa dentro de:
 
-`/fn/telegram-ai-reply`
+`/telegram-ai-reply`
 
 ## Un solo comando (modo loop)
 
 ```bash
 curl -sS -X POST \
-"http://127.0.0.1:8080/fn/telegram-ai-reply?mode=loop&dry_run=false&chat_id=TU_CHAT_ID&prompt=fastfn%20loop%20demo&wait_secs=120&max_replies=5&force_clear_webhook=true"
+"http://127.0.0.1:8080/telegram-ai-reply?mode=loop&dry_run=false&chat_id=TU_CHAT_ID&prompt=fastfn%20loop%20demo&wait_secs=120&max_replies=5&force_clear_webhook=true"
 ```
 
 Que hace:
@@ -36,7 +36,7 @@ Para forzar un reply unico:
 
 ```bash
 curl -sS -X POST \
-"http://127.0.0.1:8080/fn/telegram-ai-reply?mode=reply&dry_run=false&chat_id=TU_CHAT_ID&text=Hola"
+"http://127.0.0.1:8080/telegram-ai-reply?mode=reply&dry_run=false&chat_id=TU_CHAT_ID&text=Hola"
 ```
 
 ## Parametros
@@ -71,5 +71,5 @@ El endpoint usa:
 
 Se pueden cargar via `fn.env.json` de `telegram-ai-reply` o por variables de entorno del contenedor.
 
-La memoria se guarda localmente en `srv/fn/functions/node/telegram-ai-reply/.memory.json`.
-El estado de offset del loop se guarda en `srv/fn/functions/node/telegram-ai-reply/.loop_state.json`.
+La memoria se guarda localmente en `<FN_FUNCTIONS_ROOT>/node/telegram-ai-reply/.memory.json`.
+El estado de offset del loop se guarda en `<FN_FUNCTIONS_ROOT>/node/telegram-ai-reply/.loop_state.json`.

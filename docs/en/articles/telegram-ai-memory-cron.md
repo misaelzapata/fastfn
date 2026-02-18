@@ -61,7 +61,7 @@ Expected:
 - `node` and `python` runtimes reported as up.
 
 ## Step 2: Configure function secrets and runtime options
-Edit `srv/fn/functions/node/telegram-ai-reply/fn.env.json`:
+Edit `<FN_FUNCTIONS_ROOT>/node/telegram-ai-reply/fn.env.json`:
 
 ```json
 {
@@ -77,7 +77,7 @@ Notes:
 - Function env values are exposed at runtime as `event.env`.
 
 ## Step 3: Enable scheduler loop in function config
-Edit `srv/fn/functions/node/telegram-ai-reply/fn.config.json`:
+Edit `<FN_FUNCTIONS_ROOT>/node/telegram-ai-reply/fn.config.json`:
 
 ```json
 {
@@ -125,7 +125,7 @@ Dry run:
 
 ```bash
 curl -sS -X POST \
-'http://127.0.0.1:8080/fn/telegram-ai-reply?mode=loop&dry_run=true&wait_secs=10'
+  'http://127.0.0.1:8080/telegram-ai-reply?mode=loop&dry_run=true&wait_secs=10'
 ```
 
 Live mode:
@@ -137,7 +137,7 @@ Manual one-shot reply test:
 
 ```bash
 curl -sS -X POST \
-'http://127.0.0.1:8080/fn/telegram-ai-reply?mode=reply&dry_run=false&chat_id=<CHAT_ID>&text=Hello'
+  'http://127.0.0.1:8080/telegram-ai-reply?mode=reply&dry_run=false&chat_id=<CHAT_ID>&text=Hello'
 ```
 
 ## Memory and offset behavior
@@ -147,10 +147,10 @@ Memory settings (query params):
 - `memory_ttl_secs` (default 3600)
 
 Offset persistence:
-- `srv/fn/functions/node/telegram-ai-reply/.loop_state.json`
+- `<FN_FUNCTIONS_ROOT>/node/telegram-ai-reply/.loop_state.json`
 
 Memory file:
-- `srv/fn/functions/node/telegram-ai-reply/.memory.json`
+- `<FN_FUNCTIONS_ROOT>/node/telegram-ai-reply/.memory.json`
 
 This combination is what makes cron mode stable after restarts.
 

@@ -5,13 +5,13 @@ This function sends a periodic digest to your Telegram chat using free sources (
 ## Function
 
 - Function: `telegram-ai-digest`
-- Route: `/fn/telegram-ai-digest`
+- Route: `/telegram-ai-digest`
 - Methods: `GET`, `POST`
-- Schedule: defined in `srv/fn/functions/node/telegram-ai-digest/fn.config.json`
+- Schedule: defined per function in `<FN_FUNCTIONS_ROOT>/node/telegram-ai-digest/fn.config.json`
 
 ## Configure secrets
 
-Edit `srv/fn/functions/node/telegram-ai-digest/fn.env.json`:
+Edit `<FN_FUNCTIONS_ROOT>/node/telegram-ai-digest/fn.env.json`:
 
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
@@ -44,13 +44,13 @@ To disable:
 Dry run:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/telegram-ai-digest?chat_id=1160337817&dry_run=true'
+curl -sS 'http://127.0.0.1:8080/telegram-ai-digest?chat_id=1160337817&dry_run=true'
 ```
 
 Send to your phone:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/telegram-ai-digest?chat_id=1160337817&dry_run=false'
+curl -sS 'http://127.0.0.1:8080/telegram-ai-digest?chat_id=1160337817&dry_run=false'
 ```
 
 Optional query flags:

@@ -56,7 +56,7 @@ Ese es tu `CHAT_ID`.
 
 ```bash
 export CHAT_ID='123456789'
-curl -sS "http://127.0.0.1:8080/fn/telegram-send?chat_id=${CHAT_ID}&text=Hola&dry_run=false"
+curl -sS "http://127.0.0.1:8080/telegram-send?chat_id=${CHAT_ID}&text=Hola&dry_run=false"
 ```
 
 Esperado: el JSON incluye `"sent":true`.
@@ -82,7 +82,7 @@ CHAT_ID='123456789' TEXT='hola desde fastfn' ./scripts/manual/telegram-e2e.sh
 ### Opcion C: script solo-docker (cuando el loopback del host esta bloqueado)
 
 ```bash
-CHAT_ID='123456789' TEXT='hola desde fastfn' ./scripts/manual/telegram-e2e-docker.sh
+CHAT_ID='123456789' TEXT='hola desde FastFN' ./scripts/manual/telegram-e2e-docker.sh
 ```
 
 ## 5) Opcional: AI reply sin configurar webhook
@@ -91,25 +91,27 @@ Podés probar el bot con IA sin configurar un webhook usando modo query:
 
 ```bash
 export CHAT_ID='123456789'
-curl -sS "http://127.0.0.1:8080/fn/telegram-ai-reply?mode=reply&dry_run=false&chat_id=${CHAT_ID}&text=Hola"
+curl -sS "http://127.0.0.1:8080/telegram-ai-reply?mode=reply&dry_run=false&chat_id=${CHAT_ID}&text=Hola"
 ```
 
 Esto llama a OpenAI y luego responde por Telegram (requiere `OPENAI_API_KEY` y `TELEGRAM_BOT_TOKEN`).
 
 ### 5.1 Tools y auto-tools (modo reply)
 
+Ver también: [Herramientas (Función-a-Función + HTTP Limitado)](./herramientas.md)
+
 Tools manuales:
 
 ```bash
 curl -sS \
-"http://127.0.0.1:8080/fn/telegram-ai-reply?mode=reply&dry_run=false&chat_id=${CHAT_ID}&tools=true&text=Usa%20[[http:https://api.ipify.org?format=json]]%20y%20[[fn:request-inspector?key=e2e|GET]]"
+"http://127.0.0.1:8080/telegram-ai-reply?mode=reply&dry_run=false&chat_id=${CHAT_ID}&tools=true&text=Usa%20[[http:https://api.ipify.org?format=json]]%20y%20[[fn:request-inspector?key=e2e|GET]]"
 ```
 
 Auto-tools desde lenguaje natural:
 
 ```bash
 curl -sS \
-"http://127.0.0.1:8080/fn/telegram-ai-reply?mode=reply&dry_run=false&chat_id=${CHAT_ID}&tools=true&auto_tools=true&text=Como%20esta%20el%20clima%20hoy%20y%20cual%20es%20mi%20IP%3F"
+"http://127.0.0.1:8080/telegram-ai-reply?mode=reply&dry_run=false&chat_id=${CHAT_ID}&tools=true&auto_tools=true&text=Como%20esta%20el%20clima%20hoy%20y%20cual%20es%20mi%20IP%3F"
 ```
 
 Env recomendado en `telegram-ai-reply/fn.env.json`:
@@ -126,7 +128,7 @@ Ahora el loop corre 100% dentro del endpoint. Manda un prompt, espera tu respues
 
 ```bash
 curl -sS \
-"http://127.0.0.1:8080/fn/telegram-ai-reply?mode=loop&dry_run=false&chat_id=${CHAT_ID}&prompt=fastfn%20loop%20demo&wait_secs=120&max_replies=5&memory=true&force_clear_webhook=true"
+"http://127.0.0.1:8080/telegram-ai-reply?mode=loop&dry_run=false&chat_id=${CHAT_ID}&prompt=fastfn%20loop%20demo&wait_secs=120&max_replies=5&memory=true&force_clear_webhook=true"
 ```
 
 Para modo scheduler, podés omitir `chat_id` y correr loop como poller multi-chat.
@@ -164,26 +166,26 @@ Después del check E2E, remové secretos del env de la función:
 Este repo incluye una version Python del bot:
 
 - Funcion: `telegram-ai-reply-py`
-- Ruta: `/fn/telegram-ai-reply-py`
+- Ruta: `/telegram-ai-reply-py`
 
 Dry run (seguro):
 
 ```bash
 export CHAT_ID='123456789'
-curl -sS "http://127.0.0.1:8080/fn/telegram-ai-reply-py?mode=reply&dry_run=true&chat_id=${CHAT_ID}&text=Hola%20desde%20python&tools=true&auto_tools=true"
+curl -sS "http://127.0.0.1:8080/telegram-ai-reply-py?mode=reply&dry_run=true&chat_id=${CHAT_ID}&text=Hola%20desde%20python&tools=true&auto_tools=true"
 ```
 
 Envio real:
 
 ```bash
 export CHAT_ID='123456789'
-curl -sS "http://127.0.0.1:8080/fn/telegram-ai-reply-py?mode=reply&dry_run=false&chat_id=${CHAT_ID}&text=Hola%20desde%20python&tools=true&auto_tools=true"
+curl -sS "http://127.0.0.1:8080/telegram-ai-reply-py?mode=reply&dry_run=false&chat_id=${CHAT_ID}&text=Hola%20desde%20python&tools=true&auto_tools=true"
 ```
 
 Loop (dry-run):
 
 ```bash
-curl -sS "http://127.0.0.1:8080/fn/telegram-ai-reply-py?mode=loop&dry_run=true&wait_secs=20"
+curl -sS "http://127.0.0.1:8080/telegram-ai-reply-py?mode=loop&dry_run=true&wait_secs=20"
 ```
 
 Archivos (se crean en runtime):
