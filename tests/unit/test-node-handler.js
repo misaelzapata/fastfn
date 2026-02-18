@@ -89,6 +89,7 @@ async function main() {
   await testEdgeAuthGateway();
   await testGithubWebhookGuard();
   await testEdgeHeaderInject();
+  await testEdgeHeaderInjectDefaults();
   await testTelegramAiReplyDryRun();
   await testTelegramAiReplyQueryModeDryRun();
   await testTelegramAiReplyLoopDryRun();
@@ -902,6 +903,18 @@ async function testEdgeHeaderInject() {
   assert.equal(resp.proxy.path, "/request-inspector");
   assert.equal(resp.proxy.headers["x-tenant"], "acme");
   assert.equal(resp.proxy.timeout_ms, 222);
+}
+
+async function testEdgeHeaderInjectDefaults() {
+  const resp = await edgeHeaderInjectHandler({});
+  assert.equal(typeof resp.proxy, "object");
+  assert.equal(resp.proxy.path, "/request-inspector");
+  assert.equal(resp.proxy.method, "GET");
+  assert.equal(resp.proxy.headers["x-fastfn-edge"], "1");
+  assert.equal(resp.proxy.headers["x-fastfn-request-id"], "");
+  assert.equal(resp.proxy.headers["x-tenant"], "demo");
+  assert.equal(resp.proxy.body, "");
+  assert.equal(resp.proxy.timeout_ms, 2000);
 }
 
 async function testTelegramAiReplyDryRun() {
