@@ -1,23 +1,22 @@
-# Flujo de invocacion y ngx.location.capture
+# Flujo de invocación
 
-## Flujo publico `/fn/...`
+## Flujo público (`/<name>`)
 
-1. request entra al gateway Lua
-2. se resuelve runtime/version por discovery
-3. se validan metodo, body, concurrencia y timeout
-4. se construye `event`
-5. se envia JSON enmarcado al runtime por socket Unix
-6. runtime ejecuta handler
-7. gateway devuelve respuesta HTTP final
+1. La petición entra al gateway Lua.
+2. Se resuelve runtime/versión por discovery.
+3. Se validan método, body, concurrencia y timeout.
+4. Se construye `event`.
+5. Se envía JSON enmarcado al runtime por socket Unix.
+6. El runtime ejecuta el handler.
+7. El gateway devuelve la respuesta HTTP final.
 
 ## Flujo interno `/_fn/invoke`
 
-`/_fn/invoke` usa subrequest interno:
+`/_fn/invoke` no llama runtimes directamente.
 
-- `ngx.location.capture('/fn/...')`
-
-Eso garantiza que use exactamente la misma logica del gateway publico: metodos, limites, errores, y formato de respuesta.
+Construye una request interna y la enruta por la misma capa de routing/política que el tráfico público.
+Eso garantiza consistencia en métodos, límites, errores y formato de respuesta.
 
 ## Context
 
-Si `/_fn/invoke` recibe `context`, lo serializa y lo envia al gateway, que lo expone en `event.context.user` para el handler.
+Si `/_fn/invoke` recibe `context`, lo serializa y lo envía al gateway, que lo expone en `event.context.user` para el handler.

@@ -90,9 +90,10 @@ nav:
         - 9. Shared Code: en/tutorial/from-zero/chapter-09-shared-deps-env.md
       - Build a Complete API: en/tutorial/build-complete-api.md
     - How-To Guides:
+      - Quick Start (Dev): en/how-to/run-and-test.md
+      - Deploy to Production: en/how-to/deploy-to-production.md
       - Operational Recipes: en/how-to/operational-recipes.md
       - Install (Homebrew): en/how-to/homebrew.md
-      - Run & Test: en/how-to/run-and-test.md
       - Tools: en/how-to/tools.md
       - Zero-Config Routing: en/how-to/zero-config-routing.md
       - Authentication: en/how-to/authentication.md
@@ -161,6 +162,7 @@ nav:
       - "Receta: Digest Telegram (Cron)": es/como-hacer/telegram-digest.md
       - "Receta: Bot E2E": es/como-hacer/telegram-e2e.md
       - Ejecutar y Probar: es/como-hacer/ejecutar-y-probar.md
+      - Desplegar a Producción: es/como-hacer/desplegar-a-produccion.md
       - Herramientas (Tools): es/como-hacer/herramientas.md
       - Contribuir: es/como-hacer/contribuir.md
     - Artículos (Avanzado):

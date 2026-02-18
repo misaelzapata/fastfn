@@ -31,7 +31,7 @@ Una función `telegram-ai-reply` que:
 ```text
 Usuario Telegram
   -> Telegram Bot API (getUpdates)
-  -> scheduler de fastfn -> /fn/telegram-ai-reply
+  -> scheduler de FastFN -> /telegram-ai-reply
   -> OpenAI
   -> Telegram Bot API (sendMessage)
   -> Usuario Telegram
@@ -49,7 +49,7 @@ Archivos de estado local usados:
 Opcional recomendado:
 - consola habilitada localmente (`FN_UI_ENABLED=1`, `FN_CONSOLE_LOCAL_ONLY=1`)
 
-## Paso 1: Levantar fastfn
+## Paso 1: Levantar FastFN
 
 ```bash
 docker compose up -d --build

@@ -12,22 +12,21 @@ That is why it keeps OpenResty as the single HTTP edge and uses language runtime
 
 ## Mental model
 
-HTTP client -> OpenResty (`/fn/...`) -> runtime (`python`/`node`/`php`/`rust`) -> handler
+HTTP client -> OpenResty (public routes like `/hello`) -> runtime (`python`/`node`/`php`/`rust`) -> handler
 
 In Docker, everything runs in one `openresty` service, including runtime processes.
 
 ## Filesystem discovery (configurable)
 
-There is no static `routes.json`. Functions are discovered from a filesystem root.
+There is no static `routes.json`. Functions are discovered from a filesystem root (your "functions directory").
 
-The discovery root is configurable via `FN_FUNCTIONS_ROOT`.
+Recommended convention: create a `functions/` directory at the repo root and point FastFN to it.
 
-Resolution order:
+Common ways to set the functions directory:
 
-1. `FN_FUNCTIONS_ROOT`
-2. `/app/srv/fn/functions`
-3. `$PWD/srv/fn/functions`
-4. `/srv/fn/functions`
+- `fastfn dev functions`
+- `fastfn.json` -> `"functions-dir": "functions"`
+- `FN_FUNCTIONS_ROOT=/absolute/path/to/functions`
 
 Runtime list is also configurable:
 
@@ -38,9 +37,9 @@ Socket mapping is configurable:
 - `FN_RUNTIME_SOCKETS` (JSON map runtime -> socket URI)
 - `FN_SOCKET_BASE_DIR` (base dir when map is not provided)
 
-Compatibility route precedence:
+Route collision precedence:
 
-- If the same function name exists in multiple runtimes, `/fn/<name>` resolves to the first runtime in `FN_RUNTIMES`.
+- If the same function name exists in multiple runtimes, `/<name>` resolves to the first runtime in `FN_RUNTIMES`.
 - If `FN_RUNTIMES` is not set, it uses alphabetical order of runtime folders.
 
 ## Per-function policy

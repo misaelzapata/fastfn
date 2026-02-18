@@ -1,6 +1,6 @@
 # Tutorial Desde Cero (Capitulo a Capitulo)
 
-Este track esta pensado para alguien que empieza hoy con `fastfn`.
+Este track esta pensado para alguien que empieza hoy con FastFN (`fastfn` CLI).
 
 Orden recomendado:
 

@@ -1,181 +1,112 @@
-# Tutorial: QR in Python + Node (portable pattern for PHP + Lua)
+# Build a Complete API (End-to-End)
 
-This tutorial builds the same function in two runtimes:
+This tutorial creates a realistic endpoint with:
 
-- `/fn/qr` (Python, SVG response)
-- `/fn/qr@v2` (Node, PNG response)
+- `GET` and `POST`
+- API key auth (header)
+- JSON validation
+- explicit HTTP status codes
+- metadata hints for OpenAPI
 
-The goal is to verify runtime-local dependency installation:
+We will create a Python function named `customer-profile`.
 
-- Python installs to `srv/fn/functions/python/qr/.deps`
-- Node installs to `srv/fn/functions/node/qr/v2/node_modules`
+## 0) Requirements
 
-## 1) Create function folders
+- FastFN running on `http://127.0.0.1:8080`
+- Console API enabled (`FN_CONSOLE_API_ENABLED=1`)
+- Write access enabled (`FN_CONSOLE_WRITE_ENABLED=1`) or admin token
 
-```bash
-mkdir -p srv/fn/functions/python/qr
-mkdir -p srv/fn/functions/node/qr/v2
-```
+Note: `/_fn/*` is the admin/control-plane API.
 
-## 2) Add per-runtime dependency files
-
-Python requirements:
-
-```bash
-cat > srv/fn/functions/python/qr/requirements.txt <<'EOF'
-qrcode>=7.4
-EOF
-```
-
-Node package:
+## 1) Create the function
 
 ```bash
-cat > srv/fn/functions/node/qr/v2/package.json <<'EOF'
-{
-  "name": "fn-node-qr-v2",
-  "version": "1.0.0",
-  "private": true,
-  "dependencies": {
-    "qrcode": "^1.5.4"
-  }
-}
-EOF
+curl -sS 'http://127.0.0.1:8080/_fn/function?runtime=python&name=customer-profile' \
+  -X POST \
+  -H 'Content-Type: application/json' \
+  --data '{"methods":["GET","POST"],"summary":"Customer profile API"}'
 ```
 
-## 3) Add function code
+## 2) Configure policy (methods, limits, OpenAPI examples)
 
-Python `srv/fn/functions/python/qr/app.py`:
-
-```python
-#@requirements qrcode>=7.4
-import io
-import qrcode
-import qrcode.image.svg
-
-def handler(event):
-    query = event.get("query") or {}
-    text = query.get("url") or query.get("text") or "https://fastfn.io"
-
-    qr = qrcode.QRCode(
-        version=1,
-        error_correction=qrcode.constants.ERROR_CORRECT_M,
-        box_size=8,
-        border=2,
-    )
-    qr.add_data(text)
-    qr.make(fit=True)
-
-    img = qr.make_image(image_factory=qrcode.image.svg.SvgImage)
-    buf = io.BytesIO()
-    img.save(buf)
-    svg = buf.getvalue().decode("utf-8")
-
-    return {
-        "status": 200,
-        "headers": {
-            "Content-Type": "image/svg+xml; charset=utf-8",
-            "Cache-Control": "no-store",
-        },
-        "body": svg,
+```bash
+curl -sS 'http://127.0.0.1:8080/_fn/function-config?runtime=python&name=customer-profile' \
+  -X PUT \
+  -H 'Content-Type: application/json' \
+  --data '{
+    "timeout_ms": 1800,
+    "max_concurrency": 8,
+    "max_body_bytes": 262144,
+    "invoke": {
+      "methods": ["GET", "POST"],
+      "summary": "Read or update a customer profile",
+      "query": {"id": "cli_100"},
+      "body": "{\"email\":\"alice@example.com\"}"
     }
+  }'
 ```
 
-Node `srv/fn/functions/node/qr/v2/app.js`:
-
-```javascript
-const QRCode = require('qrcode');
-
-exports.handler = async (event) => {
-  const query = event.query || {};
-  const text = query.url || query.text || 'https://fastfn.io';
-  const widthRaw = Number(query.size || 320);
-  const width = Number.isFinite(widthRaw) ? Math.max(128, Math.min(1024, Math.floor(widthRaw))) : 320;
-
-  const png = await QRCode.toBuffer(text, {
-    type: 'png',
-    width,
-    margin: 2,
-    errorCorrectionLevel: 'M',
-  });
-
-  return {
-    status: 200,
-    headers: {
-      'Content-Type': 'image/png',
-      'Cache-Control': 'no-store',
-    },
-    is_base64: true,
-    body_base64: png.toString('base64'),
-  };
-};
-```
-
-## 4) Add per-function policy
-
-Python `srv/fn/functions/python/qr/fn.config.json`:
-
-```json
-{
-  "timeout_ms": 60000,
-  "max_concurrency": 4,
-  "max_body_bytes": 65536,
-  "invoke": {
-    "methods": ["GET"],
-    "summary": "Python QR generator (SVG)",
-    "query": {"text": "https://github.com/misaelzapata/fastfn"},
-    "body": ""
-  }
-}
-```
-
-Node `srv/fn/functions/node/qr/v2/fn.config.json`:
-
-```json
-{
-  "timeout_ms": 60000,
-  "max_concurrency": 4,
-  "max_body_bytes": 65536,
-  "invoke": {
-    "methods": ["GET"],
-    "summary": "Node QR generator (PNG)",
-    "query": {"text": "https://github.com/misaelzapata/fastfn", "size": 320},
-    "body": ""
-  }
-}
-```
-
-## 5) Validate dependency auto-install and runtime output
-
-If running in Docker:
+## 3) Store a secret in function env
 
 ```bash
-docker compose exec -T openresty sh -lc "rm -rf /app/srv/fn/functions/python/qr/.deps /app/srv/fn/functions/node/qr/v2/node_modules"
+curl -sS 'http://127.0.0.1:8080/_fn/function-env?runtime=python&name=customer-profile' \
+  -X PUT \
+  -H 'Content-Type: application/json' \
+  --data '{"API_SECRET":{"value":"demo-key-123","is_secret":true}}'
 ```
 
-Call both routes:
+## 4) Upload working handler code
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/qr?text=PythonQR' -o /tmp/qr-python.svg
-curl -sS 'http://127.0.0.1:8080/fn/qr@v2?text=NodeQR' -o /tmp/qr-node.png
+curl -sS 'http://127.0.0.1:8080/_fn/function-code?runtime=python&name=customer-profile' \
+  -X PUT \
+  -H 'Content-Type: application/json' \
+  --data '{"code":"import json\\n\\n\\ndef j(status, payload):\\n    return {\\n        \\"status\\": status,\\n        \\"headers\\": {\\"Content-Type\\": \\"application/json\\"},\\n        \\"body\\": json.dumps(payload, separators=(\\",\\", \\":\\")),\\n    }\\n\\n\\ndef main(req):\\n    method = str(req.get(\\"method\\") or \\"GET\\").upper()\\n    query = req.get(\\"query\\") or {}\\n    headers = req.get(\\"headers\\") or {}\\n    env = req.get(\\"env\\") or {}\\n\\n    if headers.get(\\"x-api-key\\") != env.get(\\"API_SECRET\\"):\\n        return j(401, {\\"error\\": \\"unauthorized\\"})\\n\\n    if method == \\"GET\\":\\n        cid = query.get(\\"id\\")\\n        if not cid:\\n            return j(400, {\\"error\\": \\"missing query param id\\"})\\n        return j(200, {\\"id\\": cid, \\"name\\": \\"Alice Example\\", \\"tier\\": \\"gold\\", \\"active\\": True})\\n\\n    if method == \\"POST\\":\\n        raw = req.get(\\"body\\") or \\"{}\\"\\n        try:\\n            payload = json.loads(raw)\\n        except Exception:\\n            return j(400, {\\"error\\": \\"invalid json body\\"})\\n\\n        email = payload.get(\\"email\\") if isinstance(payload, dict) else None\\n        if not email:\\n            return j(422, {\\"error\\": \\"email is required\\"})\\n\\n        return j(200, {\\n            \\"updated\\": True,\\n            \\"email\\": email,\\n            \\"fields\\": sorted(list(payload.keys())) if isinstance(payload, dict) else [],\\n        })\\n\\n    return j(405, {\\"error\\": \\"method not allowed\\"})\\n"}'
 ```
 
-Validate payload types:
+## 5) Validate behavior
+
+### Unauthorized (missing key)
 
 ```bash
-file /tmp/qr-python.svg
-file /tmp/qr-node.png
+curl -i -sS 'http://127.0.0.1:8080/customer-profile?id=cli_100'
 ```
 
-Validate runtime-local dependency directories:
+Expected: `401`.
+
+### Valid GET
 
 ```bash
-docker compose exec -T openresty sh -lc "test -d /app/srv/fn/functions/python/qr/.deps/qrcode && echo python-ok"
-docker compose exec -T openresty sh -lc "test -d /app/srv/fn/functions/node/qr/v2/node_modules/qrcode && echo node-ok"
+curl -i -sS 'http://127.0.0.1:8080/customer-profile?id=cli_100' \
+  -H 'x-api-key: demo-key-123'
 ```
 
-## 6) What this proves
+Expected: `200` + JSON profile.
 
-- Discovery also supports the `/fn/<name>` compatibility route style (with optional `@version`).
-- Python and Node can implement the same endpoint independently, and the same contract pattern extends to PHP and Lua handlers.
-- Each runtime installs dependencies inside its own function directory.
-- Both binary content types are served correctly through the same gateway.
+### Invalid POST (missing email)
+
+```bash
+curl -i -sS -X POST 'http://127.0.0.1:8080/customer-profile' \
+  -H 'x-api-key: demo-key-123' \
+  -H 'Content-Type: application/json' \
+  --data '{}'
+```
+
+Expected: `422`.
+
+### Valid POST
+
+```bash
+curl -i -sS -X POST 'http://127.0.0.1:8080/customer-profile' \
+  -H 'x-api-key: demo-key-123' \
+  -H 'Content-Type: application/json' \
+  --data '{"email":"alice@example.com","tier":"gold"}'
+```
+
+Expected: `200` + updated payload summary.
+
+## 6) Check OpenAPI / Swagger
+
+- `GET /openapi.json` should include `/customer-profile`
+- `GET /docs` should show request examples (query + body)
+

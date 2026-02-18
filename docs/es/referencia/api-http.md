@@ -13,20 +13,51 @@ Referencia formal de endpoints publicos e internos.
 
 ## Endpoints publicos
 
-### `GET|POST|PUT|PATCH|DELETE /fn/<name>`
+FastFN sirve funciones en rutas normales como `/hello` y `/users/123`.
 
-Invoca version default de una funcion.
+Estas rutas son las que ves en:
 
-### `GET|POST|PUT|PATCH|DELETE /fn/<name>@<version>`
+- `GET /openapi.json`
+- `GET /docs` (Swagger UI)
 
-Invoca version explicita.
+### `GET|POST|PUT|PATCH|DELETE /<ruta>`
 
-Regla clave:
+Invoca la funcion mapeada detras de esa ruta.
+
+Las rutas se generan desde:
+
+- file routes (estilo Next.js),
+- `fn.routes.json`,
+- o `fn.config.json -> invoke.routes`.
+
+### Ejemplo GET
+
+```bash
+curl -sS 'http://127.0.0.1:8080/hello?name=World'
+```
+
+### Ejemplo POST
+
+```bash
+curl -sS -X POST 'http://127.0.0.1:8080/risk-score?email=user@example.com' \
+  -H 'Content-Type: application/json' \
+  -d '{"source":"web"}'
+```
+
+## Versionado (opcional)
+
+FastFN soporta versiones lado-a-lado dentro de la carpeta de una función (por ejemplo `v2/`).
+
+### `GET|POST|PUT|PATCH|DELETE /<name>@<version>`
+
+Invoca una versión específica por nombre.
+
+Regla clave (aplica a todas):
 
 - Los metodos permitidos salen de `fn.config.json -> invoke.methods`.
 - Si el metodo no esta permitido: `405` + header `Allow`.
 
-### `GET|POST|PUT|PATCH|DELETE /<ruta-personalizada>`
+### Rutas custom via `invoke.routes`
 
 Endpoints mapeados opcionales por funcion desde `fn.config.json`:
 
@@ -40,20 +71,6 @@ Endpoints mapeados opcionales por funcion desde `fn.config.json`:
 ```
 
 Despues de recargar/discovery, llamar `/api/node-echo` invoca esa funcion.
-
-### Ejemplo GET
-
-```bash
-curl -sS 'http://127.0.0.1:8080/fn/hello?name=World'
-```
-
-### Ejemplo POST
-
-```bash
-curl -sS -X POST 'http://127.0.0.1:8080/fn/risk-score?email=user@example.com' \
-  -H 'Content-Type: application/json' \
-  -d '{"source":"web"}'
-```
 
 ## Endpoints internos de plataforma (`/_fn/*`)
 

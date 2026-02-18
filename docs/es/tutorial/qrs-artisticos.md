@@ -1,18 +1,42 @@
-# Tutorial: QRs artisticos (opcional)
+# Tutorial: Variantes de QR con estilo (opcional)
 
-Esta pagina extiende `/fn/qr` con opciones de estilo (PNG) en Python.
+Esta página agrega una variante PNG del generador de QR (con opciones de estilo).
 
-Nota: es opcional y no forma parte del quickstart.
+Nota: este tutorial es opcional y no forma parte del camino de inicio rápido.
 
-## Dependencia opcional
+Prerequisito: completa primero el tutorial base:
 
-Si queres estilos con PIL:
+- [`QR en Python + Node (aislamiento de dependencias)`](./qr-python-node.md)
+
+## 1) Crear una nueva versión (Python)
+
+Vamos a crear una versión `v3` para que `/qr@v3` sea un endpoint separado.
+
+```bash
+mkdir -p functions/python/qr/v3
+```
+
+## 2) Dependencia opcional (estilos con PIL)
+
+Si quieres estilos con PIL:
 
 ```text
 qrcode[pil]>=7.4
 ```
 
-## Handler (PNG base64)
+Guárdalo en `functions/python/qr/v3/requirements.txt`:
+
+```bash
+cat > functions/python/qr/v3/requirements.txt <<'EOF'
+qrcode[pil]>=7.4
+EOF
+```
+
+## 3) Handler (PNG base64)
+
+Al devolver PNG desde un handler, usa payload base64 (`is_base64=true`).
+
+Crea `functions/python/qr/v3/app.py`:
 
 ```python
 import base64
@@ -24,7 +48,7 @@ from qrcode.image.styles.moduledrawers import RoundedModuleDrawer, CircleModuleD
 
 def handler(event):
     query = event.get("query") or {}
-    text = query.get("url") or query.get("text") or "https://fastfn.io"
+    text = query.get("url") or query.get("text") or "https://example.com"
     fill_color = query.get("fill", "black")
     back_color = query.get("back", "white")
     style = query.get("style", "square")
@@ -63,10 +87,34 @@ def handler(event):
     }
 ```
 
-## Ejemplos
+## 4) Política de función (opcional, recomendado)
 
-```text
-/fn/qr?url=https://example.com&style=round&fill=magenta
-/fn/qr?url=https://example.com&style=circle&fill=green&back=black
+Crea `functions/python/qr/v3/fn.config.json`:
+
+```json
+{
+  "timeout_ms": 60000,
+  "max_concurrency": 4,
+  "max_body_bytes": 65536,
+  "invoke": {
+    "methods": ["GET"],
+    "summary": "Generador QR (PNG, estilizado)",
+    "query": {"text": "https://example.com", "style": "round", "fill": "magenta"},
+    "body": ""
+  }
+}
 ```
 
+## 5) Ejemplos
+
+```text
+/qr@v3?url=https://example.com&style=round&fill=magenta
+/qr@v3?url=https://example.com&style=circle&fill=green&back=black
+```
+
+También puedes guardar el PNG:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/qr@v3?text=Hola' -o /tmp/qr-v3.png
+file /tmp/qr-v3.png
+```

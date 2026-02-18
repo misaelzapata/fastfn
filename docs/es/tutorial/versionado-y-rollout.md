@@ -1,110 +1,57 @@
-# Versionado y Rollout <small>🚀</small>
+# Versionado y Rollout
 
-En producción, a menudo necesitas actualizar una API sin romper a los clientes existentes. `fastfn` tiene soporte incorporado para **Versionado de Funciones**.
+FastFN soporta versiones lado-a-lado (por ejemplo `v2`) para poder publicar cambios sin romper a los clientes existentes.
 
----
+## 1) Estructura de carpetas (runtime split)
 
-## 🎯 La Estrategia
+El versionado se representa con una subcarpeta dentro de la funcion:
 
-Usaremos una estrategia de despliegue "Lado-a-Lado" (Side-by-Side):
-1.  **V1 (Actual)**: La versión de producción actual.
-2.  **V2 (Beta)**: Una nueva versión con cambios, accesible vía una etiqueta específica.
-
----
-
-## 1. La Versión por Defecto (V1)
-
-Supongamos que tienes una función `hello` en `functions/python/hello/app.py`.
-
-```python
-# functions/python/hello/app.py
-def handler(context):
-    return {"message": "Hola desde V1"}
-```
-
-Llájala:
-```bash
-curl 'http://127.0.0.1:8080/fn/hello'
-```
-**Salida:** `{"message": "Hola desde V1"}`
-
----
-
-## 2. Desplegar Versión 2 (V2) 🆕
-
-Para crear una nueva versión, simplemente crea una subcarpeta con el nombre de la versión.
-
-**Estructura:**
 ```text
 functions/
-└── python/
-    └── hello/
-        ├── app.py       <-- Por defecto (V1)
-        └── v2/          <-- Nueva Versión
-            └── app.py
+  python/
+    hello/
+      app.py      # version default
+      v2/
+        app.py    # version v2
 ```
 
-Creemos el código de V2:
+## 2) Ejemplo de codigo
 
-**Archivo:** `functions/python/hello/v2/app.py`
+Default (`functions/python/hello/app.py`):
+
 ```python
-def handler(context):
-    # V2 retorna una estructura diferente
-    return {
-        "status": "success",
-        "data": {
-            "greeting": "Hola desde V2 [BETA]"
-        }
-    }
+def main(req):
+    name = (req.get("query") or {}).get("name", "World")
+    return {"message": f"Hola desde V1, {name}"}
 ```
 
----
+Version `v2` (`functions/python/hello/v2/app.py`):
 
-## 3. Acceder a Versiones Específicas 🏷️
+```python
+def main(req):
+    name = (req.get("query") or {}).get("name", "World")
+    return {"status": "success", "data": {"greeting": f"Hola desde V2, {name}"}}
+```
 
-`fastfn` usa la sintaxis `@` en la URL.
+## 3) Llamar default vs version
 
-### Llamar a V2 Explícitamente
+Default (si existe `app.py` en la raiz):
+
 ```bash
-curl 'http://127.0.0.1:8080/fn/hello@v2'
+curl -sS 'http://127.0.0.1:8080/hello?name=World'
 ```
 
-**Respuesta:**
-```json
-{
-  "status": "success",
-  "data": {
-    "greeting": "Hola desde V2 [BETA]"
-  }
-}
-```
+Version:
 
-### Llamar a la V1
-La URL original sigue apuntando correctamente a `app.py` en la raíz.
 ```bash
-curl 'http://127.0.0.1:8080/fn/hello'
+curl -sS 'http://127.0.0.1:8080/hello@v2?name=World'
 ```
 
-**Respuesta:**
-```json
-{
-  "message": "Hola desde V1"
-}
-```
+## 4) Patron de rollout
 
----
+1. Publica la carpeta `v2/`.
+2. Prueba con `GET /hello@v2`.
+3. Migra clientes gradualmente.
+4. Elimina la version vieja cuando el trafico llegue a cero.
 
-## 4. Estrategia de Rollout 🔀
-
-Este mecanismo permite una migración suave:
-
-1.  **Desplegar V2**: Crea la carpeta `v2`. Ahora está viva en `@v2` pero nadie la usa aún.
-2.  **Pruebas Internas**: Tu equipo de QA verifica `.../hello@v2`.
-3.  **Migración de Clientes**: Actualiza tu frontend/app móvil para apuntar a `@v2`.
-4.  **Deprecación**: Una vez que el tráfico de V1 cae a cero, puedes eliminar `functions/python/hello/app.py`.
-
-!!! tip "Estructura de URL"
-    El patrón siempre es `/fn/<nombre_funcion>@<version>`.
-    Las versiones pueden tener cualquier nombre alfanumérico: `v2`, `beta`, `rc1`, `2023-10`.
-
-[Siguiente: Autenticación y Secretos :arrow_right:](./auth-y-secretos.md){ .md-button .md-button--primary }
+[Siguiente: Auth y Secretos](./auth-y-secretos.md){ .md-button .md-button--primary }

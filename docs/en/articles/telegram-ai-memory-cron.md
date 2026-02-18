@@ -32,7 +32,7 @@ A `telegram-ai-reply` function that:
 ```text
 Telegram user
   -> Telegram Bot API (getUpdates)
-  -> fastfn scheduler -> /fn/telegram-ai-reply
+  -> FastFN scheduler -> /telegram-ai-reply
   -> OpenAI
   -> Telegram Bot API (sendMessage)
   -> Telegram user
@@ -50,7 +50,7 @@ Local state files used by the function:
 Optional but recommended:
 - console enabled only locally (`FN_UI_ENABLED=1`, `FN_CONSOLE_LOCAL_ONLY=1`)
 
-## Step 1: Start fastfn
+## Step 1: Start FastFN
 
 ```bash
 docker compose up -d --build

@@ -170,7 +170,7 @@ Seguridad (allowlists):
 
 Importante: tools no es “internet libre”. El codigo valida allowlists.
 
-Si queres testear directivas de tools **sin** Telegram/OpenAI, usa el demo:
+Si quieres probar directivas de tools **sin** Telegram/OpenAI, usa el demo:
 
 - `GET /toolbox-bot` (plan + resultados como JSON)
 
@@ -229,12 +229,12 @@ Comportamiento:
 
 ## 11) Nota de seguridad (si lo expones a internet)
 
-- Mantené `dry_run=true` hasta estar listo.
-- `/_fn/*` es control-plane. En prod, restringilo (o deshabilita la consola).
+- Mantén `dry_run=true` hasta estar listo.
+- `/_fn/*` es control-plane. En prod, restríngelo (o deshabilita la consola).
 - Si expones `telegram-ai-reply` como webhook:
   - agrega verificacion (por ejemplo un header secreto compartido)
   - mantené allowlists de tools bien estrictas
-  - ajusta timeouts (en `fn.config.json` podes subir `timeout_ms` para esta funcion)
+  - ajusta timeouts (en `fn.config.json` puedes subir `timeout_ms` para esta función)
 
 Relacionado:
 

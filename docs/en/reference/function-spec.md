@@ -5,7 +5,7 @@
 The easiest way to conform to this spec is using the CLI:
 
 ```bash
-fastfn init <name> --template <runtime>
+fastfn init <name> -t <runtime>
 ```
 
 This generates the correct folder structure and configuration file.
@@ -17,10 +17,6 @@ This generates the correct folder structure and configuration file.
 - Public routes (default):
   - `/<name>`
   - `/<name>@<version>`
-- Optional compatibility alias:
-  - `/fn/<name>`
-  - `/fn/<name>@<version>`
-  - Hidden from OpenAPI by default (set `FN_OPENAPI_INCLUDE_FN_PATHS=1` to include them).
 
 ## Runtime support status
 
@@ -36,53 +32,68 @@ Experimental (opt-in via `FN_RUNTIMES`):
 - `rust`
 - `go`
 
-## Configurable function root
+## Functions root (`FN_FUNCTIONS_ROOT`)
 
-Function discovery is filesystem-based and the root is configurable.
+FastFN discovers functions by scanning a directory tree on disk. That directory is called `FN_FUNCTIONS_ROOT`.
 
-Resolution order:
+Common setup:
 
-1. `FN_FUNCTIONS_ROOT` (if set)
-2. `/app/srv/fn/functions` (container default)
-3. `$PWD/srv/fn/functions` (local dev default)
-4. `/srv/fn/functions`
+1. Create a `functions/` directory in your repo.
+2. Run `fastfn dev functions` (or set `"functions-dir": "functions"` in `fastfn.json`).
 
-## Source filenames
+In portable (Docker) mode, FastFN mounts your functions directory into the container.
+That internal container path is not part of the public API surface and is usually not needed.
 
-The runtime looks for a valid entrypoint file in the following order:
+## Recommended layout (file routes)
 
-1. Explicit `entrypoint` in `fn.config.json` (e.g. `src/my_handler.py`).
-2. `app.{py,js,ts,php,lua,rs,go}`
-3. `handler.{py,js,ts,php,lua,rs,go}`
-4. `main.{py,js,ts,php,lua,rs,go}`
-5. `index.{py,js,ts,php,lua}`
+Inside `FN_FUNCTIONS_ROOT`, routes come from paths and filenames (Next.js-style).
 
-## Directory layout (relative to `FN_FUNCTIONS_ROOT`)
+Recommended:
 
 ```text
-<FN_FUNCTIONS_ROOT>/
-  python/<name>[/<version>]/main.py
-  node/<name>[/<version>]/index.ts
-  php/<name>[/<version>]/handler.php
-  lua/<name>[/<version>]/handler.lua
-  rust/<name>[/<version>]/src/main.rs
-  go/<name>[/<version>]/app.go
+hello/
+  get.py          # GET /hello
+users/
+  get.js          # GET /users
+  [id]/
+    get.py        # GET /users/:id
+    delete.py     # DELETE /users/:id
 ```
 
-Optional files by function/version:
+Filenames supported:
 
-- `fn.config.json`
-- `fn.env.json`
-- `requirements.txt` (Python)
-- `package.json` (Node)
-- `composer.json` (PHP)
-- `cjson.safe` available in Lua runtime sandbox
-- `Cargo.toml` (Rust)
-- `go.mod`, `go.sum` (Go, optional)
+- Method-only: `get.py`, `post.js` (maps to the directory root).
+- Method + tokens: `get.items.py`, `post.users.[id].js`.
+- `index.*`, `handler.*`, `app.*`, `main.*` are treated as "directory root" files (default method: `GET`).
 
-## Minimal handler examples
+Reserved route prefixes are blocked: `/_fn`, `/console`.
 
-All handlers consume `event` and return `{status, headers, body}`.
+## Advanced layout (runtime split)
+
+For large monorepos, you can also group by runtime:
+
+```text
+node/hello/handler.js
+python/risk-score/main.py
+php/export-report/handler.php
+lua/quick-hook/handler.lua
+```
+
+When `fn.config.json` declares a function identity (for example by setting `runtime`, `name`, or `entrypoint`), that directory is treated as a single function.
+
+## Entry files and handler functions
+
+The runtime resolves the handler file in the following order:
+
+1. Explicit `entrypoint` in `fn.config.json` (e.g. `src/my_handler.py`).
+2. File routes (Next.js-style): `<method>.<tokens>.<ext>` or method-only `<method>.<ext>` (for example `get.py`, `post.users.[id].js`).
+3. Default entry files: `app.*`, `handler.*`, `main.*`, `index.*` (runtime-specific).
+
+Handler function name:
+
+- Default: `handler(event)`
+- Override: `fn.config.json` -> `invoke.handler`
+- Python convenience: if `handler` is missing, `main(req)` is accepted.
 
 ### Python
 
@@ -95,6 +106,13 @@ def handler(event):
         "body": json.dumps({"hello": "world"}),
     }
 ```
+
+#### Optional: Python Extras (validation)
+
+This repository includes a small optional helper at `sdk/python/fastfn/extras.py`:
+
+- `json_response(body, status=200, headers=None)`
+- `validate(Model, data)` (requires `pydantic`)
 
 ### Node
 
@@ -138,6 +156,60 @@ function handler(event)
 end
 ```
 
+## Dependency management (auto-install)
+
+FastFN installs dependencies **per function directory** by default.
+
+Resolution rules:
+
+- A dependency file applies to the handler file in the **same directory** (and anything that handler imports).
+- FastFN does **not** automatically search your repo root for `requirements.txt` / `package.json`.
+- For shared dependencies across many functions, use **packs** (`shared_deps`) instead of a repo-root dependency file.
+
+### Python
+
+Supported:
+
+- `requirements.txt` next to your handler file.
+- Inline `#@requirements ...` hints at the top of the handler file.
+
+Toggles:
+
+- `FN_AUTO_REQUIREMENTS=0` disables auto-install.
+- `FN_PREINSTALL_PY_DEPS_ON_START=1` installs requirements for discovered handlers at runtime start.
+
+### Node.js
+
+Supported:
+
+- `package.json` next to your handler file.
+- If `package-lock.json` is present, FastFN prefers `npm ci` for reproducible installs.
+
+Toggles:
+
+- `FN_AUTO_NODE_DEPS=0` disables auto-install.
+- `FN_PREINSTALL_NODE_DEPS_ON_START=1` installs deps for discovered handlers at runtime start.
+- `FN_PREINSTALL_NODE_DEPS_CONCURRENCY=4` controls preinstall concurrency.
+
+### Shared dependency packs (`shared_deps`)
+
+Packs live under your functions root:
+
+```text
+<FN_FUNCTIONS_ROOT>/.fastfn/packs/python/<pack>/requirements.txt
+<FN_FUNCTIONS_ROOT>/.fastfn/packs/node/<pack>/package.json
+```
+
+Then reference them from `fn.config.json`:
+
+```json
+{ "shared_deps": ["<pack>"] }
+```
+
+### Cold starts
+
+The first request after adding or changing dependencies may be slower because the runtime installs packages before executing your handler.
+
 ## Function config (`fn.config.json`)
 
 Main fields:
@@ -155,6 +227,7 @@ Main fields:
 
 Notes:
 - By default, FastFN does not silently override an existing URL mapping.
+- In file-routes layout, a `fn.config.json` that does not declare a function identity (`runtime`/`name`/`entrypoint`) is treated as a **policy overlay** for all file routes under that folder (and nested folders). This is the recommended way to set `timeout_ms`, `max_concurrency`, `invoke.allow_hosts`, etc.
 - Use `invoke.force-url: true` only when you intentionally want this function to take a route from another function (for example during a migration).
 - Version-scoped configs (for example `node/my-fn/v2/fn.config.json`) never take over an existing URL by themselves; use `FN_FORCE_URL=1` if you need a version route to win.
 - Global override: set `FN_FORCE_URL=1` (or `fastfn dev --force-url`) to treat all config/policy routes as forced.

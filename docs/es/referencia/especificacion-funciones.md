@@ -1,16 +1,12 @@
-# Especificacion de funciones
+# Especificación de funciones
 
 ## Nombres y rutas
 
 - nombre: `^[a-zA-Z0-9_-]+$`
-- version: `^[a-zA-Z0-9_.-]+$`
-- rutas publicas (default):
+- versión: `^[a-zA-Z0-9_.-]+$`
+- rutas públicas (por defecto):
   - `/<name>`
   - `/<name>@<version>`
-- alias de compatibilidad (opcional):
-  - `/fn/<name>`
-  - `/fn/<name>@<version>`
-  - No aparece en OpenAPI por defecto (usa `FN_OPENAPI_INCLUDE_FN_PATHS=1` si queres incluirlo).
 
 ## Estado de runtimes
 
@@ -19,29 +15,32 @@ Implementados y ejecutables hoy:
 - `python`
 - `node`
 - `php`
+- `lua` (in-process)
+
+Experimentales (opt-in via `FN_RUNTIMES`):
+
 - `rust`
+- `go`
 
 ## Root de funciones configurable
 
-El discovery es por filesystem y el root se puede configurar.
+FastFN descubre funciones escaneando un directorio del filesystem.
 
-Orden de resolucion:
+Setup común (recomendado):
 
-1. `FN_FUNCTIONS_ROOT` (si existe)
-2. `/app/srv/fn/functions` (default contenedor)
-3. `$PWD/srv/fn/functions` (default local)
-4. `/srv/fn/functions`
+1. Crear `functions/` en tu repo.
+2. Correr `fastfn dev functions` (o setear `"functions-dir": "functions"` en `fastfn.json`).
 
-Tambien puedes controlar discovery con:
+También puedes controlar discovery con:
 
 - `FN_RUNTIMES` (CSV, ejemplo `python,node,php,rust`)
 - `FN_RUNTIME_SOCKETS` (JSON runtime -> socket URI)
-- `FN_SOCKET_BASE_DIR` (base de sockets si no hay mapa explicito)
+- `FN_SOCKET_BASE_DIR` (base de sockets si no hay mapa explícito)
 
-Precedencia de runtime para rutas de compatibilidad:
+Precedencia de runtime (cuando hay colisiones):
 
-- Si el mismo nombre existe en varios runtimes, `/fn/<name>` usa el primer runtime en `FN_RUNTIMES`.
-- Si `FN_RUNTIMES` no esta definido, usa orden alfabetico de carpetas runtime.
+- Si el mismo nombre existe en varios runtimes, `/<name>` usa el primer runtime en `FN_RUNTIMES`.
+- Si `FN_RUNTIMES` no está definido, usa orden alfabético de carpetas runtime.
 
 ## Archivos de codigo
 
@@ -184,19 +183,19 @@ Ejemplo:
 Notas:
 
 - `invoke.handler` permite estilo Lambda con nombre de handler custom (`main`, `run`, etc.).
-- En runtimes Node y Python, esa funcion debe existir/exportarse en el mismo archivo.
+- En runtimes Node y Python, esa función debe existir/exportarse en el mismo archivo.
 - `invoke.routes` es opcional.
 - Si existe, cada ruta debe ser absoluta (por ejemplo `/api/mi-funcion`).
-- Prefijos reservados no permitidos (`/fn`, `/_fn`, `/console`, `/docs`).
+- Prefijos reservados no permitidos (`/_fn`, `/console`, `/docs`).
 - Conflictos de rutas devuelven `409`.
 - Por defecto, FastFN no sobrescribe silenciosamente un mapeo de URL existente.
-- Usa `invoke.force-url: true` solo cuando realmente queres que esta funcion se quede con una ruta (por ejemplo, durante una migracion).
-- Los configs por version (por ejemplo `node/mi-fn/v2/fn.config.json`) no pueden "tomar" una URL existente por si solos; usa `FN_FORCE_URL=1` si necesitas que una ruta versionada gane.
+- Usa `invoke.force-url: true` solo cuando realmente quieres que esta función se quede con una ruta (por ejemplo, durante una migración).
+- Los configs por versión (por ejemplo `node/mi-fn/v2/fn.config.json`) no pueden "tomar" una URL existente por sí solos; usa `FN_FORCE_URL=1` si necesitas que una ruta versionada gane.
 - Override global: setea `FN_FORCE_URL=1` (o `fastfn dev --force-url`) para tratar todas las rutas config/policy como forced.
 
 ## Config edge passthrough (`edge`)
 
-Si queres un comportamiento estilo Cloudflare Workers (el handler devuelve un `proxy` y el gateway hace el request saliente), habilitalo por funcion en `fn.config.json`:
+Si quieres un comportamiento estilo Cloudflare Workers (el handler devuelve un `proxy` y el gateway hace el request saliente), habilítalo por función en `fn.config.json`:
 
 ```json
 {
@@ -209,11 +208,11 @@ Si queres un comportamiento estilo Cloudflare Workers (el handler devuelve un `p
 }
 ```
 
-Despues el handler puede devolver `{ "proxy": { ... } }`. Ver el contrato completo en: **Contrato Runtime**.
+Después el handler puede devolver `{ "proxy": { ... } }`. Ver el contrato completo en: **Contrato Runtime**.
 
 ## Packs de dependencias compartidas (`shared_deps`)
 
-Si queres que varias funciones reutilicen la misma instalacion de dependencias (por ejemplo: un `node_modules` compartido para Node, o una carpeta de pip compartida para Python), podes usar packs compartidos.
+Si quieres que varias funciones reutilicen la misma instalación de dependencias (por ejemplo: un `node_modules` compartido para Node, o una carpeta de pip compartida para Python), puedes usar packs compartidos.
 
 En `fn.config.json`:
 

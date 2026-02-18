@@ -49,7 +49,7 @@ En `tests/fixtures/polyglot-demo`, este patron mezcla handlers Node/Python/PHP/R
 
 Un problema tipico poliglota es tener documentacion separada por stack.
 
-FastFN genera un solo OpenAPI desde el gateway usando las rutas descubiertas, asi los consumidores ven una API unica aunque los handlers esten en runtimes distintos.
+FastFN genera un solo OpenAPI desde el gateway usando las rutas descubiertas, así los consumidores ven una API única aunque los handlers estén en runtimes distintos.
 
 Operativamente ayuda a:
 

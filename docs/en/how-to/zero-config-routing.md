@@ -42,7 +42,7 @@ Conventions:
 - Optional method prefix in filename: `get.`, `post.`, `put.`, `patch.`, `delete.`.
 - Ignored files: `_*.ext`, `*.test.*`, `*.spec.*`.
 - Optional catch-all `[[...opt]]` maps both `/base` and `/base/:opt*`.
-- Reserved prefixes are blocked (`/_fn`, `/console`, `/fn`).
+- Reserved prefixes are blocked (`/_fn`, `/console`).
 - `/docs` is available for user routes.
 
 ## 3. Precedence (Important)
@@ -158,5 +158,4 @@ Quick expectations:
 
 - Internal endpoints exist under `/_fn/*` (for example `/_fn/invoke`, `/_fn/catalog`).
 - Public routes exist as mapped OpenAPI paths (`/users`, `/users/{id}`, `/blog/{slug}`, `/php/profile/{id}`, `/rust/health`).
-- No `/fn/*` compatibility paths are emitted by default.
 - No `unknown/unknown` operation summaries are emitted.

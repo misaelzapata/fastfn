@@ -1,22 +1,59 @@
-# Chapter 9 - Shared Dependencies and Shared Config Patterns
+# Chapter 9 - Shared Code & Dependencies
 
-Goal: reduce duplication across many functions.
+**Goal**: Share common logic (database connections, auth helpers) across multiple functions.
 
-## Shared dependency pack
+You can keep shared code under `functions/.shared/` and import it from your handlers.
 
-In function config:
+Using a dot-folder keeps it out of the public routing tree.
 
-```json
-{
-  "shared_deps": ["qrcode_pack"]
-}
+## 1. Creating Shared Logic
+
+Create `functions/.shared/db.js`:
+
+```js
+// This file is available to all Node functions!
+const connect = () => {
+    return { status: "connected" };
+};
+
+module.exports = { connect };
 ```
 
-Pack location:
+## 2. Using Shared Code
 
-`<FN_FUNCTIONS_ROOT>/.fastfn/packs/node/qrcode_pack/package.json`
+Create `functions/users/get.js`:
 
-This allows several functions to reuse the same install.
+```js
+const db = require("../.shared/db");
+
+exports.handler = async () => {
+  const conn = db.connect();
+  return {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: "Users list", db_status: conn.status }),
+  };
+};
+```
+
+## 3. Shared Dependencies (Packs)
+
+If multiple functions use the same dependencies (for example `dayjs`, `pandas`), define a shared pack and reference it from `fn.config.json`.
+
+Packs live under:
+
+```text
+functions/.fastfn/packs/node/<pack>/package.json
+functions/.fastfn/packs/python/<pack>/requirements.txt
+```
+
+Then reference it from any function directory:
+
+`functions/users/fn.config.json`
+
+```json
+{ "shared_deps": ["<pack>"] }
+```
 
 ## Shared env strategy (simple and practical)
 
@@ -29,3 +66,9 @@ Recommended approach:
 3. merge script outputs final `fn.env.json`
 
 This keeps runtime simple while avoiding duplicated manual edits.
+
+## One important rule
+
+Keep shared code in a dot-folder like `functions/.shared/`.
+
+FastFN ignores dot-folders for routing, which prevents accidental public endpoints like `/.shared/*`.

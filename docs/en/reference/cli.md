@@ -16,29 +16,29 @@ export PATH=$PWD/bin:$PATH
 
 ### `init`
 
-Creates a new function project structure.
+Create a new function scaffold.
 
 **Usage:**
 ```bash
-fastfn init <function-name> --template <runtime>
+fastfn init <name> -t <runtime>
 ```
 
 **Arguments:**
-- `<function-name>`: The name of the function (and directory).
+- `<name>`: Function directory name.
 
 **Flags:**
-- `-t, --template`: Runtime template to use. Options: `node` (default), `python`, `php`, `rust`.
+- `-t, --template`: `node` (default), `python`, `php`, `lua`, `rust` (experimental).
 
 **Example:**
 ```bash
-fastfn init my-api -t python
+fastfn init hello -t node
 ```
 
 ---
 
 ### `dev`
 
-Starts the development server with hot-reloading. It wraps `docker compose` but automatically mounts any function directories found in the current path.
+Start the development server with hot reload.
 
 **Usage:**
 ```bash
@@ -49,19 +49,81 @@ fastfn dev [directory]
 - `[directory]`: The root directory to scan for functions (default: `.`).
 
 **Flags:**
-- `--dry-run`: Print the generated docker-compose configuration without running it.
-- `--force-url`: Allow config/policy routes to override already-mapped URLs (unsafe; prefer fixing route conflicts).
-
-**Behavior:**
-1. Scans the target directory using the same discovery rules as the runtime.
-2. Uses a dual/hybrid mount strategy:
-   - file-based routes: mounts the project root to `/app/srv/fn/functions`
-   - `fn.config.json` functions: mounts each function dir to `/app/srv/fn/functions/<runtime>/<name>`
-   - mixed projects include both mount styles
-3. Starts the stack and tails the logs.
+- `--native`: Run on host using the embedded runtime stack (no Docker).
+- `--build`: Build the runtime image before starting (slower).
+- `--dry-run`: Print generated `docker-compose.yml` and exit.
+- `--force-url`: Allow config/policy routes to override existing mapped URLs.
 
 ---
 
-### `up` / `down` / `logs`
+### `run`
 
-Use the standard `docker compose` commands or the `Makefile` shortcuts.
+Start the server with production-oriented defaults (no hot reload).
+
+**Usage:**
+```bash
+fastfn run [directory] --native
+```
+
+**Flags:**
+- `--native`: Run on host (required; Docker production mode is not wired yet).
+- `--force-url`: Allow config/policy routes to override existing mapped URLs.
+
+---
+
+### `doctor` (alias: `check`)
+
+Run environment and project diagnostics. Exits non-zero if any check fails.
+
+**Usage:**
+```bash
+fastfn doctor [subcommand] [flags]
+fastfn check [subcommand] [flags]
+```
+
+**Subcommands:**
+- `domains`: Check DNS configuration for custom domains.
+
+**Flags:**
+- `--json`: Print machine-readable JSON output.
+- `--fix`: Apply safe local auto-fixes when possible.
+
+**Example:**
+```bash
+fastfn doctor
+fastfn doctor domains --domain api.example.com
+fastfn check --json
+```
+
+---
+
+### `logs`
+
+Stream logs from a running FastFN stack.
+
+**Usage:**
+```bash
+fastfn logs
+```
+
+**Flags:**
+- `--file`: Native log file(s): `error|access|all` (default: `all`).
+- `--lines`: Tail N lines (default: 200).
+- `--no-follow`: Print current logs and exit (do not follow).
+- `--native`: Force native logs backend.
+- `--docker`: Force Docker logs backend.
+
+**Example:**
+```bash
+fastfn logs --native --file error --lines 200
+```
+
+---
+
+### `docs`
+
+Open the local Swagger UI (when the server is running).
+
+```bash
+fastfn docs
+```

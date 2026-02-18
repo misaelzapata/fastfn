@@ -4,32 +4,31 @@
 
 La plataforma optimiza tres cosas al mismo tiempo:
 
-1. desarrollo local rapido
-2. control operativo por funcion
+1. desarrollo local rápido
+2. control operativo por función
 3. baja complejidad operativa
 
-Por eso mantiene OpenResty como unico borde HTTP y usa runtimes de lenguaje por Unix sockets.
+Por eso mantiene OpenResty como único edge HTTP y usa runtimes de lenguaje por Unix sockets.
 
 ## Modelo mental
 
-Cliente HTTP -> OpenResty (`/fn/...`) -> runtime (`python`/`node`/`php`/`rust`) -> handler
+Cliente HTTP -> OpenResty (rutas públicas como `/hello`) -> runtime (`python`/`node`/`php`/`rust`) -> handler
 
 En Docker, todo corre dentro del servicio `openresty`, incluyendo procesos runtime.
 
-## Discovery por filesystem (configurable)
+## Descubrimiento por filesystem (configurable)
 
-No existe `routes.json` estatico. Las funciones se descubren desde un root de filesystem.
+No existe `routes.json` estático. Las funciones se descubren desde un root de filesystem (tu "directorio de funciones").
 
-Ese root se configura con `FN_FUNCTIONS_ROOT`.
+Convención recomendada: crea un directorio `functions/` en la raíz del repo y apunta FastFN a ese lugar.
 
-Orden de resolucion:
+Formas comunes de configurar el directorio de funciones:
 
-1. `FN_FUNCTIONS_ROOT`
-2. `/app/srv/fn/functions`
-3. `$PWD/srv/fn/functions`
-4. `/srv/fn/functions`
+- `fastfn dev functions`
+- `fastfn.json` -> `"functions-dir": "functions"`
+- `FN_FUNCTIONS_ROOT=/ruta/absoluta/a/functions`
 
-La lista de runtimes tambien es configurable:
+La lista de runtimes también es configurable:
 
 - `FN_RUNTIMES` (CSV, ejemplo `python,node,php,rust`)
 
@@ -38,10 +37,10 @@ El mapeo de sockets es configurable:
 - `FN_RUNTIME_SOCKETS` (JSON runtime -> socket URI)
 - `FN_SOCKET_BASE_DIR` (base de sockets si no hay mapa)
 
-Precedencia de rutas de compatibilidad:
+Precedencia ante colisiones de rutas:
 
-- Si el mismo nombre existe en varios runtimes, `/fn/<name>` resuelve al primer runtime en `FN_RUNTIMES`.
-- Si `FN_RUNTIMES` no esta definido, usa orden alfabetico de carpetas runtime.
+- Si el mismo nombre existe en varios runtimes, `/<name>` resuelve al primer runtime en `FN_RUNTIMES`.
+- Si `FN_RUNTIMES` no está definido, usa orden alfabético de carpetas runtime.
 
 ## Politica por funcion
 
@@ -52,7 +51,7 @@ Precedencia de rutas de compatibilidad:
 - `max_concurrency`
 - `max_body_bytes`
 
-Esto evita rigidez global y deja control cerca del owner de la funcion.
+Esto evita rigidez global y deja control cerca del dueño de la función.
 
 ## Contrato runtime uniforme
 
@@ -61,7 +60,7 @@ Todos los runtimes comparten el mismo protocolo:
 - request: `{ fn, version, event }`
 - response: `{ status, headers, body }`
 
-Asi el gateway se mantiene agnostico al lenguaje.
+Así el gateway se mantiene agnóstico al lenguaje.
 
 ## Seguridad
 
@@ -77,6 +76,6 @@ Controles incluidos:
 
 - latencia mayor que Lua embebido en algunos casos
 - discovery filesystem requiere disciplina de estructura
-- auth publica es por funcion (no centralizada por default)
+- auth pública es por función (no centralizada por defecto)
 
-Tradeoff intencional: velocidad local fuerte + control practico.
+Tradeoff intencional: velocidad local fuerte + control práctico.

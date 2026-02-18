@@ -14,9 +14,9 @@ Use `fn.env.json` instead.
 
 ## Step 1: create `fn.env.json`
 
-Path:
+Create a file named `fn.env.json` inside your function folder.
 
-- `srv/fn/functions/node/hello-world/fn.env.json`
+Path: `functions/hello-world/fn.env.json`
 
 Content:
 
@@ -35,7 +35,9 @@ Content:
 
 The function still receives both values in `event.env`.
 
-## Step 2: update `app.js`
+## Step 2: update `index.js`
+
+Modify `functions/hello-world/get.js`:
 
 ```js
 exports.handler = async (event) => {
@@ -58,25 +60,21 @@ exports.handler = async (event) => {
 ## Step 3: test
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/hello-world?name=Ana'
+curl -sS 'http://127.0.0.1:8080/hello-world?name=Ana'
 ```
 
-Expected fields:
+Expected output:
 
-- `message: "Hi Ana"`
-- `app_mode: "dev"`
-- `has_api_key: true`
+```json
+{"message":"Hi Ana","app_mode":"dev","has_api_key":true}
+```
 
 ## If values do not change
 
-1. Confirm file path:
-   - `srv/fn/functions/node/hello-world/fn.env.json`
+1. Confirm file path: `functions/hello-world/fn.env.json`.
 2. Confirm valid JSON syntax.
-3. Wait a few seconds for hot reload, or restart stack:
+3. Wait a few seconds for hot reload.
 
-```bash
-docker compose restart openresty
-```
 
 ## Security note
 

@@ -115,13 +115,13 @@ Meaning:
 Unauthorized:
 
 ```bash
-curl -i -sS -X POST http://127.0.0.1:8080/fn/secure-webhook
+curl -i -sS -X POST http://127.0.0.1:8080/secure-webhook
 ```
 
 Wrong method:
 
 ```bash
-curl -i -sS http://127.0.0.1:8080/fn/secure-webhook
+curl -i -sS http://127.0.0.1:8080/secure-webhook
 ```
 
 Expected responses should include `401` and `405` respectively.

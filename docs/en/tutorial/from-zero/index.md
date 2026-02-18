@@ -2,7 +2,7 @@
 
 If this is your first time building a function, start here.
 
-This tutorial assumes **zero prior knowledge** of fastfn.
+This tutorial assumes **zero prior knowledge** of FastFN.
 
 ## What is fastfn in one sentence?
 
@@ -10,21 +10,20 @@ This tutorial assumes **zero prior knowledge** of fastfn.
 
 Example endpoint:
 
-- `http://127.0.0.1:8080/fn/hello-world`
+- `http://127.0.0.1:8080/hello-world`
 
 ## What you need before Chapter 1
 
-1. Docker Desktop running.
-2. This repo cloned on your machine.
-3. Terminal open in repo root.
+Pick one:
 
-## Start the stack
+1. Portable mode (recommended for beginners): Docker Desktop running.
+2. Native mode: `fastfn dev --native` (requires OpenResty + runtimes installed on the host).
 
-```bash
-docker compose up -d
-```
+Everything in this tutorial works in both modes.
 
 ## Confirm it is alive
+
+Start your dev server (Chapter 1 shows the full command), then:
 
 ```bash
 curl -sS 'http://127.0.0.1:8080/_fn/health'
@@ -36,7 +35,7 @@ You should see JSON output. If you get `connection refused`, wait a few seconds 
 
 All chapters use this folder:
 
-- `srv/fn/functions/node/hello-world`
+- `functions/hello-world/`
 
 ## Learning path
 

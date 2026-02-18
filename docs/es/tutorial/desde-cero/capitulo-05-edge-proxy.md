@@ -1,37 +1,76 @@
-# Capitulo 5 - Edge Proxy (estilo Workers)
+# Capítulo 5 - Edge Proxy (estilo Workers)
 
-Objetivo: devolver `proxy` desde la funcion y que el gateway haga la llamada saliente.
+**Objetivo**: devolver un `proxy` desde la función para que el gateway haga el fetch por ti.
 
-## Config
+Es útil cuando quieres:
+
+- validar/auth en tu handler,
+- reescribir el request,
+- y que OpenResty/Lua haga el HTTP outbound (rapido y controlado).
+
+Comportamiento de seguridad importante:
+
+- el proxy a control-plane esta bloqueado: `/_fn/*` y `/console/*` nunca se permiten.
+
+## Paso 1: crea la funcion proxy
+
+Crea:
+
+- `functions/edge-proxy/get.js`
+- `functions/edge-proxy/fn.config.json`
+
+`functions/edge-proxy/fn.config.json`:
 
 ```json
 {
   "edge": {
     "base_url": "http://127.0.0.1:8080",
-    "allow_hosts": ["127.0.0.1:8080"],
-    "allow_private": true,
-    "max_response_bytes": 1048576
+    "allow_hosts": ["127.0.0.1:8080", "api.github.com"],
+    "allow_private": true
+  },
+  "invoke": {
+    "summary": "Demo edge proxy (auth + passthrough)"
   }
 }
 ```
 
-## Handler
+`functions/edge-proxy/get.js`:
 
 ```js
-exports.handler = async () => ({
-  status: 200,
-  proxy: {
-    // Nota: los paths del control-plane (`/_fn/*` y `/console/*`) están bloqueados para edge proxy.
-    // Proxeá a un endpoint público (en este tutorial: `/hello`).
-    path: "/hello?name=edge",
-    method: "GET",
-    headers: { "x-fastfn-edge": "1" }
+exports.handler = async (event) => {
+  const headers = event.headers || {};
+  const secret = headers["x-secret"] || headers["X-Secret"];
+
+  if (!secret) {
+    return {
+      status: 401,
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+      body: "Unauthorized (falta x-secret)",
+    };
   }
-});
+
+  return {
+    proxy: {
+      path: "/hello-world?name=edge",
+      method: "GET",
+      headers: { "x-edge-proxy": "1" },
+    },
+  };
+};
 ```
 
-## Prueba
+## Paso 2: prueba
+
+No autorizado:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/mi-proxy' | jq .
+curl -i -sS 'http://127.0.0.1:8080/edge-proxy' | sed -n '1,20p'
 ```
+
+Autorizado:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/edge-proxy' -H 'x-secret: demo'
+```
+
+Deberias ver la respuesta de `/hello-world`, entregada a traves de tu funcion.

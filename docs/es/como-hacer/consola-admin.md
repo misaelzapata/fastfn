@@ -41,7 +41,7 @@ Esta pagina cubre:
 
 ## Login opcional (UI de consola)
 
-Si queres una pantalla de login para `/console`:
+Si quieres una pantalla de login para `/console`:
 
 ```bash
 export FN_CONSOLE_LOGIN_ENABLED=1
@@ -50,7 +50,7 @@ export FN_CONSOLE_LOGIN_PASSWORD='dev-password'
 export FN_CONSOLE_SESSION_SECRET='change-me-too'
 ```
 
-Si tambien queres que la API de consola (`/_fn/*`) requiera cookie de login:
+Si también quieres que la API de consola (`/_fn/*`) requiera cookie de login:
 
 ```bash
 export FN_CONSOLE_LOGIN_API=1

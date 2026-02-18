@@ -1,6 +1,6 @@
-# Authentication & Secrets <small>🔐</small>
+# Authentication and Secrets
 
-In `fastfn`, security is handled **in code**. You have full access to headers, environment variables, and request context to implement any auth strategy.
+In FastFN, security is handled **in code**. You have full access to headers, environment variables, and request context to implement any auth strategy.
 
 ---
 
@@ -21,7 +21,7 @@ The platform automatically injects these into `event['env']` (Python) or `event.
 
 ---
 
-## 2. Implementing API Key Auth 🔑
+## 2. Implementing API Key Auth
 
 This is the most common pattern for server-to-server communication.
 
@@ -59,17 +59,17 @@ def handler(event):
 **Test it:**
 
 ```bash
-# ❌ Fail
-curl -i 'http://127.0.0.1:8080/fn/secure-api'
+# Fail
+curl -i 'http://127.0.0.1:8080/secure-api'
 
-# ✅ Success
-curl -i 'http://127.0.0.1:8080/fn/secure-api' \
+# Success
+curl -i 'http://127.0.0.1:8080/secure-api' \
   -H 'x-api-key: my-super-secret-key-123'
 ```
 
 ---
 
-## 3. Basic Authentication (Username/Password) 🛡️
+## 3. Basic Authentication (Username/Password)
 
 Handling standard `Authorization: Basic <base64>` header.
 
@@ -111,9 +111,9 @@ exports.handler = async (event) => {
 
 ---
 
-## 4. Avoiding Sensitive Data Leaks 🚫
+## 4. Avoiding Sensitive Data Leaks
 
-Reviewing your logs is important. By default, `fastfn` logs execution details.
+Reviewing your logs is important. By default, FastFN logs execution details.
 
 !!! warning "Do not print secrets"
     Avoid code like `print(env)` or `console.log(event.env)`.

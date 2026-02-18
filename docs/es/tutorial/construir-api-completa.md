@@ -66,7 +66,7 @@ curl -sS 'http://127.0.0.1:8080/_fn/function-code?runtime=python&name=perfil-cli
 ### No autorizado (sin key)
 
 ```bash
-curl -i -sS 'http://127.0.0.1:8080/fn/perfil-cliente?id=cli_100'
+curl -i -sS 'http://127.0.0.1:8080/perfil-cliente?id=cli_100'
 ```
 
 Esperado: `401`.
@@ -74,7 +74,7 @@ Esperado: `401`.
 ### GET válido
 
 ```bash
-curl -i -sS 'http://127.0.0.1:8080/fn/perfil-cliente?id=cli_100' \
+curl -i -sS 'http://127.0.0.1:8080/perfil-cliente?id=cli_100' \
   -H 'x-api-key: clave-demo-123'
 ```
 
@@ -83,7 +83,7 @@ Esperado: `200` + JSON de perfil.
 ### POST con JSON inválido
 
 ```bash
-curl -i -sS -X POST 'http://127.0.0.1:8080/fn/perfil-cliente' \
+curl -i -sS -X POST 'http://127.0.0.1:8080/perfil-cliente' \
   -H 'x-api-key: clave-demo-123' \
   -H 'Content-Type: application/json' \
   -d '{json malo}'
@@ -94,7 +94,7 @@ Esperado: `400`.
 ### POST sin campo requerido
 
 ```bash
-curl -i -sS -X POST 'http://127.0.0.1:8080/fn/perfil-cliente' \
+curl -i -sS -X POST 'http://127.0.0.1:8080/perfil-cliente' \
   -H 'x-api-key: clave-demo-123' \
   -H 'Content-Type: application/json' \
   -d '{"name":"Alicia"}'
@@ -105,7 +105,7 @@ Esperado: `422`.
 ### POST válido
 
 ```bash
-curl -i -sS -X POST 'http://127.0.0.1:8080/fn/perfil-cliente' \
+curl -i -sS -X POST 'http://127.0.0.1:8080/perfil-cliente' \
   -H 'x-api-key: clave-demo-123' \
   -H 'Content-Type: application/json' \
   -d '{"email":"alicia@ejemplo.com","newsletter":false}'

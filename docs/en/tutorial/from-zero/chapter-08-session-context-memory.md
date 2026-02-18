@@ -1,25 +1,53 @@
-# Chapter 8 - Session, Context, and Basic Memory
+# Chapter 8 - Context (Auth + Trace IDs)
 
-Goal: pass user context and keep minimal conversational memory.
+**Goal**: Read user context from `event.context` without mixing it into your JSON body.
 
-## Context via `/_fn/invoke`
+FastFN extracts a small safe subset of headers and maps them into context.
 
-```bash
-curl -sS 'http://127.0.0.1:8080/_fn/invoke' \
-  -X POST -H 'content-type: application/json' \
-  --data '{
-    "name":"request-inspector",
-    "method":"GET",
-    "context":{"trace_id":"abc-123","tenant":"demo"}
-  }' | jq .
+## 1) Create a `whoami` endpoint
+
+Create `functions/whoami/get.js`:
+
+```js
+exports.handler = async (event) => {
+  const ctx = event.context || {};
+  const user = ctx.user || { id: "anonymous" };
+
+  return {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      ok: true,
+      request_id: event.id,
+      user,
+    }),
+  };
+};
 ```
 
-The function receives this in `event.context.user`.
+## 2) Send user headers
 
-## Basic memory pattern
+```bash
+curl -sS \
+  -H 'x-user-id: 123' \
+  -H 'x-role: admin' \
+  http://127.0.0.1:8080/whoami
+```
 
-- Use a stable key (`chat_id`, `user_id`, session id)
-- Store last N turns
-- Apply TTL (for example 24h)
+Expected shape:
 
-This pattern is already used by `telegram-ai-reply`.
+```json
+{"ok":true,"request_id":"...","user":{"id":"123","role":"admin"}}
+```
+
+## 3) Note about internal invocation
+
+FastFN also exposes `POST /_fn/invoke` for internal tooling. It can inject a full JSON context object (including `context.user`) directly.
+
+This is useful for:
+
+- internal test harnesses
+- controlled scheduler/job invocations
+
+It is not recommended as a public endpoint.
+

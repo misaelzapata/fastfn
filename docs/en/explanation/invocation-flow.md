@@ -1,9 +1,9 @@
-# Invocation Flow and ngx.location.capture
+# Invocation Flow
 
-## `/fn/...` public path
+## Public path (`/<name>`)
 
 1. Nginx routes request to `fn_gateway.lua`.
-2. Gateway parses `<name>` and optional `@<version>`.
+2. Gateway parses the route (for example `/hello`) and optional `@<version>` (for example `/hello@v2`).
 3. Discovery resolves runtime (`python`, `node`, `php`, or `rust`) and effective policy.
 4. Gateway validates method/body/concurrency.
 5. Gateway sends framed JSON to runtime socket.
@@ -14,11 +14,8 @@
 
 `/_fn/invoke` does not call runtimes directly.
 
-It builds an internal request and runs:
-
-- `ngx.location.capture('/fn/...')`
-
-So it reuses exactly the same gateway path, method policy, limits, and response behavior as external clients.
+It builds an internal request and routes it through the same gateway routing/policy layer as external clients.
+That means method policy, limits, and error mapping are consistent.
 
 ## Context forwarding
 

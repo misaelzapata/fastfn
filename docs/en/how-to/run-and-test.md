@@ -1,31 +1,27 @@
 # Run and Test
 
-Reproducible local validation checklist.
+Practical local validation checklist.
 
 ## What this validates
 
-- platform boots in Docker
+- FastFN boots in portable mode (Docker)
 - runtimes are healthy
 - public routes respond
-- docs endpoints are available
-- smoke + integration + stress smoke pass
+- OpenAPI + Swagger UI are available
+- unit + integration + UI E2E tests pass
 
 ## Prerequisites
 
 - Docker Desktop running
-- `docker compose` available
-- host port `8080` free
+- `bin/fastfn` built or installed
+- host port `8080` is free
 
 ## 1) Automated Testing (Recommended)
 
-The fastest way to validate the entire platform is using the built-in test suites.
+The fastest way to validate the entire platform is to run the CI-like pipeline locally:
 
 ```bash
-# Run Unit Tests (Isolated logic)
-make test-unit
-
-# Run Integration Tests (Spin up stack & test endpoints)
-make test-integration
+bash scripts/ci/test-pipeline.sh
 ```
 
 If these pass, the platform is healthy.
@@ -34,10 +30,10 @@ If these pass, the platform is healthy.
 
 If you prefer to run the stack manually and check endpoints:
 
-### Boot platform
+### Boot a demo app
 
 ```bash
-make dev
+bin/fastfn dev examples/functions/next-style
 ```
 
 ### Verify System Health
@@ -46,25 +42,28 @@ make dev
 curl -sS 'http://127.0.0.1:8080/_fn/health' | jq
 ```
 
-### Verify Test Function
+### Verify a public function
 
-If you initialized a function (e.g., `my-func`), call it:
+Call a JSON endpoint:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/my-func'
+curl -sS 'http://127.0.0.1:8080/hello?name=World'
 ```
 
 Optional dependency isolation check:
 
 ```bash
-docker compose exec -T openresty sh -lc "rm -rf /app/srv/fn/functions/python/qr/.deps /app/srv/fn/functions/node/qr/v2/node_modules"
-curl -sS 'http://127.0.0.1:8080/fn/qr?text=PythonQR' -o /tmp/qr-python.svg
-curl -sS 'http://127.0.0.1:8080/fn/qr@v2?text=NodeQR' -o /tmp/qr-node.png
-docker compose exec -T openresty sh -lc "ls -la /app/srv/fn/functions/python/qr/.deps | head"
-docker compose exec -T openresty sh -lc "ls -la /app/srv/fn/functions/node/qr/v2/node_modules | head"
+bin/fastfn dev examples/functions
+
+curl -sS 'http://127.0.0.1:8080/qr?text=PythonQR' -o /tmp/qr-python.svg
+curl -sS 'http://127.0.0.1:8080/qr@v2?text=NodeQR' -o /tmp/qr-node.png
+
+# Force a reinstall (these folders are created at runtime):
+rm -rf examples/functions/python/qr/.deps
+rm -rf examples/functions/node/qr/v2/node_modules
 ```
 
-## 4) Verify docs endpoints
+## 3) Verify docs endpoints
 
 ```bash
 curl -sS 'http://127.0.0.1:8080/openapi.json' | head -c 300
@@ -73,46 +72,17 @@ curl -sS 'http://127.0.0.1:8080/openapi.json' | head -c 300
 - Swagger: [http://127.0.0.1:8080/docs](http://127.0.0.1:8080/docs)
 - Console: [http://127.0.0.1:8080/console](http://127.0.0.1:8080/console)
 
-## 5) Run packaged checks
-
-```bash
-./scripts/smoke.sh
-./scripts/curl-examples.sh
-./scripts/stress.sh
-```
-
-## 6) Full quality suite
-
-```bash
-./scripts/test-all.sh
-```
-
-## 7) QR benchmark snapshots
-
-```bash
-./cli/benchmark-qr.sh default
-./cli/benchmark-qr.sh no-throttle
-```
-
-Results are stored in `tests/stress/results/`.
-
-Reference report:
-
-- `docs/en/explanation/performance-benchmarks.md`
-
-## 8) Stop clean
+## 4) Stop clean
 
 ```bash
 docker compose down --remove-orphans
 ```
 
-## Notes on configurable function root
+## 5) Function root
 
-Function discovery root is configurable via `FN_FUNCTIONS_ROOT`.
+FastFN scans the directory you pass to `fastfn dev`.
 
-Resolution order:
+Recommendations:
 
-1. `FN_FUNCTIONS_ROOT`
-2. `/app/srv/fn/functions`
-3. `$PWD/srv/fn/functions`
-4. `/srv/fn/functions`
+- Put your code under `functions/` and run: `fastfn dev functions`
+- Or set a default in `fastfn.json` via `functions-dir`

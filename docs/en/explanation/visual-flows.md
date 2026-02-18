@@ -4,7 +4,7 @@
 
 ```mermaid
 flowchart LR
-  A["Client Request"] --> B["OpenResty /fn route"]
+  A["Client Request"] --> B["OpenResty public route"]
   B --> C{"Method allowed?"}
   C -- "No" --> D["405 + Allow header"]
   C -- "Yes" --> E{"Body size / concurrency ok?"}
@@ -23,8 +23,8 @@ flowchart LR
   A["Console/API invoke payload"] --> B["/_fn/invoke"]
   B --> C["Validate method/policy"]
   C --> D["Inject context.user"]
-  D --> E["ngx.location.capture('/fn/...')"]
-  E --> F["Same gateway path as external traffic"]
+  D --> E["Route through gateway router"]
+  E --> F["Same policy path as external traffic"]
   F --> G["Runtime execution"]
   G --> H["JSON wrapper response"]
 ```

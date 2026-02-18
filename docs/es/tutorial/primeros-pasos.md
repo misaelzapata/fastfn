@@ -61,7 +61,7 @@ Si ves `"up": true`, los workers están conectados al gateway vía Sockets Unix 
 
 ---
 
-## 3. Primer Demo: Generador QR 📞
+## 3. Primer Demo: Generador QR
 
 La plataforma trae ejemplos listos. Empieza con QR:
 
@@ -78,7 +78,7 @@ curl 'http://127.0.0.1:8080/hello?name=Mundo'
 
 !!! question "¿Cómo sucedió eso?"
     1.  La petición llegó a **Nginx** en el puerto 8080.
-    2.  Nginx vio `/fn/hello` y lo enrutó al **Controlador Lua**.
+    2.  Nginx vio `/hello` y lo enrutó al **Controlador Lua**.
     3.  Lua verificó la función descubierta en `FN_FUNCTIONS_ROOT`.
     4.  Reenvió la petición al socket Unix del runtime resuelto.
     5.  El Worker ejecutó `handler()` y retornó el JSON.
@@ -86,7 +86,7 @@ curl 'http://127.0.0.1:8080/hello?name=Mundo'
 
 ---
 
-## 4. Explora el Dashboard 🎛️
+## 4. Explora el Dashboard
 
 No tienes que usar `curl` para todo. Incluimos una consola visual.
 
@@ -106,6 +106,6 @@ Desde aquí puedes:
     docker compose up -d --build
     ```
 
-[Siguiente: Escribe Tu Primera Función :arrow_right:](./tu-primera-funcion.md){ .md-button .md-button--primary }
+[Siguiente: Escribe Tu Primera Función](./tu-primera-funcion.md){ .md-button .md-button--primary }
 
-[Demo Bot de WhatsApp (QR login + enviar/recibir + AI) :arrow_right:](./demo-bot-whatsapp.md){ .md-button }
+[Demo Bot de WhatsApp (QR login + enviar/recibir + AI)](./demo-bot-whatsapp.md){ .md-button }

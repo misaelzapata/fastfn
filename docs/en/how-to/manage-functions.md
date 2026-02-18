@@ -6,15 +6,17 @@ Practical CRUD lifecycle using `/_fn/*` endpoints.
 
 Function files are stored under `FN_FUNCTIONS_ROOT` (not hardcoded).
 
-Defaults:
+In practice, this is the directory you pass to `fastfn dev`.
 
-- Docker: `/app/srv/fn/functions`
-- local repo: `$PWD/srv/fn/functions`
+Recommended setup:
 
-Set explicitly when needed:
+1. Put your code under `functions/`.
+2. Run `fastfn dev functions` (or set `"functions-dir": "functions"` in `fastfn.json`).
+
+If you need to set it explicitly:
 
 ```bash
-export FN_FUNCTIONS_ROOT="$PWD/srv/fn/functions"
+export FN_FUNCTIONS_ROOT="$PWD/functions"
 ```
 
 ## Prerequisites
@@ -34,7 +36,7 @@ Use this first to confirm runtime names and discover current `functions_root`.
 ## 2) Create a function
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/_fn/function?runtime=python&name=demo_new' \
+curl -sS 'http://127.0.0.1:8080/_fn/function?runtime=python&name=demo-new' \
   -X POST \
   -H 'Content-Type: application/json' \
   --data '{"methods":["GET"],"summary":"Demo function"}'
@@ -43,13 +45,13 @@ curl -sS 'http://127.0.0.1:8080/_fn/function?runtime=python&name=demo_new' \
 ## 3) Read details
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/_fn/function?runtime=python&name=demo_new&include_code=1'
+curl -sS 'http://127.0.0.1:8080/_fn/function?runtime=python&name=demo-new&include_code=1'
 ```
 
 ## 4) Update policy (methods/limits)
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/_fn/function-config?runtime=python&name=demo_new' \
+curl -sS 'http://127.0.0.1:8080/_fn/function-config?runtime=python&name=demo-new' \
   -X PUT \
   -H 'Content-Type: application/json' \
 --data '{"timeout_ms":1200,"max_concurrency":5,"max_body_bytes":262144,"invoke":{"methods":["GET","POST"]}}'
@@ -66,7 +68,7 @@ If multiple functions need the same dependencies, you can define a shared pack u
 Then attach it to a function via `shared_deps`:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/_fn/function-config?runtime=python&name=demo_new' \
+curl -sS 'http://127.0.0.1:8080/_fn/function-config?runtime=python&name=demo-new' \
   -X PUT \
   -H 'Content-Type: application/json' \
   --data '{"shared_deps":["common_http"]}'
@@ -75,7 +77,7 @@ curl -sS 'http://127.0.0.1:8080/_fn/function-config?runtime=python&name=demo_new
 ## 4b) Add a schedule (interval cron)
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/_fn/function-config?runtime=python&name=demo_new' \
+curl -sS 'http://127.0.0.1:8080/_fn/function-config?runtime=python&name=demo-new' \
   -X PUT \
   -H 'Content-Type: application/json' \
   --data '{"schedule":{"enabled":true,"every_seconds":60,"method":"GET","query":{"action":"inc"},"headers":{},"body":"","context":{}}}'
@@ -90,7 +92,7 @@ curl -sS 'http://127.0.0.1:8080/_fn/schedules'
 ## 5) Update env
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/_fn/function-env?runtime=python&name=demo_new' \
+curl -sS 'http://127.0.0.1:8080/_fn/function-env?runtime=python&name=demo-new' \
   -X PUT \
   -H 'Content-Type: application/json' \
   --data '{"GREETING_PREFIX":"hello"}'
@@ -99,7 +101,7 @@ curl -sS 'http://127.0.0.1:8080/_fn/function-env?runtime=python&name=demo_new' \
 ## 6) Update code
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/_fn/function-code?runtime=python&name=demo_new' \
+curl -sS 'http://127.0.0.1:8080/_fn/function-code?runtime=python&name=demo-new' \
   -X PUT \
   -H 'Content-Type: application/json' \
   --data '{"code":"import json\n\ndef handler(event):\n    q = event.get(\"query\") or {}\n    return {\"status\":200,\"headers\":{\"Content-Type\":\"application/json\"},\"body\":json.dumps({\"ok\":True,\"query\":q})}\n"}'
@@ -111,10 +113,10 @@ curl -sS 'http://127.0.0.1:8080/_fn/function-code?runtime=python&name=demo_new' 
 curl -sS 'http://127.0.0.1:8080/_fn/invoke' \
   -X POST \
   -H 'Content-Type: application/json' \
-  --data '{"runtime":"python","name":"demo_new","method":"GET","query":{"name":"Ops"}}'
+  --data '{"runtime":"python","name":"demo-new","method":"GET","query":{"name":"Ops"}}'
 ```
 
-This uses `ngx.location.capture('/fn/...')`, so it enforces the same policy as public traffic.
+This routes through the same gateway routing/policy layer as public traffic, so it enforces the same methods and limits.
 
 ## 7b) Enqueue async job (run later)
 
@@ -122,7 +124,7 @@ This uses `ngx.location.capture('/fn/...')`, so it enforces the same policy as p
 curl -sS 'http://127.0.0.1:8080/_fn/jobs' \
   -X POST \
   -H 'Content-Type: application/json' \
-  --data '{"name":"demo_new","method":"GET","query":{"name":"Async"}}'
+  --data '{"name":"demo-new","method":"GET","query":{"name":"Async"}}'
 ```
 
 Then poll:
@@ -135,7 +137,7 @@ curl -sS 'http://127.0.0.1:8080/_fn/jobs/<id>/result'
 ## 8) Delete function
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/_fn/function?runtime=python&name=demo_new' -X DELETE
+curl -sS 'http://127.0.0.1:8080/_fn/function?runtime=python&name=demo-new' -X DELETE
 ```
 
 ## Common errors

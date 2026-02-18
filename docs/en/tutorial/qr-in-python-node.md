@@ -2,19 +2,19 @@
 
 This tutorial builds the same function in two runtimes:
 
-- `/fn/qr` (Python, SVG response)
-- `/fn/qr@v2` (Node, PNG response)
+- `/qr` (Python, SVG response)
+- `/qr@v2` (Node, PNG response)
 
 The goal is to verify runtime-local dependency installation:
 
-- Python installs to `srv/fn/functions/python/qr/.deps`
-- Node installs to `srv/fn/functions/node/qr/v2/node_modules`
+- Python installs to `functions/python/qr/.deps`
+- Node installs to `functions/node/qr/v2/node_modules`
 
 ## 1) Create function folders
 
 ```bash
-mkdir -p srv/fn/functions/python/qr
-mkdir -p srv/fn/functions/node/qr/v2
+mkdir -p functions/python/qr
+mkdir -p functions/node/qr/v2
 ```
 
 ## 2) Add per-runtime dependency files
@@ -22,7 +22,7 @@ mkdir -p srv/fn/functions/node/qr/v2
 Python requirements:
 
 ```bash
-cat > srv/fn/functions/python/qr/requirements.txt <<'EOF'
+cat > functions/python/qr/requirements.txt <<'EOF'
 qrcode>=7.4
 EOF
 ```
@@ -30,7 +30,7 @@ EOF
 Node package:
 
 ```bash
-cat > srv/fn/functions/node/qr/v2/package.json <<'EOF'
+cat > functions/node/qr/v2/package.json <<'EOF'
 {
   "name": "fn-node-qr-v2",
   "version": "1.0.0",
@@ -44,7 +44,7 @@ EOF
 
 ## 3) Add function code
 
-Python `srv/fn/functions/python/qr/app.py`:
+Python `functions/python/qr/app.py`:
 
 ```python
 import io
@@ -80,7 +80,7 @@ def handler(event):
     }
 ```
 
-Node `srv/fn/functions/node/qr/v2/app.js`:
+Node `functions/node/qr/v2/app.js`:
 
 ```javascript
 const QRCode = require('qrcode');
@@ -112,7 +112,7 @@ exports.handler = async (event) => {
 
 ## 4) Add per-function policy
 
-Python `srv/fn/functions/python/qr/fn.config.json`:
+Python `functions/python/qr/fn.config.json`:
 
 ```json
 {
@@ -128,7 +128,7 @@ Python `srv/fn/functions/python/qr/fn.config.json`:
 }
 ```
 
-Node `srv/fn/functions/node/qr/v2/fn.config.json`:
+Node `functions/node/qr/v2/fn.config.json`:
 
 ```json
 {
@@ -146,17 +146,17 @@ Node `srv/fn/functions/node/qr/v2/fn.config.json`:
 
 ## 5) Validate dependency auto-install and runtime output
 
-If running in Docker, you can reset local dependency folders:
+You can reset local dependency folders:
 
 ```bash
-docker compose exec -T openresty sh -lc "rm -rf /app/srv/fn/functions/python/qr/.deps /app/srv/fn/functions/node/qr/v2/node_modules"
+rm -rf functions/python/qr/.deps functions/node/qr/v2/node_modules
 ```
 
 Call both routes:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/qr?text=PythonQR' -o /tmp/qr-python.svg
-curl -sS 'http://127.0.0.1:8080/fn/qr@v2?text=NodeQR' -o /tmp/qr-node.png
+curl -sS 'http://127.0.0.1:8080/qr?text=PythonQR' -o /tmp/qr-python.svg
+curl -sS 'http://127.0.0.1:8080/qr@v2?text=NodeQR' -o /tmp/qr-node.png
 ```
 
 Validate payload types:
@@ -169,13 +169,13 @@ file /tmp/qr-node.png
 Validate runtime-local dependency directories:
 
 ```bash
-docker compose exec -T openresty sh -lc "test -d /app/srv/fn/functions/python/qr/.deps/qrcode && echo python-ok"
-docker compose exec -T openresty sh -lc "test -d /app/srv/fn/functions/node/qr/v2/node_modules/qrcode && echo node-ok"
+test -d functions/python/qr/.deps/qrcode && echo python-ok
+test -d functions/node/qr/v2/node_modules/qrcode && echo node-ok
 ```
 
 ## 6) What this proves
 
-- Discovery works on function routes (`/fn/<name>` + optional `@version`) and optional mapped routes from `invoke.routes`.
+- Discovery works on public mapped routes, and also supports versioned compatibility routes like `/<name>@<version>`.
 - Python and Node can implement the same endpoint independently, and the same contract pattern extends to PHP and Lua handlers.
 - Each runtime installs dependencies inside its own function directory.
 - Both binary content types are served correctly through the same gateway.

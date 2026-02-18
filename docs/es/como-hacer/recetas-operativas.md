@@ -10,7 +10,7 @@ curl -sS 'http://127.0.0.1:8080/_fn/health'
 
 Esperado: runtimes estables `python`, `node`, `php` y `lua` con `health.up=true` (`rust`/`go` cuando estén habilitados).
 
-Si `curl` no conecta pero el stack esta levantado (y/o `wget` te funciona), probá:
+Si `curl` no conecta pero el stack está levantado (y/o `wget` te funciona), prueba:
 
 ```bash
 # forzar IPv4
@@ -20,7 +20,7 @@ curl -4 -sS 'http://127.0.0.1:8080/_fn/health'
 curl --noproxy '*' -sS 'http://127.0.0.1:8080/_fn/health'
 ```
 
-En entornos "sandbox" donde el loopback del host esta bloqueado, hacé el request desde adentro del contenedor:
+En entornos "sandbox" donde el loopback del host está bloqueado, haz la petición desde dentro del contenedor:
 
 ```bash
 docker compose exec -T openresty sh -lc "curl -sS 'http://127.0.0.1:8080/_fn/health'"
@@ -37,7 +37,7 @@ Uso: saber que funciones existen y con que politica efectiva.
 ## Receta 3: invocacion GET con query
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/echo?key=test'
+curl -sS 'http://127.0.0.1:8080/echo?key=test'
 ```
 
 Esperado (aprox):
@@ -49,7 +49,7 @@ Esperado (aprox):
 ## Receta 4: versionado (`@v2`)
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/hello@v2?name=NodeWay'
+curl -sS 'http://127.0.0.1:8080/hello@v2?name=NodeWay'
 ```
 
 Uso: rollout progresivo sin romper version default.
@@ -57,21 +57,21 @@ Uso: rollout progresivo sin romper version default.
 ## Receta 4b: probar PHP y Rust
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/php-profile?name=PHP'
-curl -sS 'http://127.0.0.1:8080/fn/rust-profile?name=Rust'
+curl -sS 'http://127.0.0.1:8080/php-profile?name=PHP'
+curl -sS 'http://127.0.0.1:8080/rust-profile?name=Rust'
 ```
 
 ## Receta 4c: probar rutas (patrón Python + Node + PHP + Lua)
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/qr?text=PythonQR' -o qr-python.svg
-curl -sS 'http://127.0.0.1:8080/fn/qr@v2?text=NodeQR' -o qr-node.png
+curl -sS 'http://127.0.0.1:8080/qr?text=PythonQR' -o qr-python.svg
+curl -sS 'http://127.0.0.1:8080/qr@v2?text=NodeQR' -o qr-node.png
 ```
 
 ## Receta 5: forzar 405 por metodo no permitido
 
 ```bash
-curl -sS -o /dev/null -w '%{http_code}\n' -X POST 'http://127.0.0.1:8080/fn/echo?key=test'
+curl -sS -o /dev/null -w '%{http_code}\n' -X POST 'http://127.0.0.1:8080/echo?key=test'
 ```
 
 Esperado: `405`.
@@ -87,7 +87,7 @@ curl -sS 'http://127.0.0.1:8080/_fn/function-config?runtime=node&name=node-echo'
 Verificar:
 
 ```bash
-curl -sS -o /dev/null -w '%{http_code}\n' -X PUT 'http://127.0.0.1:8080/fn/node-echo?name=x'
+curl -sS -o /dev/null -w '%{http_code}\n' -X PUT 'http://127.0.0.1:8080/node-echo?name=x'
 ```
 
 ## Receta 7: inyectar `context` desde `/_fn/invoke`
@@ -124,15 +124,15 @@ curl -sS 'http://127.0.0.1:8080/_fn/function-code?runtime=node&name=demo-recipe'
 Validar:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/demo-recipe?name=RecipeOK'
+curl -sS 'http://127.0.0.1:8080/demo-recipe?name=RecipeOK'
 ```
 
 ## Receta 10: respuestas HTML/CSV/PNG
 
 ```bash
-curl -i -sS 'http://127.0.0.1:8080/fn/html-demo?name=Web' | head -n 10
-curl -i -sS 'http://127.0.0.1:8080/fn/csv-demo?name=Alice' | head -n 12
-curl -sS 'http://127.0.0.1:8080/fn/png-demo' --output out.png
+curl -i -sS 'http://127.0.0.1:8080/html-demo?name=Web' | head -n 10
+curl -i -sS 'http://127.0.0.1:8080/csv-demo?name=Alice' | head -n 12
+curl -sS 'http://127.0.0.1:8080/png-demo' --output out.png
 file out.png
 ```
 
@@ -142,7 +142,7 @@ file out.png
 curl -sS 'http://127.0.0.1:8080/_fn/reload' -X POST
 ```
 
-Uso: despues de crear/borrar funciones manualmente en filesystem.
+Uso: después de crear/borrar funciones manualmente en filesystem.
 
 ## Receta 12: limpieza de demos
 

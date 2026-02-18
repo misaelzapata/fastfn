@@ -1,6 +1,6 @@
 # Chapter 1 - Hello World (First Function)
 
-Goal: create one file and call it from your browser or `curl`.
+Goal: create one file and call it from your browser or `curl`, using the simplified routing.
 
 ## What you are building
 
@@ -8,23 +8,25 @@ A function named `hello-world`.
 
 That means your URL will be:
 
-- `/fn/hello-world`
+- `/hello-world`
 
-## Step 1: create the folder
-
-Run exactly:
+## Step 1: create the project folder
 
 ```bash
-mkdir -p srv/fn/functions/node/hello-world
+mkdir my-functions
+cd my-functions
 ```
 
 ## Step 2: create the function file
 
-Create this file:
+Create a folder named `hello-world` inside `functions`, and add a `get.js` file.
 
-- `srv/fn/functions/node/hello-world/app.js`
+```bash
+mkdir -p functions/hello-world
+touch functions/hello-world/get.js
+```
 
-Paste this exact code:
+Paste this code into `functions/hello-world/get.js`:
 
 ```js
 exports.handler = async (event) => ({
@@ -32,7 +34,7 @@ exports.handler = async (event) => ({
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
     ok: true,
-    message: "Hello fastfn",
+    message: "Hello FastFN",
     method: event.method,
     path: event.path,
   }),
@@ -41,43 +43,36 @@ exports.handler = async (event) => ({
 
 ### What this code means
 
-- `exports.handler`: entry function fastfn executes
+- `exports.handler`: entry function FastFN executes
 - `status: 200`: successful HTTP response
 - `headers`: response type (JSON)
 - `body`: payload (must be a string)
 
-## Step 3: call your function
+## Step 3: Run the development server
+
+Use the `fastfn` CLI to start the server:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/hello-world'
+fastfn dev functions
 ```
+
+You should see output indicating the server is running on `http://localhost:8080`.
+
+## Step 4: call your function
+
+Open:
+
+- `http://127.0.0.1:8080/hello-world`
 
 Expected output:
 
 ```json
-{"ok":true,"message":"Hello fastfn","method":"GET","path":"/fn/hello-world"}
+{"ok":true,"message":"Hello FastFN","method":"GET","path":"/hello-world"}
 ```
 
-## Step 4: try in browser
+## Troubleshooting
 
-Open:
+1. Portable mode: check if Docker is running.
+2. Ensure the file is named `get.js` inside `functions/hello-world/`.
+3. Native mode: try `fastfn dev --native functions` and confirm OpenResty is installed.
 
-- `http://127.0.0.1:8080/fn/hello-world`
-
-## If it does not work
-
-1. Check stack is running:
-
-```bash
-docker compose ps
-```
-
-2. Check logs:
-
-```bash
-docker compose logs --tail=100 openresty
-```
-
-3. Make sure file path and filename are exact:
-
-- `srv/fn/functions/node/hello-world/app.js`

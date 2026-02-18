@@ -1,12 +1,12 @@
 # Referencia de `fastfn.json`
 
-`fastfn.json` es el archivo de configuracion default del CLI.
+`fastfn.json` es el archivo de configuración por defecto del CLI.
 
 FastFN lo busca en el directorio actual cuando ejecutas comandos como `fastfn dev` o `fastfn run`.
 
 ## Claves Soportadas
 
-| Clave | Tipo | Descripcion |
+| Clave | Tipo | Descripción |
 | --- | --- | --- |
 | `functions-dir` | `string` | Root default de funciones cuando no pasas directorio al CLI. |
 | `public-base-url` | `string` | Base URL publica canonica para `servers[0].url` en OpenAPI. |
@@ -17,10 +17,10 @@ FastFN lo busca en el directorio actual cuando ejecutas comandos como `fastfn de
 Notas:
 - La forma recomendada es kebab-case: `functions-dir`, `public-base-url`.
 - Alias de compatibilidad que siguen funcionando: `functions_dir`, `functionsDir`, `public_base_url`, `publicBaseUrl`.
-- Tambien se aceptan alias para OpenAPI interna: `openapi_include_internal`, `openapi.include_internal`, `swagger-include-admin`.
+- También se aceptan alias para OpenAPI interna: `openapi_include_internal`, `openapi.include_internal`, `swagger-include-admin`.
 - `domains` es solo para checks de `fastfn doctor domains`. No aplica restriccion de host entrante por si solo.
 - Para restringir hosts entrantes por funcion, usa `invoke.allow_hosts` en cada `fn.config.json`.
-- Tambien podes optar globalmente via `force-url` o el flag `--force-url` (riesgoso; usalo con cuidado).
+- También puedes optar globalmente vía `force-url` o el flag `--force-url` (riesgoso; úsalo con cuidado).
 
 ## Ejemplo 1: Directorio Default en Desarrollo
 
@@ -47,7 +47,7 @@ Comportamiento esperado:
 
 ```json
 {
-  "functions-dir": "srv/fn/functions",
+  "functions-dir": "functions",
   "public-base-url": "https://api.midominio.com"
 }
 ```

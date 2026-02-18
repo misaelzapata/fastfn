@@ -14,7 +14,7 @@ This document defines exactly what OpenResty sends to handlers and what runtimes
 ### Public request (client -> gateway)
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/risk-score?email=user@example.com' \
+curl -sS 'http://127.0.0.1:8080/risk-score?email=user@example.com' \
   -H 'x-user-email: user@example.com' \
   -H 'x-api-key: my-key' \
   -H 'Cookie: session_id=abc123; theme=dark' \
@@ -41,8 +41,8 @@ curl -sS 'http://127.0.0.1:8080/fn/risk-score?email=user@example.com' \
     "id": "req-1770795478241-13-311866",
     "ts": 1770795478241,
     "method": "GET",
-    "path": "/fn/hello@v2",
-    "raw_path": "/fn/hello@v2?name=NodeWay",
+    "path": "/hello@v2",
+    "raw_path": "/hello@v2?name=NodeWay",
     "query": {"name": "NodeWay"},
     "headers": {
       "host": "127.0.0.1:8080",

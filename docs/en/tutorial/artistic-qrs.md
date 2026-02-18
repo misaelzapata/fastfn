@@ -10,10 +10,10 @@ Prerequisite: complete the basic QR tutorial first:
 
 ## 1) Create a new version folder (Python)
 
-We will create a new version `v3` so `/fn/qr@v3` is a distinct endpoint.
+We will create a new version `v3` so `/qr@v3` is a distinct endpoint.
 
 ```bash
-mkdir -p srv/fn/functions/python/qr/v3
+mkdir -p functions/python/qr/v3
 ```
 
 ## 2) Optional dependency upgrade (PIL styling)
@@ -24,10 +24,10 @@ If you want PIL styling, use:
 qrcode[pil]>=7.4
 ```
 
-Put it in `srv/fn/functions/python/qr/v3/requirements.txt`:
+Put it in `functions/python/qr/v3/requirements.txt`:
 
 ```bash
-cat > srv/fn/functions/python/qr/v3/requirements.txt <<'EOF'
+cat > functions/python/qr/v3/requirements.txt <<'EOF'
 qrcode[pil]>=7.4
 EOF
 ```
@@ -36,7 +36,7 @@ EOF
 
 When returning PNG from a handler, use base64 payload (`is_base64=true`).
 
-Create `srv/fn/functions/python/qr/v3/app.py`:
+Create `functions/python/qr/v3/app.py`:
 
 ```python
 import base64
@@ -48,7 +48,7 @@ from qrcode.image.styles.moduledrawers import RoundedModuleDrawer, CircleModuleD
 
 def handler(event):
     query = event.get("query") or {}
-    text = query.get("url") or query.get("text") or "https://fastfn.io"
+    text = query.get("url") or query.get("text") or "https://example.com"
     fill_color = query.get("fill", "black")
     back_color = query.get("back", "white")
     style = query.get("style", "square")
@@ -89,7 +89,7 @@ def handler(event):
 
 ## 4) Add function policy (optional, but recommended)
 
-Create `srv/fn/functions/python/qr/v3/fn.config.json`:
+Create `functions/python/qr/v3/fn.config.json`:
 
 ```json
 {
@@ -108,26 +108,26 @@ Create `srv/fn/functions/python/qr/v3/fn.config.json`:
 ## 5) Examples
 
 ```text
-/fn/qr@v3?url=https://example.com&style=round&fill=magenta
-/fn/qr@v3?url=https://example.com&style=circle&fill=green&back=black
+/qr@v3?url=https://example.com&style=round&fill=magenta
+/qr@v3?url=https://example.com&style=circle&fill=green&back=black
 ```
 
 You can also save a PNG file:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/qr@v3?text=Hello' -o /tmp/qr-v3.png
+curl -sS 'http://127.0.0.1:8080/qr@v3?text=Hello' -o /tmp/qr-v3.png
 file /tmp/qr-v3.png
 ```
 
 ## 6) Node composition pattern
 
-A Node function can prepare a URL and redirect to `/fn/qr`.
+A Node function can prepare a URL and redirect to `/qr`.
 
 ```js
 exports.handler = async (event) => {
   const query = event.query || {};
   const phone = query.phone;
-  const text = query.text || 'Hello from fastfn';
+  const text = query.text || 'Hello from FastFN';
   if (!phone) {
     return {
       status: 400,
@@ -139,7 +139,7 @@ exports.handler = async (event) => {
   const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
   return {
     status: 302,
-    headers: { Location: `/fn/qr@v3?url=${encodeURIComponent(waUrl)}` },
+    headers: { Location: `/qr@v3?url=${encodeURIComponent(waUrl)}` },
     body: '',
   };
 };

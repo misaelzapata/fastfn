@@ -51,7 +51,7 @@ Formato:
 - Ruta: `GET /toolbox-bot`, `POST /toolbox-bot`
 - Código: `examples/functions/node/toolbox-bot/app.js`
 
-Nota: `curl` interpreta `[` y `]` como "ranges" (globbing) en URLs. En ejemplos que incluyen `[[...]]` en la URL, usá `curl -g` para desactivar globbing.
+Nota: `curl` interpreta `[` y `]` como "ranges" (globbing) en URLs. En ejemplos que incluyen `[[...]]` en la URL, usa `curl -g` para desactivar globbing.
 
 ### 3.1 Solo plan (sin llamadas externas)
 
@@ -89,14 +89,14 @@ Los resultados incluyen:
 
 ## 4) Auto-tools (selección por intención)
 
-Si no incluís directivas, podés activar auto-tools:
+Si no incluyes directivas, puedes activar auto-tools:
 
 ```bash
 curl -sS \
 "http://127.0.0.1:8080/toolbox-bot?dry_run=true&auto_tools=true&text=cual%20es%20mi%20ip%20y%20como%20esta%20el%20clima%20en%20Buenos%20Aires%3F"
 ```
 
-Auto-tools es intencionalmente simple (por keywords). Si no elige nada, usá directivas manuales.
+Auto-tools es intencionalmente simple (por keywords). Si no elige nada, usa directivas manuales.
 
 ## 5) Allowlists (controles de seguridad)
 
@@ -135,7 +135,7 @@ Ejemplos que soportan tools:
 
 ## 6.1 OpenAI tool-calling (el modelo elige tools)
 
-Si querés un flow "mágico" donde **la IA elige tools** (en vez de heurísticas por keywords o directivas manuales), usá:
+Si quieres un flujo "mágico" donde **la IA elige tools** (en vez de heurísticas por keywords o directivas manuales), usa:
 
 - `ai-tool-agent` (Node)
   - Ruta: `GET /ai-tool-agent`

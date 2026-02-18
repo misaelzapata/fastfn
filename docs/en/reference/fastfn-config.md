@@ -47,7 +47,7 @@ Expected behavior:
 
 ```json
 {
-  "functions-dir": "srv/fn/functions",
+  "functions-dir": "functions",
   "public-base-url": "https://api.example.com"
 }
 ```

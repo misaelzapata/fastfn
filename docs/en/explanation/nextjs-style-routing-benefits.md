@@ -97,7 +97,7 @@ Results:
 
 So internal tooling can be off in hardened environments without sacrificing app routes.
 
-## 8. Why This Is Better Than `/fn/*`-Only DX
+## 8. Why This Improves DX
 
 - Lower setup friction.
 - Better source-of-truth: route is near handler code.

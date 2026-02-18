@@ -2,19 +2,19 @@
 
 En este tutorial armamos la misma funcion en dos runtimes:
 
-- `/fn/qr` (Python, responde SVG)
-- `/fn/qr@v2` (Node, responde PNG)
+- `/qr` (Python, responde SVG)
+- `/qr@v2` (Node, responde PNG)
 
 La idea es validar instalacion de dependencias por funcion (sin contaminar el sistema):
 
-- Python instala en `srv/fn/functions/python/qr/.deps`
-- Node instala en `srv/fn/functions/node/qr/v2/node_modules`
+- Python instala en `functions/python/qr/.deps`
+- Node instala en `functions/node/qr/v2/node_modules`
 
 ## 1) Crear carpetas
 
 ```bash
-mkdir -p srv/fn/functions/python/qr
-mkdir -p srv/fn/functions/node/qr/v2
+mkdir -p functions/python/qr
+mkdir -p functions/node/qr/v2
 ```
 
 ## 2) Agregar archivos de dependencias
@@ -22,7 +22,7 @@ mkdir -p srv/fn/functions/node/qr/v2
 Python:
 
 ```bash
-cat > srv/fn/functions/python/qr/requirements.txt <<'EOF'
+cat > functions/python/qr/requirements.txt <<'EOF'
 qrcode>=7.4
 EOF
 ```
@@ -30,7 +30,7 @@ EOF
 Node:
 
 ```bash
-cat > srv/fn/functions/node/qr/v2/package.json <<'EOF'
+cat > functions/node/qr/v2/package.json <<'EOF'
 {
   "name": "fn-node-qr-v2",
   "version": "1.0.0",
@@ -44,7 +44,7 @@ EOF
 
 ## 3) Codigo de funcion
 
-Python `srv/fn/functions/python/qr/app.py`:
+Python `functions/python/qr/app.py`:
 
 ```python
 import io
@@ -80,7 +80,7 @@ def handler(event):
     }
 ```
 
-Node `srv/fn/functions/node/qr/v2/app.js`:
+Node `functions/node/qr/v2/app.js`:
 
 ```javascript
 const QRCode = require('qrcode');
@@ -112,7 +112,7 @@ exports.handler = async (event) => {
 
 ## 4) Politica por funcion
 
-Python `srv/fn/functions/python/qr/fn.config.json`:
+Python `functions/python/qr/fn.config.json`:
 
 ```json
 {
@@ -128,7 +128,7 @@ Python `srv/fn/functions/python/qr/fn.config.json`:
 }
 ```
 
-Node `srv/fn/functions/node/qr/v2/fn.config.json`:
+Node `functions/node/qr/v2/fn.config.json`:
 
 ```json
 {
@@ -146,17 +146,17 @@ Node `srv/fn/functions/node/qr/v2/fn.config.json`:
 
 ## 5) Validar instalacion automatica + respuesta
 
-En Docker podes resetear dependencias:
+Podes resetear dependencias:
 
 ```bash
-docker compose exec -T openresty sh -lc "rm -rf /app/srv/fn/functions/python/qr/.deps /app/srv/fn/functions/node/qr/v2/node_modules"
+rm -rf functions/python/qr/.deps functions/node/qr/v2/node_modules
 ```
 
 Llamar ambos endpoints:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/qr?text=PythonQR' -o /tmp/qr-python.svg
-curl -sS 'http://127.0.0.1:8080/fn/qr@v2?text=NodeQR' -o /tmp/qr-node.png
+curl -sS 'http://127.0.0.1:8080/qr?text=PythonQR' -o /tmp/qr-python.svg
+curl -sS 'http://127.0.0.1:8080/qr@v2?text=NodeQR' -o /tmp/qr-node.png
 ```
 
 Validar tipos:
@@ -169,7 +169,6 @@ file /tmp/qr-node.png
 Validar que quedaron instaladas por funcion:
 
 ```bash
-docker compose exec -T openresty sh -lc "test -d /app/srv/fn/functions/python/qr/.deps/qrcode && echo python-ok"
-docker compose exec -T openresty sh -lc "test -d /app/srv/fn/functions/node/qr/v2/node_modules/qrcode && echo node-ok"
+test -d functions/python/qr/.deps/qrcode && echo python-ok
+test -d functions/node/qr/v2/node_modules/qrcode && echo node-ok
 ```
-

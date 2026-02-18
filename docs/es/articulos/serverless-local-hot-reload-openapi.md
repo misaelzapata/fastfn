@@ -17,17 +17,17 @@ Muchos setups serverless locales fallan por dos motivos:
 
 ## Idea base
 Definís funciones por archivos en:
-- `srv/fn/functions/<runtime>/<name>/`
+- `functions/<runtime>/<name>/`
 
 Con versionado opcional:
-- `srv/fn/functions/<runtime>/<name>/<version>/`
+- `functions/<runtime>/<name>/<version>/`
 
 No necesitás `routes.json` global.
 
 El gateway descubre automáticamente y aplica políticas por `fn.config.json`.
 
 ## Paso 1: Crear función mínima
-Crear `srv/fn/functions/python/my-profile/app.py`:
+Crear `functions/python/my-profile/app.py`:
 
 ```python
 import json
@@ -42,7 +42,7 @@ def handler(event):
     }
 ```
 
-Crear `srv/fn/functions/python/my-profile/fn.config.json`:
+Crear `functions/python/my-profile/fn.config.json`:
 
 ```json
 {
@@ -67,7 +67,7 @@ Así evitás reinicios en cada cambio.
 ## Paso 3: Invocar función
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/my-profile?name=Misael'
+curl -sS 'http://127.0.0.1:8080/my-profile?name=Misael'
 ```
 
 ## Paso 4: Verificar OpenAPI vivo
@@ -77,7 +77,7 @@ curl -sS http://127.0.0.1:8080/openapi.json
 ```
 
 Confirmá:
-- existe `/fn/my-profile`,
+- existe `/my-profile`,
 - métodos iguales a `invoke.methods`.
 
 Si cambiás a `POST` y recargás, OpenAPI se actualiza.
@@ -104,18 +104,18 @@ curl -sS 'http://127.0.0.1:8080/public/whoami?name=Misael'
 
 ## Paso 6: Versionado sin confusión
 Crear v2:
-- `srv/fn/functions/python/my-profile/v2/app.py`
-- `srv/fn/functions/python/my-profile/v2/fn.config.json`
+- `functions/python/my-profile/v2/app.py`
+- `functions/python/my-profile/v2/fn.config.json`
 
 Probar:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/fn/my-profile'
-curl -sS 'http://127.0.0.1:8080/fn/my-profile@v2'
+curl -sS 'http://127.0.0.1:8080/my-profile'
+curl -sS 'http://127.0.0.1:8080/my-profile@v2'
 ```
 
 ## Paso 7: Handler custom estilo Lambda
-Si no querés usar nombre `handler`, configurá `invoke.handler`.
+Si no quieres usar el nombre `handler`, configura `invoke.handler`.
 
 `fn.config.json`:
 
@@ -128,7 +128,7 @@ Si no querés usar nombre `handler`, configurá `invoke.handler`.
 }
 ```
 
-Luego definí/exportá `main` en el archivo runtime.
+Luego define/exporta `main` en el archivo runtime.
 
 ## Errores comunes y fixes
 

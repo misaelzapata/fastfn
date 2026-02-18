@@ -29,7 +29,7 @@ En este repo (corriendo `fastfn dev examples/functions`), ese path es:
 `examples/functions/node/telegram-send/fn.env.json`
 
 !!! tip "Consola deshabilitada?"
-    La Console UI viene deshabilitada por defecto. Si corrés con Docker Compose, habilitala con:
+    La Console UI viene deshabilitada por defecto. Si ejecutas con Docker Compose, habilítala con:
 
     - `FN_UI_ENABLED=1`
     - mantené `FN_CONSOLE_LOCAL_ONLY=1` (default) para que no se exponga remoto
@@ -67,9 +67,9 @@ Esperado: el JSON incluye `"sent":true`.
     - `TELEGRAM_BOT_TOKEN`
     - `TELEGRAM_API_BASE` (opcional)
 
-    Esto sirve si guardás secretos en un `.env` local usado por Docker Compose y no querés escribirlos en `fn.env.json`.
+    Esto sirve si guardas secretos en un `.env` local usado por Docker Compose y no quieres escribirlos en `fn.env.json`.
 
-    Si corrés `fastfn` con `docker compose`, `docker-compose.yml` ya pasa estas variables al contenedor.
+    Si ejecutas `fastfn` con `docker compose`, `docker-compose.yml` ya pasa estas variables al contenedor.
 
 ### Opcion B: script manual (recomendado)
 
@@ -131,9 +131,9 @@ curl -sS \
 "http://127.0.0.1:8080/telegram-ai-reply?mode=loop&dry_run=false&chat_id=${CHAT_ID}&prompt=fastfn%20loop%20demo&wait_secs=120&max_replies=5&memory=true&force_clear_webhook=true"
 ```
 
-Para modo scheduler, podés omitir `chat_id` y correr loop como poller multi-chat.
+Para modo scheduler, puedes omitir `chat_id` y correr loop como poller multi-chat.
 
-Para forzar un reply único, usá `mode=reply`.
+Para forzar un reply único, usa `mode=reply`.
 
 Notas:
 - `force_clear_webhook=true` limpia un webhook activo para evitar conflictos `getUpdates` (HTTP 409).
