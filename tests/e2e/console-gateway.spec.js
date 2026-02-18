@@ -11,7 +11,9 @@ async function assertOk(res, label) {
 
 test.describe('Console Gateway mapping UX', () => {
   test.beforeEach(async ({ request }) => {
-    const cfg = await request.put('/_fn/function-config?runtime=node&name=node-hello', {
+    // Use a dedicated function for this test so it doesn't affect other suites that rely on defaults
+    // (for example runtimes.spec.js expects /node-hello to exist).
+    const cfg = await request.put('/_fn/function-config?runtime=node&name=my-demo', {
       headers: {
         'Content-Type': 'application/json',
         'x-fn-admin-token': ADMIN_TOKEN,
@@ -38,14 +40,14 @@ test.describe('Console Gateway mapping UX', () => {
 
     const row = page.locator('#routeTableBody tr', { hasText: '/api/e2e-node-echo' }).first();
     await expect(row).toBeVisible();
-    await expect(row).toContainText('node/node-hello');
+    await expect(row).toContainText('node/my-demo');
     await expect(row).toContainText(/GET,\s*POST/);
 
     await row.getByRole('button', { name: /Open/i }).click();
 
     // Gateway "Open" goes to the function detail view and pre-fills Explorer/Test with the mapped route.
-    await expect(page).toHaveURL(/\/console\/functions\/node\/node-hello/);
-    await expect(page.locator('#detailFnName')).toContainText('node-hello');
+    await expect(page).toHaveURL(/\/console\/functions\/node\/my-demo/);
+    await expect(page.locator('#detailFnName')).toContainText('my-demo');
 
     await expect(page.locator('#invokeRoute')).toHaveValue('/api/e2e-node-echo');
 
