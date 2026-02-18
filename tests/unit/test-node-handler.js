@@ -15,6 +15,7 @@ const githubWebhookGuardHandler = require(path.join(root, "examples/functions/no
 const edgeHeaderInjectHandler = require(path.join(root, "examples/functions/node/edge-header-inject/app.js")).handler;
 const telegramAiReplyHandler = require(path.join(root, "examples/functions/node/telegram-ai-reply/app.js")).handler;
 const telegramAiDigestHandler = require(path.join(root, "examples/functions/node/telegram-ai-digest/app.js")).handler;
+const toolboxBotHandler = require(path.join(root, "examples/functions/node/toolbox-bot/app.js")).handler;
 const whatsappHandler = require(path.join(root, "examples/functions/node/whatsapp/app.js")).handler;
 const ipIntelRemoteHandler = require(path.join(root, "examples/functions/ip-intel/get.remote.js")).handler;
 
@@ -75,6 +76,11 @@ async function main() {
   await testEdgeProxyDirectiveShape();
   await testEdgeFilterAuthAndRewrite();
   await testRequestInspector();
+  await testToolboxBotManualPlanDryRun();
+  await testToolboxBotAutoToolsPlanDryRun();
+  await testToolboxBotExecuteManualPlan();
+  await testToolboxBotDenyHostWithoutFetching();
+  await testToolboxBotDenyFnWithoutFetching();
   await testEdgeAuthGateway();
   await testGithubWebhookGuard();
   await testEdgeHeaderInject();
@@ -377,6 +383,155 @@ async function testRequestInspector() {
   assert.equal(body.headers["x-test"], "1");
   assert.equal(body.body, "hello");
   assert.equal(body.context.request_id, "req-ri");
+}
+
+async function testToolboxBotManualPlanDryRun() {
+  const resp = await toolboxBotHandler({
+    method: "GET",
+    query: {
+      dry_run: true,
+      text: "Use [[http:https://api.ipify.org?format=json]] and [[fn:request-inspector?key=demo|GET]]",
+    },
+  });
+  assert.equal(resp.status, 200);
+  const body = JSON.parse(resp.body);
+  assert.equal(body.ok, true);
+  assert.equal(body.dry_run, true);
+  assert.equal(Array.isArray(body.plan), true);
+  assert.equal(body.plan.length, 2);
+  assert.equal(body.plan[0].type, "fn");
+  assert.equal(body.plan[0].name, "request-inspector");
+  assert.equal(body.plan[0].query, "?key=demo");
+  assert.equal(body.plan[0].method, "GET");
+  assert.equal(body.plan[1].type, "http");
+  assert.equal(body.plan[1].url, "https://api.ipify.org?format=json");
+}
+
+async function testToolboxBotAutoToolsPlanDryRun() {
+  const resp = await toolboxBotHandler({
+    method: "GET",
+    query: {
+      dry_run: true,
+      auto_tools: true,
+      text: "my ip and weather in Buenos Aires",
+    },
+  });
+  assert.equal(resp.status, 200);
+  const body = JSON.parse(resp.body);
+  assert.equal(body.ok, true);
+  assert.equal(body.dry_run, true);
+  assert.equal(Array.isArray(body.plan), true);
+  assert.equal(body.plan.length, 2);
+  assert.equal(body.plan[0].type, "http");
+  assert.equal(body.plan[0].url, "https://api.ipify.org/?format=json");
+  assert.equal(body.plan[1].type, "http");
+  assert.equal(body.plan[1].url, "https://wttr.in/Buenos%20Aires?format=3");
+}
+
+async function testToolboxBotExecuteManualPlan() {
+  const prevFetch = global.fetch;
+  const calls = [];
+  global.fetch = async (url, opts = {}) => {
+    calls.push({ url: String(url), method: String(opts.method || "GET") });
+    const u = String(url);
+    if (u.includes("/fn/request-inspector")) {
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => "application/json" },
+        text: async () => JSON.stringify({ ok: true, note: "request-inspector-mock" }),
+      };
+    }
+    if (u.startsWith("https://api.ipify.org")) {
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: () => "application/json" },
+        text: async () => JSON.stringify({ ip: "203.0.113.10" }),
+      };
+    }
+    return {
+      ok: false,
+      status: 418,
+      headers: { get: () => "text/plain" },
+      text: async () => "nope",
+    };
+  };
+  try {
+    const resp = await toolboxBotHandler({
+      method: "GET",
+      query: {
+        dry_run: false,
+        text: "Use [[http:https://api.ipify.org?format=json]] and [[fn:request-inspector?key=demo|GET]]",
+      },
+    });
+    assert.equal(resp.status, 200);
+    const body = JSON.parse(resp.body);
+    assert.equal(body.ok, true);
+    assert.equal(body.dry_run, false);
+    assert.equal(body.summary.ok, true);
+    assert.equal(Array.isArray(body.results), true);
+    assert.equal(body.results.length, 2);
+    assert.equal(body.results[0].type, "fn");
+    assert.equal(body.results[0].name, "request-inspector");
+    assert.equal(body.results[0].ok, true);
+    assert.equal(body.results[0].status, 200);
+    assert.equal(body.results[1].type, "http");
+    assert.equal(body.results[1].ok, true);
+    assert.equal(body.results[1].status, 200);
+    assert.equal(calls.length, 2);
+    assert.ok(calls[0].url.includes("/fn/request-inspector?key=demo"));
+    assert.equal(calls[0].method, "GET");
+    assert.ok(calls[1].url.startsWith("https://api.ipify.org/?format=json"));
+  } finally {
+    global.fetch = prevFetch;
+  }
+}
+
+async function testToolboxBotDenyHostWithoutFetching() {
+  const prevFetch = global.fetch;
+  global.fetch = async () => {
+    throw new Error("unexpected fetch");
+  };
+  try {
+    const resp = await toolboxBotHandler({
+      method: "GET",
+      query: { dry_run: false, text: "Use [[http:https://example.com/]]" },
+    });
+    assert.equal(resp.status, 200);
+    const body = JSON.parse(resp.body);
+    assert.equal(body.ok, true);
+    assert.equal(body.dry_run, false);
+    assert.equal(body.summary.ok, false);
+    assert.equal(body.results.length, 1);
+    assert.equal(body.results[0].ok, false);
+    assert.equal(body.results[0].error, "host not allowed");
+  } finally {
+    global.fetch = prevFetch;
+  }
+}
+
+async function testToolboxBotDenyFnWithoutFetching() {
+  const prevFetch = global.fetch;
+  global.fetch = async () => {
+    throw new Error("unexpected fetch");
+  };
+  try {
+    const resp = await toolboxBotHandler({
+      method: "GET",
+      query: { dry_run: false, text: "Use [[fn:not_allowed|GET]]" },
+    });
+    assert.equal(resp.status, 200);
+    const body = JSON.parse(resp.body);
+    assert.equal(body.ok, true);
+    assert.equal(body.dry_run, false);
+    assert.equal(body.summary.ok, false);
+    assert.equal(body.results.length, 1);
+    assert.equal(body.results[0].ok, false);
+    assert.equal(body.results[0].error, "function not allowed");
+  } finally {
+    global.fetch = prevFetch;
+  }
 }
 
 async function testEdgeAuthGateway() {
