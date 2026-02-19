@@ -247,6 +247,40 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Install OpenResty for native parity tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v openresty >/dev/null 2>&1; then
+            command -v openresty
+            openresty -V
+            exit 0
+          fi
+
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends curl gnupg2 ca-certificates lsb-release
+
+          codename="$(. /etc/os-release && echo "${VERSION_CODENAME:-}")"
+          if [[ -z "$codename" ]]; then
+            codename="$(lsb_release -sc)"
+          fi
+
+          sudo install -m 0755 -d /usr/share/keyrings
+          curl -fsSL https://openresty.org/package/pubkey.gpg | sudo gpg --dearmor -o /usr/share/keyrings/openresty.gpg
+          echo "deb [signed-by=/usr/share/keyrings/openresty.gpg] http://openresty.org/package/ubuntu ${codename} main" | \
+            sudo tee /etc/apt/sources.list.d/openresty.list >/dev/null
+
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends openresty
+
+          if ! command -v openresty >/dev/null 2>&1 && [[ -x /usr/local/openresty/bin/openresty ]]; then
+            echo "/usr/local/openresty/bin" >> "$GITHUB_PATH"
+            sudo ln -sf /usr/local/openresty/bin/openresty /usr/local/bin/openresty
+          fi
+
+          command -v openresty
+          openresty -V
+
       - name: Ensure bash is available
         shell: sh
         run: |

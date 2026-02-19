@@ -19,6 +19,11 @@ has_cmd() {
 }
 
 check_native_prereqs() {
+  if [ -x "/usr/local/openresty/bin/openresty" ]; then
+    PATH="/usr/local/openresty/bin:$PATH"
+    export PATH
+  fi
+
   if has_cmd openresty; then
     return 0
   fi
