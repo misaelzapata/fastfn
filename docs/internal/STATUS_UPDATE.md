@@ -26,8 +26,13 @@
 
 - [x] External reference set used for alignment (standard pattern):
   - Cloudflare Wrangler docs: explicit prerequisite/install flow
-  - Supabase CLI docs: Docker as mandatory local dependency with health guidance
-  - AWS SAM / LocalStack docs: clear failure wording when local container runtime is missing or unavailable
+    - https://developers.cloudflare.com/workers/wrangler/install-and-update/
+  - Supabase CLI docs: Docker-compatible runtime as mandatory local dependency
+    - https://supabase.com/docs/guides/local-development
+  - AWS SAM docs: explicit docker-required failure message for local execution
+    - https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-cli-troubleshooting.html
+  - LocalStack docs: concrete “Docker not available” troubleshooting + fix command
+    - https://docs.localstack.cloud/aws/services/lambda/
 
 ## Update: 2026-02-19 (Runtime Reliability Hardening: Restart + Socket Safety)
 
