@@ -1,111 +1,158 @@
-# Primeros Pasos <small>🚀</small>
+# Primeros pasos
 
-Bienvenido a **fastfn**. Esta guía te llevará desde cero hasta una plataforma serverless local completamente funcional en menos de **2 minutos**.
+Esta guia te muestra el flujo completo de FastFN con validaciones reales.
 
----
+Vas a:
 
-## 🎯 Qué estamos construyendo
+1. compilar el CLI
+2. levantar el runtime
+3. enviar trafico HTTP real
+4. validar salud, ruteo y OpenAPI
 
-No solo estamos ejecutando un script; estamos iniciando una **Plataforma FaaS Lista para Producción** localmente que incluye:
+Si vienes de FastAPI o de rutas API de Next.js, el modelo es familiar: los archivos definen rutas y luego la capa de config/politica ajusta comportamiento.
 
-1.  **Gateway (OpenResty)**: Maneja enrutamiento, seguridad y balanceo de carga.
-2.  **Workers (Python, Node.js, PHP, Lua, Rust)**: Procesos persistentes listos para ejecutar código.
-3.  **Consola y Docs**: UI integrada para gestionar y probar tus funciones.
+## Antes de empezar
 
----
-
-## 1. Iniciar la Plataforma ⚡️
-
-Todo el sistema está contenerizado. No necesitas instalar Python, Node, PHP, Lua o Nginx en tu máquina. Solo Docker.
+Desde la raiz del repo:
 
 ```bash
-docker compose up -d --build
+make build-cli
 ```
 
-<div class="result" markdown>
-:white_check_mark: **Listo.** La plataforma ahora está escuchando en el puerto `8080`.
-</div>
+Esto genera `./bin/fastfn`.
 
-!!! tip "Bajo el capó"
-    `docker compose up` levanta OpenResty y los runtimes de lenguaje en el mismo servicio, conectados por Unix sockets.
+Modos de ejecucion:
 
----
+- `docker` (default, recomendado para primera corrida): `./bin/fastfn dev .`
+- `native` (requiere OpenResty en PATH): `./bin/fastfn dev --native .`
 
-## 2. Verificar Salud del Sistema 🏥
+Referencias relacionadas:
 
-Antes de ejecutar código, asegurémonos de que el cerebro del sistema esté activo.
+- [Flags del CLI](../referencia/cli-reference.md)
+- [Desplegar en produccion](../como-hacer/desplegar-a-produccion.md)
+- [Arquitectura](../explicacion/arquitectura.md)
 
-### Navegador
+## 1) Crear una primera funcion
 
-Abre **[http://127.0.0.1:8080/_fn/health](http://127.0.0.1:8080/_fn/health)**
+Crea una funcion minima:
 
-### Terminal
+```bash
+./bin/fastfn init hello --template node
+```
+
+Se crea una carpeta con:
+
+- `fn.config.json` (config y politica de la funcion)
+- `handler.js` (handler runtime)
+
+Referencia:
+
+- [Especificacion de funciones](../referencia/especificacion-funciones.md)
+- [Configuracion fastfn.json](../referencia/config-fastfn.md)
+
+## 2) Levantar FastFN
+
+Modo Docker:
+
+```bash
+./bin/fastfn dev .
+```
+
+Modo Native:
+
+```bash
+./bin/fastfn dev --native .
+```
+
+Que inicia internamente:
+
+1. gateway (OpenResty)
+2. daemons de runtime (Node/Python/PHP/Lua y runtimes experimentales opcionales)
+3. discovery de archivos y generacion del mapa de rutas
+
+Mas detalle:
+
+- [Flujo de invocacion](../explicacion/flujo-invocacion.md)
+- [Contrato runtime](../referencia/contrato-runtime.md)
+
+## 3) Verificar salud del sistema
+
+En otra terminal:
 
 ```bash
 curl -sS 'http://127.0.0.1:8080/_fn/health' | jq
 ```
 
-**Salida Esperada:**
-```json
-{
-  "runtimes": {
-    "python": { "health": { "up": true } },
-    "node":   { "health": { "up": true } },
-    "php":    { "health": { "up": true } },
-    "rust":   { "health": { "up": true } }
-  }
-}
-```
+Esperado:
 
-Si ves `"up": true`, los workers están conectados al gateway vía Sockets Unix y esperan comandos.
+- gateway accesible
+- cada runtime habilitado con `"up": true`
 
----
+Si un runtime aparece caido:
 
-## 3. Primer Demo: Generador QR
+- revisar dependencias faltantes en modo native (`openresty`, `node`, `python3`, etc.)
+- revisar daemon de Docker en modo docker
 
-La plataforma trae ejemplos listos. Empieza con QR:
+Rutas de troubleshooting:
 
-**Petición:**
-```bash
-curl 'http://127.0.0.1:8080/qr?text=HolaQR' -o /tmp/qr.svg
-```
+- [Ejecutar y probar](../como-hacer/ejecutar-y-probar.md)
+- [Recetas operativas](../como-hacer/recetas-operativas.md)
 
-Luego prueba una función JSON:
+## 4) Enviar la primera request
 
 ```bash
-curl 'http://127.0.0.1:8080/hello?name=Mundo'
+curl -i 'http://127.0.0.1:8080/hello?name=Mundo'
 ```
 
-!!! question "¿Cómo sucedió eso?"
-    1.  La petición llegó a **Nginx** en el puerto 8080.
-    2.  Nginx vio `/hello` y lo enrutó al **Controlador Lua**.
-    3.  Lua verificó la función descubierta en `FN_FUNCTIONS_ROOT`.
-    4.  Reenvió la petición al socket Unix del runtime resuelto.
-    5.  El Worker ejecutó `handler()` y retornó el JSON.
-    **Todo típicamente en < 5ms.**
+Esto valida:
 
----
+1. resolucion de ruta publica
+2. dispatch gateway -> socket runtime
+3. normalizacion de salida del handler a respuesta HTTP
 
-## 4. Explora el Dashboard
+Modelo de ruteo:
 
-No tienes que usar `curl` para todo. Incluimos una consola visual.
+- [Especificacion de funciones](../referencia/especificacion-funciones.md)
+- [Arquitectura](../explicacion/arquitectura.md)
 
-Abre **[http://127.0.0.1:8080/console/wizard](http://127.0.0.1:8080/console/wizard)** (paso a paso para principiantes)
+## 5) Validar consistencia de docs y mapa de rutas
 
-Desde aquí puedes:
-*   Ver todas las funciones desplegadas.
-*   Editar código en el navegador (si está habilitado).
-*   **Probar funciones** con payloads JSON personalizados.
-*   Ver logs de ejecución.
+OpenAPI:
 
-!!! note "Consola deshabilitada por defecto"
-    La UI de consola está apagada a menos que la habilites:
+```bash
+curl -sS 'http://127.0.0.1:8080/_fn/openapi.json' | jq '.paths | keys'
+```
 
-    ```bash
-    export FN_UI_ENABLED=1
-    docker compose up -d --build
-    ```
+Catalogo:
 
-[Siguiente: Escribe Tu Primera Función](./tu-primera-funcion.md){ .md-button .md-button--primary }
+```bash
+curl -sS 'http://127.0.0.1:8080/_fn/catalog' | jq '{mapped_routes, mapped_route_conflicts}'
+```
 
-[Demo Bot de WhatsApp (QR login + enviar/recibir + AI)](./demo-bot-whatsapp.md){ .md-button }
+Esperado:
+
+- la ruta aparece en catalogo y OpenAPI
+- `mapped_route_conflicts` vacio
+
+Referencias:
+
+- [API HTTP](../referencia/api-http.md)
+- [Funciones de ejemplo](../referencia/funciones-ejemplo.md)
+
+## 6) Apagar limpio
+
+Modo Docker:
+
+```bash
+docker compose down --remove-orphans
+```
+
+Modo Native:
+
+- detener con `Ctrl+C` en la terminal de `fastfn dev --native`.
+
+## Siguientes lecturas
+
+- [Construir API completa](./construir-api-completa.md)
+- [Ejecutar y probar (validacion completa)](../como-hacer/ejecutar-y-probar.md)
+- [Desplegar a produccion](../como-hacer/desplegar-a-produccion.md)

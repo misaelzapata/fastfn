@@ -118,9 +118,9 @@ Revisar tus logs es importante. Por defecto, FastFN registra detalles de ejecuci
     Si necesitas depurar, imprime solo claves seguras o valores enmascarados.
 
 ```python
-# ✅ BIEN
+# BIEN
 print(f"Auth check: clave_provista={bool(provided_key)}")
 
-# ❌ MAL
+# MAL
 print(f"Auth check: clave={provided_key}") 
 ```

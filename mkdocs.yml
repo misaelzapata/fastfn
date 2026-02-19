@@ -91,6 +91,7 @@ nav:
       - Build a Complete API: en/tutorial/build-complete-api.md
     - How-To Guides:
       - Quick Start (Dev): en/how-to/run-and-test.md
+      - FastAPI/Next.js Playbook: en/how-to/fastapi-nextjs-playbook.md
       - Deploy to Production: en/how-to/deploy-to-production.md
       - Operational Recipes: en/how-to/operational-recipes.md
       - Install (Homebrew): en/how-to/homebrew.md
@@ -158,6 +159,7 @@ nav:
       - Auth y Secretos: es/tutorial/auth-y-secretos.md
     - Guías Cómo-Hacer:
       - Consola y Administración: es/como-hacer/consola-admin.md
+      - Playbook FastAPI/Next.js: es/como-hacer/playbook-fastapi-nextjs.md
       - Instalar (Homebrew): es/como-hacer/homebrew.md
       - Gestionar Funciones: es/como-hacer/gestionar-funciones.md
       - Recetas Operativas: es/como-hacer/recetas-operativas.md

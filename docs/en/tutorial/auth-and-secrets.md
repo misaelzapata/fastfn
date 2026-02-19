@@ -120,9 +120,9 @@ Reviewing your logs is important. By default, FastFN logs execution details.
     If you need to debug, print only safe keys or masked values.
 
 ```python
-# ✅ GOOD
+# GOOD
 print(f"Auth check: key_provided={bool(provided_key)}")
 
-# ❌ BAD
+# BAD
 print(f"Auth check: key={provided_key}") 
 ```

@@ -15,40 +15,40 @@ Esta documentación sigue el framework **[Diátaxis](https://diataxis.fr/)** par
 
 <div class="grid cards" markdown>
 
--   :material-school: **Tutoriales**
+-   **Tutoriales**
     
     Empieza aquí si eres nuevo. Lecciones paso a paso.
     
-    [Comenzar Aquí :arrow_right:](./tutorial/primeros-pasos.md)
+    [Comenzar aqui](./tutorial/primeros-pasos.md)
 
--   :material-compass-outline: **Guías Cómo-Hacer**
+-   **Guias Como-Hacer**
     
     Recetas prácticas y accionables para tareas concretas.
     
-    [Ver Guías :arrow_right:](./como-hacer/ejecutar-y-probar.md)
+    [Ver guias](./como-hacer/ejecutar-y-probar.md)
 
--   :material-book-open-page-variant: **Referencia**
+-   **Referencia**
     
     Descripciones técnicas de APIs, contratos y configuraciones.
     
-    [Explorar Referencia :arrow_right:](./referencia/api-http.md)
+    [Explorar referencia](./referencia/api-http.md)
 
--   :material-text-box-search-outline: **Explicación**
+-   **Explicacion**
     
     Profundización en arquitectura, decisiones de diseño y el "por qué".
     
-    [Leer Explicaciones :arrow_right:](./explicacion/arquitectura.md)
+    [Leer explicaciones](./explicacion/arquitectura.md)
 
 </div>
 
 ## ¿Por qué FastFN?
 
-### 🆚 Mejor que FastApi/Express puro
+### Mejor que FastApi/Express puro
 *   **Cero Boilerplate**: Sin `app = FastAPI()`, sin `app.listen()`. Solo funciones.
 *   **Auto-Discovery**: El sistema de archivos es el router.
 *   **Políglota**: Mezcla Python para IA, Node para IO, Lua para glue logic y Rust para velocidad.
 
-### 🆚 Mejor que OpenFaaS/Knative
+### Mejor que OpenFaaS/Knative
 *   **Sin Kubernetes**: Corre en Docker simple o procesos nativos.
 *   **Ciclo de Dev Instantáneo**: Los cambios se reflejan al instante (`fastfn dev`). Sin construir Docker por cambio.
 *   **Ligero**: Mínimo consumo de recursos.

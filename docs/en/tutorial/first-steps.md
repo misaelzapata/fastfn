@@ -1,128 +1,158 @@
-# First Steps <small>🚀</small>
+# First Steps
 
-Welcome to **fastfn**. This guide will take you from zero to a fully functional local serverless platform in under **2 minutes**.
+This guide is the fastest way to understand how FastFN works in practice.
 
----
+You will:
 
-## 🎯 What we are building
+1. build the CLI
+2. start the runtime stack
+3. send real API traffic
+4. verify health, routing, and OpenAPI consistency
 
-We are not just running a script; we are booting up a **Production-Ready FaaS Platform** locally that includes:
+If you are coming from FastAPI or Next.js API routes, this should feel familiar: files define routes, then policy/config layers refine behavior.
 
-1.  **Gateway (OpenResty)**: Handles routing, security, and load balancing.
-2.  **Workers (Python, Node.js, PHP, Rust)**: Persistently running processes ready to execute code instantly.
-3.  **Console & Docs**: Built-in UI to manage and test your functions.
+## Before you start
 
----
-
-## 1. Setup & Create Function ⚡️
-
-First, build the CLI tool and initialize your first serverless function.
+From repo root:
 
 ```bash
-# Build the CLI tool
 make build-cli
-
-# Create a new function (choose your language: node, python, php, rust)
-./bin/fastfn init my-first-func --template node
 ```
 
-This creates a `my-first-func/` directory with a configuration file and handler code.
+This creates `./bin/fastfn`.
 
----
+Runtime modes:
 
-## 2. Start the Runtime 🚀
+- `docker` (default, recommended for first run): `./bin/fastfn dev .`
+- `native` (requires OpenResty in PATH): `./bin/fastfn dev --native .`
 
-Start the platform in development mode. This will mount your current directory (including your new function) into the runtime environment.
+Related references:
+
+- [CLI flags](../reference/cli.md)
+- [Deploy mode expectations](../how-to/deploy-to-production.md)
+- [Architecture](../explanation/architecture.md)
+
+## 1) Create a first function
+
+Create a minimal function:
 
 ```bash
-# Start the development server
-make dev
+./bin/fastfn init hello --template node
 ```
 
-<div class="result" markdown>
-:white_check_mark: **Done.** The platform is now listening on port `8080`.
-</div>
+This creates a function folder with:
 
-!!! tip "Under the Hood"
-    `make dev` runs `docker compose up` but dynamically mounts local function directories into the container, enabling hot-reload.
+- `fn.config.json` (function policy/config)
+- `handler.js` (runtime handler)
 
----
+Function config reference:
 
-## 2. Verify System Health 🏥
+- [Function spec](../reference/function-spec.md)
+- [fastfn.json config](../reference/fastfn-config.md)
 
-Before we run code, let's make sure the brain of the system is active.
+## 2) Start FastFN
 
-### Browser
+Docker mode:
 
-Open **[http://127.0.0.1:8080/_fn/health](http://127.0.0.1:8080/_fn/health)**
+```bash
+./bin/fastfn dev .
+```
 
-### Terminal
+Native mode:
+
+```bash
+./bin/fastfn dev --native .
+```
+
+What starts internally:
+
+1. gateway (OpenResty)
+2. runtime daemons (Node/Python/PHP/Lua and optional experimental runtimes)
+3. file discovery and route map generation
+
+Lifecycle details:
+
+- [Invocation flow](../explanation/invocation-flow.md)
+- [Runtime contract](../reference/runtime-contract.md)
+
+## 3) Verify system health
+
+In a new terminal:
 
 ```bash
 curl -sS 'http://127.0.0.1:8080/_fn/health' | jq
 ```
 
-**Expected Output:**
-```json
-{
-  "runtimes": {
-    "python": { "health": { "up": true } },
-    "node":   { "health": { "up": true } },
-    "php":    { "health": { "up": true } },
-    "rust":   { "health": { "up": true } }
-  }
-}
-```
+Expected:
 
-If you see `"up": true`, the workers are connected to the gateway via Unix Sockets and are waiting for commands.
+- gateway reachable
+- each enabled runtime reports `"up": true`
 
----
+If runtime health is down:
 
-## 3. First Demo: QR Generator
+- check missing dependencies in native mode (`openresty`, `node`, `python3`, etc.)
+- check Docker daemon in docker mode
 
-The platform includes built-in examples. Start with QR:
+Troubleshooting paths:
 
-**Request:**
-```bash
-curl 'http://127.0.0.1:8080/qr?text=HelloQR' -o /tmp/qr.svg
-```
+- [Run and test checklist](../how-to/run-and-test.md)
+- [Operational recipes](../how-to/operational-recipes.md)
 
-Then check a JSON function:
+## 4) Send your first request
 
 ```bash
-curl 'http://127.0.0.1:8080/hello?name=World'
+curl -i 'http://127.0.0.1:8080/hello?name=World'
 ```
 
-!!! question "How did that happen?"
-    1.  Request hit **Nginx** at port 8080.
-    2.  Nginx saw `/hello` and routed it to the **Lua Controller**.
-    3.  Lua checked the discovered function files under `FN_FUNCTIONS_ROOT`.
-    4.  It forwarded the request to the resolved runtime socket.
-    5.  Worker executed `handler()` and returned the JSON.
-    **All in typically < 5ms.**
+What this validates:
 
----
+1. public route resolution
+2. gateway to runtime socket dispatch
+3. handler output normalization to HTTP response
 
-## 4. Explore the Dashboard
+Routing model:
 
-You don't have to use `curl` for everything. We include a visual console.
+- [Zero-config routing](../how-to/zero-config-routing.md)
+- [Next.js style routing rationale](../explanation/nextjs-style-routing-benefits.md)
 
-Open **[http://127.0.0.1:8080/console/wizard](http://127.0.0.1:8080/console/wizard)** (beginner-friendly step-by-step)
+## 5) Validate docs and route map consistency
 
-From here you can:
-*   See all deployed functions.
-*   Edit code in the browser (if enabled).
-*   **Test functions** with custom JSON payloads.
-*   View execution logs.
+OpenAPI:
 
-!!! note "Console disabled by default"
-    The Console UI is off unless you enable it:
+```bash
+curl -sS 'http://127.0.0.1:8080/_fn/openapi.json' | jq '.paths | keys'
+```
 
-    ```bash
-    export FN_UI_ENABLED=1
-    docker compose up -d --build
-    ```
+Catalog:
 
-[Next: Write Your First Function](./your-first-function.md){ .md-button .md-button--primary }
+```bash
+curl -sS 'http://127.0.0.1:8080/_fn/catalog' | jq '{mapped_routes, mapped_route_conflicts}'
+```
 
-[WhatsApp Bot Demo (QR login + send/receive + AI)](./whatsapp-bot-demo.md){ .md-button }
+Expected:
+
+- your route exists in both catalog and OpenAPI
+- `mapped_route_conflicts` is empty
+
+HTTP/API references:
+
+- [HTTP API](../reference/http-api.md)
+- [Built-in endpoints](../reference/builtin-functions.md)
+
+## 6) Stop cleanly
+
+Docker mode:
+
+```bash
+docker compose down --remove-orphans
+```
+
+Native mode:
+
+- stop with `Ctrl+C` in the `fastfn dev --native` terminal.
+
+## Next links
+
+- [Write your first function](./your-first-function.md)
+- [Build a complete API](./build-complete-api.md)
+- [Run and test (full validation)](../how-to/run-and-test.md)

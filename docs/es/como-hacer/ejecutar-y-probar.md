@@ -1,82 +1,159 @@
 # Ejecutar y probar
 
-Checklist practico para validar FastFN en local.
+Esta guia define un flujo de validacion real para usar FastFN como plataforma FaaS en serio.
 
-## Que valida
+Esta ordenada por etapas para que puedas usarla igual en local y en CI.
 
-- arranque en modo portable (Docker)
-- salud de runtimes
-- respuesta de rutas publicas
-- OpenAPI + Swagger UI
-- unit + integracion + UI E2E
+## Alcance de validacion
+
+Este flujo valida:
+
+- arranque de runtimes y salud
+- discovery de rutas y manejo de requests
+- paridad OpenAPI con rutas descubiertas
+- comportamiento ante conflictos de rutas
+- suites de regresion (unit + integracion)
+
+Contexto tecnico:
+
+- [Arquitectura](../explicacion/arquitectura.md)
+- [Flujo de invocacion](../explicacion/flujo-invocacion.md)
+- [Especificacion de funciones](../referencia/especificacion-funciones.md)
+- [Playbook FastAPI/Next.js](./playbook-fastapi-nextjs.md)
 
 ## Requisitos
 
-- Docker Desktop activo
-- `bin/fastfn` compilado o instalado
-- puerto `8080` libre
+Base:
 
-## 1) Pipeline automatico (recomendado)
+- `./bin/fastfn` disponible
+- `curl`, `jq`
 
-```bash
-bash scripts/ci/test-pipeline.sh
-```
+Segun modo:
 
-Si pasa, la plataforma esta OK.
+- modo Docker (`fastfn dev`): Docker CLI + daemon activo
+- modo Native (`fastfn dev --native`): OpenResty en PATH y runtimes que vayas a usar
 
-## 2) Verificacion manual
+## Etapa 1: build y arranque
 
-### Levantar demo
+Build:
 
 ```bash
-bin/fastfn dev examples/functions/next-style
+make build-cli
 ```
 
-### Salud
+Arranque en Docker:
+
+```bash
+./bin/fastfn dev examples/functions/next-style
+```
+
+Arranque en Native:
+
+```bash
+./bin/fastfn dev --native examples/functions/next-style
+```
+
+Criterio de aceptacion:
+
+- proceso inicia sin errores fatales
+- `/_fn/health` llega a HTTP `200`
+
+## Etapa 2: salud y endpoints base
+
+Salud:
 
 ```bash
 curl -sS 'http://127.0.0.1:8080/_fn/health' | jq
 ```
 
-### Rutas publicas
+Smoke de rutas publicas:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/hello?name=World'
+curl -i 'http://127.0.0.1:8080/hello?name=Mundo'
+curl -i 'http://127.0.0.1:8080/html?name=Designer'
 ```
 
-Chequeo opcional de deps (auto-install + cold start):
+Criterio de aceptacion:
+
+- health reporta runtimes habilitados en `up=true`
+- endpoints responden HTTP `200`
+
+## Etapa 3: paridad OpenAPI y mapa de rutas
+
+Rutas OpenAPI:
 
 ```bash
-bin/fastfn dev examples/functions
-
-curl -sS 'http://127.0.0.1:8080/qr?text=PythonQR' -o /tmp/qr-python.svg
-curl -sS 'http://127.0.0.1:8080/qr@v2?text=NodeQR' -o /tmp/qr-node.png
-
-# Forzar reinstalacion (estos folders se crean en runtime):
-rm -rf examples/functions/python/qr/.deps
-rm -rf examples/functions/node/qr/v2/node_modules
+curl -sS 'http://127.0.0.1:8080/_fn/openapi.json' | jq '.paths | keys'
 ```
 
-## 3) Docs
+Catalogo y conflictos:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/openapi.json' | head -c 300
+curl -sS 'http://127.0.0.1:8080/_fn/catalog' | jq '{mapped_routes, mapped_route_conflicts}'
 ```
 
-- Swagger: [http://127.0.0.1:8080/docs](http://127.0.0.1:8080/docs)
-- Console: [http://127.0.0.1:8080/console](http://127.0.0.1:8080/console)
+Criterio de aceptacion:
 
-## 4) Apagar limpio
+- las rutas publicas esperadas existen en OpenAPI
+- `mapped_route_conflicts` vacio en operacion normal
+
+Referencias:
+
+- [API HTTP](../referencia/api-http.md)
+- [Especificacion de funciones](../referencia/especificacion-funciones.md)
+
+## Etapa 4: validar politica de conflictos
+
+FastFN no debe sobrescribir rutas mapeadas en silencio por default.
+
+Validar:
+
+1. crear dos funciones que reclamen la misma ruta
+2. revisar catalogo y conflicto detectado
+3. confirmar comportamiento determinista de error
+
+Politica:
+
+- `invoke.force-url` por funcion
+- `FN_FORCE_URL` global
+
+Detalles:
+
+- [Config fastfn.json](../referencia/config-fastfn.md)
+- [Especificacion de funciones](../referencia/especificacion-funciones.md)
+
+## Etapa 5: suites de regresion
+
+Pipeline completo:
 
 ```bash
-docker compose down --remove-orphans
+bash scripts/ci/test-pipeline.sh
 ```
 
-## 5) Root de funciones
+Suites focalizadas:
 
-FastFN escanea el directorio que le pasas a `fastfn dev`.
+```bash
+bash tests/integration/test-openapi-system.sh
+bash tests/integration/test-openapi-native.sh
+bash tests/integration/test-api.sh
+```
 
-Recomendado:
+Criterio de aceptacion:
 
-- Poner tus funciones en `functions/` y correr: `fastfn dev functions`
-- O setear el default en `fastfn.json` con `functions-dir`
+- sin `skip` en checks obligatorios de CI
+- paridad OpenAPI OK en docker y native (si aplica)
+
+## Etapa 6: checklist de seguimiento antes de merge/release
+
+- [ ] `/_fn/health` responde 200 y runtimes en up
+- [ ] rutas publicas representativas responden status/body esperado
+- [ ] `/_fn/openapi.json` contiene rutas publicas mapeadas
+- [ ] `mapped_route_conflicts` vacio (o conflicto documentado)
+- [ ] `test-openapi-system.sh` en verde
+- [ ] `test-openapi-native.sh` en verde (o justificado fuera de entorno native)
+- [ ] docs y links internos actualizados con el cambio
+
+Siguiente paso para hardening:
+
+- [Desplegar a produccion](./desplegar-a-produccion.md)
+- [Checklist de seguridad](./checklist-seguridad-produccion.md)

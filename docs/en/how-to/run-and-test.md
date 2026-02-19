@@ -1,88 +1,156 @@
 # Run and Test
 
-Practical local validation checklist.
+This guide is the practical validation flow for teams treating FastFN as a serious FaaS platform.
 
-## What this validates
+It is organized as a staged checklist so you can run it locally and in CI with the same criteria.
 
-- FastFN boots in portable mode (Docker)
-- runtimes are healthy
-- public routes respond
-- OpenAPI + Swagger UI are available
-- unit + integration + UI E2E tests pass
+## Validation scope
+
+This flow validates:
+
+- runtime boot and health
+- route discovery and request handling
+- OpenAPI parity with discovered routes
+- route conflict behavior
+- regression test suites (unit + integration)
+
+If you need architecture background first:
+
+- [Architecture](../explanation/architecture.md)
+- [Invocation flow](../explanation/invocation-flow.md)
+- [Function spec](../reference/function-spec.md)
+- [FastAPI / Next.js migration playbook](./fastapi-nextjs-playbook.md)
 
 ## Prerequisites
 
-- Docker Desktop running
-- `bin/fastfn` built or installed
-- host port `8080` is free
+Required:
 
-## 1) Automated Testing (Recommended)
+- `./bin/fastfn` available
+- `curl`, `jq`
 
-The fastest way to validate the entire platform is to run the CI-like pipeline locally:
+Mode-specific:
 
-```bash
-bash scripts/ci/test-pipeline.sh
-```
+- Docker mode (`fastfn dev`): Docker CLI + daemon running
+- Native mode (`fastfn dev --native`): OpenResty in PATH, plus runtime binaries you plan to use
 
-If these pass, the platform is healthy.
+## Stage 1: build and start
 
-## 2) Manual Verification
-
-If you prefer to run the stack manually and check endpoints:
-
-### Boot a demo app
+Build:
 
 ```bash
-bin/fastfn dev examples/functions/next-style
+make build-cli
 ```
 
-### Verify System Health
+Start stack (docker default):
+
+```bash
+./bin/fastfn dev examples/functions/next-style
+```
+
+Start stack (native):
+
+```bash
+./bin/fastfn dev --native examples/functions/next-style
+```
+
+Acceptance criteria:
+
+- process starts without fatal errors
+- `/_fn/health` reaches HTTP `200`
+
+## Stage 2: health and core endpoint checks
+
+Health:
 
 ```bash
 curl -sS 'http://127.0.0.1:8080/_fn/health' | jq
 ```
 
-### Verify a public function
-
-Call a JSON endpoint:
+Public endpoint smoke:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/hello?name=World'
+curl -i 'http://127.0.0.1:8080/hello?name=World'
+curl -i 'http://127.0.0.1:8080/html?name=Designer'
 ```
 
-Optional dependency isolation check:
+Acceptance criteria:
+
+- health payload reports enabled runtimes as up
+- endpoint calls return HTTP `200`
+
+## Stage 3: OpenAPI and routing parity checks
+
+OpenAPI paths:
 
 ```bash
-bin/fastfn dev examples/functions
-
-curl -sS 'http://127.0.0.1:8080/qr?text=PythonQR' -o /tmp/qr-python.svg
-curl -sS 'http://127.0.0.1:8080/qr@v2?text=NodeQR' -o /tmp/qr-node.png
-
-# Force a reinstall (these folders are created at runtime):
-rm -rf examples/functions/python/qr/.deps
-rm -rf examples/functions/node/qr/v2/node_modules
+curl -sS 'http://127.0.0.1:8080/_fn/openapi.json' | jq '.paths | keys'
 ```
 
-## 3) Verify docs endpoints
+Catalog routes and conflict view:
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/openapi.json' | head -c 300
+curl -sS 'http://127.0.0.1:8080/_fn/catalog' | jq '{mapped_routes, mapped_route_conflicts}'
 ```
 
-- Swagger: [http://127.0.0.1:8080/docs](http://127.0.0.1:8080/docs)
-- Console: [http://127.0.0.1:8080/console](http://127.0.0.1:8080/console)
+Acceptance criteria:
 
-## 4) Stop clean
+- all expected public routes appear in OpenAPI
+- `mapped_route_conflicts` is empty in normal operation
+
+Related behavior:
+
+- [Zero-config routing](./zero-config-routing.md)
+- [HTTP API reference](../reference/http-api.md)
+
+## Stage 4: explicit conflict behavior check
+
+FastFN should not silently override mapped URLs by default.
+
+Verify conflict handling policy:
+
+1. create two functions claiming the same route
+2. call catalog and confirm conflict exposure
+3. ensure collision returns deterministic error behavior
+
+Policy references:
+
+- [Function route precedence and `invoke.force-url`](../reference/function-spec.md)
+- [Global override (`FN_FORCE_URL`)](../reference/fastfn-config.md)
+
+## Stage 5: run full regression suites
+
+Core CI-like pipeline:
 
 ```bash
-docker compose down --remove-orphans
+bash scripts/ci/test-pipeline.sh
 ```
 
-## 5) Function root
+Focused suites:
 
-FastFN scans the directory you pass to `fastfn dev`.
+```bash
+bash tests/integration/test-openapi-system.sh
+bash tests/integration/test-openapi-native.sh
+bash tests/integration/test-api.sh
+```
 
-Recommendations:
+Acceptance criteria:
 
-- Put your code under `functions/` and run: `fastfn dev functions`
-- Or set a default in `fastfn.json` via `functions-dir`
+- no skipped mandatory checks in CI
+- OpenAPI parity tests pass in both docker and native where required
+
+## Stage 6: publish-quality tracking checklist
+
+Use this checklist before merge/release:
+
+- [ ] `/_fn/health` returns 200 and runtimes up
+- [ ] representative public routes return expected status/body
+- [ ] `/_fn/openapi.json` includes mapped public routes
+- [ ] `mapped_route_conflicts` is empty (or intentionally documented)
+- [ ] `test-openapi-system.sh` passes
+- [ ] `test-openapi-native.sh` passes (or explicitly justified for local non-native environments)
+- [ ] docs links added/updated for changed behavior
+
+For production hardening next:
+
+- [Deploy to production](./deploy-to-production.md)
+- [Security confidence checklist](./security-confidence.md)

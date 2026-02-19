@@ -18,15 +18,15 @@
 
 <div class="feature-grid">
   <div class="feature-card">
-    <h3>⚡️ Fast to Code</h3>
+    <h3>Fast to Code</h3>
     <p>Increase the speed to develop features by about 200% to 300%. Drop a file, get an endpoint.</p>
   </div>
   <div class="feature-card">
-    <h3>📂 Automatic Docs</h3>
+    <h3>Automatic Docs</h3>
     <p>Interactive API documentation (Swagger UI) generated automatically from your code.</p>
   </div>
   <div class="feature-card">
-    <h3>🌐 Polyglot Power</h3>
+    <h3>Polyglot Power</h3>
     <p>Use the best tool for the job. AI in Python, IO in Node, glue logic in Lua, performance in Rust.</p>
   </div>
 </div>
@@ -41,29 +41,29 @@ This documentation follows the strict **[Diátaxis](https://diataxis.fr/)** fram
 
 <div class="grid cards" markdown>
 
--   :material-school: **Tutorials**
+-   **Tutorials**
     
     Start here. Step-by-step lessons to build your first API.
     
-    [Start Learning :arrow_right:](./tutorial/first-steps.md)
+    [Start learning](./tutorial/first-steps.md)
 
--   :material-compass-outline: **How-To Guides**
+-   **How-To Guides**
     
     Solve specific problems. "How do I add auth?", "How do I deploy?".
     
-    [See Recipes :arrow_right:](./how-to/operational-recipes.md)
+    [See guides](./how-to/operational-recipes.md)
 
--   :material-book-open-page-variant: **Reference**
+-   **Reference**
     
     Technical details. Config schemas, CLI commands, and contracts.
     
-    [Browse API :arrow_right:](./reference/http-api.md)
+    [Browse reference](./reference/http-api.md)
 
--   :material-text-box-search-outline: **Explanation**
+-   **Explanation**
     
     Understand the architecture. Why processes? Why not containers?
     
-    [Read Design :arrow_right:](./explanation/architecture.md)
+    [Read architecture](./explanation/architecture.md)
 
 </div>
 
