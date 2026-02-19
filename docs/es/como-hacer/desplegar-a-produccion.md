@@ -10,6 +10,11 @@
 
 FastFN está pensado para correr en producción usando el mismo motor que en desarrollo, pero con hot reload deshabilitado y defaults más seguros.
 
+## Estado actual
+
+- Modo producción native (`fastfn run --native`): disponible
+- Modo producción docker-first: in progress
+
 ## Modos de Producción
 
 ### 1. Self-Hosted (VM / Bare Metal)
