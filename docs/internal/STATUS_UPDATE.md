@@ -1,5 +1,34 @@
 # Status Update: 2026-02-15
 
+## Update: 2026-02-19 (Dependency UX Hardening for `--native`)
+
+- Revision: `deps-ux-2026-02-19-r2`
+- Target version: `next patch after current main`
+- Scope:
+  - explicit native dependency messaging when OpenResty is missing
+  - documented behavior matrix for native vs docker fallback
+  - aligned with common CLI dependency UX patterns from similar projects
+
+- [x] Improved native dependency check messaging:
+  - if OpenResty is missing and Docker is available: suggest `fastfn dev` (no `--native`)
+  - if OpenResty is missing and Docker daemon is down: suggest starting daemon + fallback command
+  - if both are missing: show install paths for OpenResty and Docker-mode fallback
+  - files:
+    - `cli/internal/process/check.go`
+    - `cli/internal/process/check_test.go`
+
+- [x] Updated user-facing docs for dependency matrix and mode behavior:
+  - files:
+    - `docs/en/how-to/homebrew.md`
+    - `docs/es/como-hacer/homebrew.md`
+    - `docs/en/how-to/deploy-to-production.md`
+    - `docs/es/como-hacer/desplegar-a-produccion.md`
+
+- [x] External reference set used for alignment (standard pattern):
+  - Cloudflare Wrangler docs: explicit prerequisite/install flow
+  - Supabase CLI docs: Docker as mandatory local dependency with health guidance
+  - AWS SAM / LocalStack docs: clear failure wording when local container runtime is missing or unavailable
+
 ## Update: 2026-02-19 (Runtime Reliability Hardening: Restart + Socket Safety)
 
 - Revision: `ops-reliability-2026-02-19-r1`

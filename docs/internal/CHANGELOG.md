@@ -23,3 +23,20 @@
 - runtime daemon crashes no longer require manual `fastfn` restart in common cases.
 - startup now fails earlier and clearer when socket paths are already occupied by active processes.
 - stale socket paths are auto-cleaned before daemon bind, reducing false startup failures.
+
+## 2026-02-19
+
+- Revision: `deps-ux-2026-02-19-r2`
+- Target version: `next patch after current main`
+- Scope:
+  - native dependency error UX for OpenResty missing scenarios
+  - docs matrix for `--native` vs Docker fallback behavior
+
+### Changed
+
+- `CheckDependencies()` now emits explicit, mode-aware guidance:
+  - OpenResty missing + Docker ready: suggest `fastfn dev` fallback
+  - OpenResty missing + Docker daemon down: suggest daemon start + fallback
+  - OpenResty missing + no Docker: show install path for OpenResty and Docker-mode alternative
+- Added targeted unit tests for those cases in `cli/internal/process/check_test.go`.
+- Updated EN/ES docs to document behavior when Docker exists but OpenResty is missing.

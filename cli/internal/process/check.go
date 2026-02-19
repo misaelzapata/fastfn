@@ -2,6 +2,7 @@ package process
 
 import (
 	"fmt"
+	"io"
 	"os/exec"
 )
 
@@ -9,6 +10,27 @@ type Dependency struct {
 	Name     string
 	Command  string // e.g., "openresty" or "nginx"
 	Optional bool
+}
+
+type dockerState int
+
+const (
+	dockerMissing dockerState = iota
+	dockerInstalledDaemonDown
+	dockerReady
+)
+
+func detectDockerState() dockerState {
+	if _, err := exec.LookPath("docker"); err != nil {
+		return dockerMissing
+	}
+	cmd := exec.Command("docker", "info")
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	if err := cmd.Run(); err != nil {
+		return dockerInstalledDaemonDown
+	}
+	return dockerReady
 }
 
 // CheckDocker verifies that Docker is installed AND the daemon is running
@@ -50,7 +72,17 @@ func CheckDependencies() error {
 	}
 
 	if len(missing) > 0 {
-		return fmt.Errorf("missing required dependencies for Native mode: %v. Install required runtimes (OpenResty via Homebrew or distro package) or use Docker mode", missing)
+		if len(missing) == 1 && missing[0] == "OpenResty" {
+			switch detectDockerState() {
+			case dockerReady:
+				return fmt.Errorf("OpenResty is required for --native but was not found in PATH. Docker is available, so you can run `fastfn dev` (without --native), or install OpenResty for native mode (macOS: `brew install openresty`; Ubuntu/Debian: `sudo apt install openresty`; Fedora/RHEL: `sudo dnf install openresty`)")
+			case dockerInstalledDaemonDown:
+				return fmt.Errorf("OpenResty is required for --native but was not found in PATH. Docker CLI is installed but the daemon is not running; start Docker and run `fastfn dev` (without --native), or install OpenResty for native mode (macOS: `brew install openresty`; Ubuntu/Debian: `sudo apt install openresty`; Fedora/RHEL: `sudo dnf install openresty`)")
+			default:
+				return fmt.Errorf("OpenResty is required for --native but was not found in PATH. Install OpenResty (macOS: `brew install openresty`; Ubuntu/Debian: `sudo apt install openresty`; Fedora/RHEL: `sudo dnf install openresty`) or install/start Docker and use `fastfn dev`")
+			}
+		}
+		return fmt.Errorf("missing required dependencies for Native mode: %v", missing)
 	}
 
 	return nil

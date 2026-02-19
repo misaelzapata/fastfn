@@ -17,7 +17,11 @@ fastfn run --native /path/a/tus/funciones
 **Requisitos:**
 
 - Binario de FastFN en el host.
+- OpenResty disponible en `PATH` (requerido por `--native`).
 - Runtimes instalados en el host para los lenguajes que uses (Python/Node/PHP).
+
+Si falta OpenResty pero Docker esta instalado, `run --native` igual falla (esperado).  
+Para desarrollo puedes usar `fastfn dev` (modo Docker) mientras instalas OpenResty para flujos native de produccion.
 
 ### 2. Contenedor Docker
 

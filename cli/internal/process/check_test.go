@@ -62,6 +62,9 @@ func TestCheckDependencies_MissingRequiredOpenResty(t *testing.T) {
 	if !strings.Contains(err.Error(), "OpenResty") {
 		t.Fatalf("expected OpenResty in error, got %v", err)
 	}
+	if !strings.Contains(err.Error(), "--native") {
+		t.Fatalf("expected --native guidance in error, got %v", err)
+	}
 }
 
 func TestCheckDependencies_OnlyRequiredPresent(t *testing.T) {
@@ -71,5 +74,36 @@ func TestCheckDependencies_OnlyRequiredPresent(t *testing.T) {
 
 	if err := CheckDependencies(); err != nil {
 		t.Fatalf("expected success with required dependency present, got %v", err)
+	}
+}
+
+func TestCheckDependencies_MissingOpenResty_DockerAvailable(t *testing.T) {
+	binDir := t.TempDir()
+	writeExecutable(t, binDir, "docker", "#!/bin/sh\nif [ \"$1\" = \"info\" ]; then exit 0; fi\nexit 0\n")
+	t.Setenv("PATH", binDir)
+
+	err := CheckDependencies()
+	if err == nil {
+		t.Fatalf("expected error when openresty is missing")
+	}
+	if !strings.Contains(err.Error(), "Docker is available") {
+		t.Fatalf("expected Docker available guidance, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "fastfn dev") {
+		t.Fatalf("expected Docker fallback command, got %v", err)
+	}
+}
+
+func TestCheckDependencies_MissingOpenResty_DockerDaemonDown(t *testing.T) {
+	binDir := t.TempDir()
+	writeExecutable(t, binDir, "docker", "#!/bin/sh\nif [ \"$1\" = \"info\" ]; then exit 1; fi\nexit 0\n")
+	t.Setenv("PATH", binDir)
+
+	err := CheckDependencies()
+	if err == nil {
+		t.Fatalf("expected error when openresty is missing")
+	}
+	if !strings.Contains(err.Error(), "daemon is not running") {
+		t.Fatalf("expected daemon-down guidance, got %v", err)
 	}
 }

@@ -23,6 +23,21 @@ fastfn --version
 - `native` (`fastfn dev --native`, `fastfn run --native`): requiere `openresty`.
 - `docker` (`fastfn dev` por default): requiere Docker CLI + daemon activo.
 
+Comportamiento cuando faltan dependencias:
+
+- Docker instalado, OpenResty ausente:
+  - `fastfn dev --native` y `fastfn run --native` fallan con error explicito de OpenResty.
+  - `fastfn dev` (sin `--native`) funciona si el daemon de Docker esta activo.
+- OpenResty instalado, Docker ausente:
+  - el modo native funciona.
+  - el modo docker falla hasta instalar/iniciar Docker.
+
+Esto sigue el estandar de UX de dependencias usado por CLIs similares:
+
+- prerequisito explicito por modo de ejecucion (docs de Cloudflare Wrangler)
+- requisito claro de Docker para stack local (docs de Supabase)
+- error accionable cuando el runtime de contenedores falta/esta caido (docs de AWS SAM / LocalStack)
+
 Bootstrap planificado (macOS + Homebrew):
 
 ```bash
