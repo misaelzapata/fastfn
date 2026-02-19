@@ -686,7 +686,7 @@ func installHintForBinary(bin string) string {
 			return "Install OpenResty (Homebrew: brew install openresty) and ensure it is in PATH"
 		}
 		if runtime.GOOS == "linux" {
-			return "Install OpenResty and ensure it is in PATH (for example: apt install openresty, dnf install openresty, or OpenResty official repo packages)"
+			return "Install OpenResty and ensure it is in PATH (Homebrew/Linuxbrew: brew install openresty; apt install openresty; dnf install openresty; or OpenResty official repo packages)"
 		}
 		return "Install OpenResty and ensure it is in PATH"
 	case "docker":
