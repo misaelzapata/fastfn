@@ -284,3 +284,40 @@ Architecture rule (locked):
   - restart runtime services by default with backoff.
   - enforce startup socket preflight (active socket fail, stale socket cleanup).
   - align native/docker startup behavior and embed parity.
+
+33. One-command setup/bootstrap flow
+- Status: planned
+- Priority: high
+- Goal:
+  - add a `fastfn setup`/bootstrap-style command (or equivalent script) to prepare local prerequisites.
+  - detect/install guidance by mode:
+    - native: OpenResty + runtime binaries
+    - docker: Docker CLI + daemon
+  - include explicit preflight checks and fail-fast messaging before first `dev` run.
+  - align with common CLI patterns (doctor + setup workflow).
+
+34. Demo explainers and guided tutorial track
+- Status: planned
+- Priority: high
+- Goal:
+  - prioritize detailed demo explainers before adding many new tutorials.
+  - for each demo, publish:
+    - purpose and architecture path (request -> gateway -> runtime -> response)
+    - minimal runnable commands
+    - expected output and failure modes
+    - security and production notes
+    - extension steps.
+  - then expand tutorials for migration tracks (FastAPI-style and Next.js-style teams).
+
+35. Unified how-to complexity format (EN/ES)
+- Status: in_progress
+- Priority: high
+- Goal:
+  - enforce one structure across all how-to guides:
+    - complexity level
+    - expected duration
+    - prerequisites
+    - staged steps
+    - verification checks
+    - related links.
+  - keep internal links consistent and navigable from MkDocs nav.
