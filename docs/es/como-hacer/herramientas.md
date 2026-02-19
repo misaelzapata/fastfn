@@ -165,7 +165,7 @@ La respuesta incluye `trace.steps[]` con:
 
 Para activar schedules de forma segura (admin), ver:
 
-- [Gestionar funciones (Console API)](./gestionar-funciones.md#4b-agregar-un-schedule-interval-cron)
+- [Gestionar funciones (Console API)](./gestionar-funciones.md)
 
 Ver también:
 

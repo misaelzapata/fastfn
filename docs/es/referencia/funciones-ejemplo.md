@@ -574,7 +574,7 @@ Scheduler / cron:
 
 - `ai-tool-agent` trae un bloque `schedule` de ejemplo en `examples/functions/node/ai-tool-agent/fn.config.json` (desactivado por defecto).
 - Podés activar schedules vía Console API, o editando `fn.config.json` y haciendo reload.
-- Ver: [Gestionar funciones](../como-hacer/gestionar-funciones.md#4b-agregar-un-schedule-interval-cron)
+- Ver: [Gestionar funciones](../como-hacer/gestionar-funciones.md)
 
 ### Logs (interno)
 
