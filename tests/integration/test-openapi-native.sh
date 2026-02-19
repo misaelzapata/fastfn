@@ -87,6 +87,10 @@ require_native_prereqs_or_skip() {
   fi
 
   if [[ "${#missing[@]}" -gt 0 ]]; then
+    if [[ "${FN_REQUIRE_NATIVE_DEPS:-0}" == "1" || "${CI:-}" == "true" ]]; then
+      echo "FAIL test-openapi-native.sh (missing native deps: ${missing[*]})"
+      exit 1
+    fi
     echo "SKIP test-openapi-native.sh (missing native deps: ${missing[*]})"
     exit 0
   fi

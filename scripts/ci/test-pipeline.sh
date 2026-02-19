@@ -18,6 +18,18 @@ has_cmd() {
   command -v "$1" >/dev/null 2>&1
 }
 
+check_native_prereqs() {
+  if has_cmd openresty; then
+    return 0
+  fi
+  if [ "${FN_REQUIRE_NATIVE_DEPS:-0}" = "1" ] || [ "${CI:-}" = "true" ]; then
+    log "fail: native parity requires openresty in PATH (install it in CI runner before test-all.sh)"
+    return 1
+  fi
+  log "warn: openresty not found; native parity test may skip"
+  return 0
+}
+
 dump_debug_info() {
   exit_code="$1"
   log "failed at stage: ${CURRENT_STAGE:-unknown} (exit=${exit_code})"
@@ -56,6 +68,7 @@ fi
 if [ "$USE_BASH" = "1" ]; then
   run_stage "repo layout" "$ROOT_DIR/scripts/ci/check-repo-layout.sh"
   run_stage "cli build" "$ROOT_DIR/cli/build.sh"
+  run_stage "native deps preflight" check_native_prereqs
   run_stage "core suite (unit + integration)" "$ROOT_DIR/cli/test-all.sh"
   if [ "$RUN_UI_E2E" = "1" ]; then
     run_stage "ui e2e (playwright)" "$ROOT_DIR/cli/test-playwright.sh"
@@ -68,9 +81,11 @@ else
   run_stage "go tests (cmd + process + embed)" sh -c "cd \"$ROOT_DIR/cli\" && go test ./cmd/... ./internal/process/... ./embed/runtime/..."
   run_stage "build fastfn binary" sh -c "cd \"$ROOT_DIR/cli\" && go build -o ../bin/fastfn"
   run_stage "python unit" python3 "$ROOT_DIR/tests/unit/test-python-handlers.py"
+  run_stage "python daemon adapters" python3 "$ROOT_DIR/tests/unit/test-python-daemon-adapters.py"
   run_stage "go runtime unit" python3 "$ROOT_DIR/tests/unit/test-go-handler.py"
   if has_cmd node; then
     run_stage "node unit" node "$ROOT_DIR/tests/unit/test-node-handler.js"
+    run_stage "node daemon adapters" node "$ROOT_DIR/tests/unit/test-node-daemon-adapters.js"
     run_stage "js sdk smoke" sh -c "cd \"$ROOT_DIR/sdk/js\" && node smoke.test.cjs"
   else
     log "warn: node not found, skipping node/js sdk checks"
