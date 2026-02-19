@@ -1,5 +1,146 @@
 # Status Update: 2026-02-15
 
+## Update: 2026-02-19 (Runtime Reliability Hardening: Restart + Socket Safety)
+
+- Revision: `ops-reliability-2026-02-19-r1`
+- Target version: `next patch after current main`
+- Scope:
+  - auto-restart behavior for managed runtime services (native + docker parity path)
+  - startup preflight to avoid booting against occupied runtime sockets
+  - docs/install wording aligned to current Homebrew rollout state (planned/pending)
+
+- [x] Added managed service restart policy with exponential backoff in native process manager:
+  - restart is now enabled by default for managed services.
+  - files:
+    - `cli/internal/process/manager.go`
+    - `cli/internal/process/runner.go`
+
+- [x] Added socket safety preflight in native startup:
+  - fail fast when unix socket is actively in use.
+  - stale socket cleanup before daemon launch.
+  - files:
+    - `cli/internal/process/runner.go`
+    - `cli/internal/process/runner_test.go`
+
+- [x] Added daemon-level socket guard before bind:
+  - node/python/php/rust/go daemons now validate socket path semantics before startup bind.
+  - files:
+    - `srv/fn/runtimes/node-daemon.js`
+    - `srv/fn/runtimes/python-daemon.py`
+    - `srv/fn/runtimes/php-daemon.py`
+    - `srv/fn/runtimes/rust-daemon.py`
+    - `srv/fn/runtimes/go-daemon.py`
+  - embed parity updated under:
+    - `cli/embed/runtime/srv/fn/runtimes/*`
+
+- [x] Docker runtime startup now supervises daemon restarts + socket preflight:
+  - file:
+    - `docker/openresty/start.sh`
+  - embed parity:
+    - `cli/embed/runtime/docker/openresty/start.sh`
+
+- [x] Added internal architecture analysis for multi-workers:
+  - file:
+    - `docs/internal/MULTI_WORKERS_ANALYSIS.md`
+
+Validation executed:
+
+- `cd cli && go test ./internal/process`
+- `cd cli && go test ./cmd`
+- `cd cli && go test ./...`
+- `python3 -m py_compile srv/fn/runtimes/*.py cli/embed/runtime/srv/fn/runtimes/*.py`
+- `node --check srv/fn/runtimes/node-daemon.js`
+- `node --check cli/embed/runtime/srv/fn/runtimes/node-daemon.js`
+- `bash -n docker/openresty/start.sh`
+- `bash -n cli/embed/runtime/docker/openresty/start.sh`
+
+## Update: 2026-02-19 (Adapter Compatibility Beta: Workers + Lambda)
+
+- [x] Added per-function invocation compatibility adapter (`invoke.adapter`) for Node/Python:
+  - values: `native` (default), `aws-lambda`, `cloudflare-worker`
+  - runtimes:
+    - `srv/fn/runtimes/node-daemon.js`
+    - `srv/fn/runtimes/python-daemon.py`
+    - `srv/fn/runtimes/python-function-worker.py`
+  - embed parity:
+    - `cli/embed/runtime/srv/fn/runtimes/node-daemon.js`
+    - `cli/embed/runtime/srv/fn/runtimes/python-daemon.py`
+    - `cli/embed/runtime/srv/fn/runtimes/python-function-worker.py`
+- [x] Implemented Lambda callback compatibility in Node adapter:
+  - supports `handler(event, context, callback)` in `aws-lambda` mode
+  - resolves safely for callback/promise/sync completion without double-resolve
+  - file:
+    - `srv/fn/runtimes/node-daemon.js` (+ embed parity copy)
+- [x] Added dedicated adapter unit coverage:
+  - Node:
+    - `tests/unit/test-node-daemon-adapters.js`
+  - Python:
+    - `tests/unit/test-python-daemon-adapters.py`
+  - CI hooks:
+    - `cli/test-all.sh`
+    - `scripts/ci/test-pipeline.sh`
+- [x] Updated reference docs for beta adapter surface:
+  - `docs/en/reference/function-spec.md`
+  - `docs/es/referencia/especificacion-funciones.md`
+- [x] Added long-form beta article + roadmap/plan (EN/ES):
+  - `docs/en/articles/workers-compatibility-beta.md`
+  - `docs/es/articulos/workers-compat-beta.md`
+  - nav links:
+    - `mkdocs.yml`
+- [x] Added Cloudflare 1:1 compat fixture (real upstream router example, minimal export adaptation):
+  - `tests/fixtures/compat/cloudflare-v1-router/app.js`
+  - `tests/fixtures/compat/cloudflare-v1-router/fn.config.json`
+  - `tests/fixtures/compat/cloudflare-v1-router/fn.env.json`
+- [x] Added CI coverage for compat fixture behavior:
+  - integration phase:
+    - `tests/integration/test-api.sh` (Phase 10: Cloudflare Worker compat fixture)
+  - unit fixture coverage:
+    - `tests/unit/test-node-daemon-adapters.js` (`testCloudflareFixtureExample`)
+  - fixture catalog docs/layout:
+    - `tests/fixtures/README.md`
+    - `scripts/ci/check-repo-layout.sh`
+- [ ] Next beta tasks queued (not yet implemented):
+  - Node ESM-first Worker syntax (`export default { fetch }`) without export rewrite
+  - broaden adapter contract regression matrix (headers/query/binary/errors) across providers/runtimes in integration CI
+
+## Update: 2026-02-19 (Runtime Stability: Python 3.9 + Port-in-use preflight)
+
+- [x] Fixed Python daemon type-hint compatibility for Python `<3.10`:
+  - replaced PEP 604 unions (`Path | None`, `bytes | None`) with `Optional[...]` in:
+    - `srv/fn/runtimes/python-daemon.py`
+    - `cli/embed/runtime/srv/fn/runtimes/python-daemon.py`
+  - reason:
+    - hosts running Python 3.9 crashed daemon startup with:
+      - `TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'`
+
+- [x] Added explicit native pre-check for `FN_HOST_PORT` conflicts:
+  - native runner now validates that the host port is free before launching OpenResty.
+  - file:
+    - `cli/internal/process/runner.go`
+  - current error is now direct and actionable:
+    - `FN_HOST_PORT=<port> is already in use; stop the existing process or set FN_HOST_PORT to another port`
+
+- [x] Added unit tests for port conflict behavior:
+  - `TestEnsurePortAvailable_DetectsConflict`
+  - `TestEnsurePortAvailable_AcceptsFreePort`
+  - file:
+    - `cli/internal/process/runner_test.go`
+
+- [!] Follow-up note:
+  - we should have had this address/port conflict preflight earlier; not having it produced noisy bind failures instead of early clear feedback.
+  - queued for launch readiness:
+    - close Homebrew dependency story for runtime requirements (OpenResty/Docker guidance + tap-side alignment).
+    - keep internal planning docs out of public website output.
+
+Validation executed:
+
+- `env -u NO_COLOR node tests/unit/test-node-daemon-adapters.js`
+- `python3 tests/unit/test-python-daemon-adapters.py`
+- `env -u NO_COLOR node tests/unit/test-node-handler.js`
+- `python3 tests/unit/test-python-handlers.py`
+- `bash -n tests/integration/test-api.sh`
+- `bash scripts/ci/check-repo-layout.sh`
+
 ## Update: 2026-02-16 (Routing + Edge Security)
 
 - [x] `FN_FORCE_URL` now affects routing inside OpenResty:

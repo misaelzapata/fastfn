@@ -679,6 +679,30 @@ func statusPrefix(s doctorStatus) string {
 	}
 }
 
+func installHintForBinary(bin string) string {
+	switch bin {
+	case "openresty":
+		if runtime.GOOS == "darwin" {
+			return "Install OpenResty (Homebrew: brew install openresty) and ensure it is in PATH"
+		}
+		if runtime.GOOS == "linux" {
+			return "Install OpenResty and ensure it is in PATH (for example: apt install openresty, dnf install openresty, or OpenResty official repo packages)"
+		}
+		return "Install OpenResty and ensure it is in PATH"
+	case "docker":
+		switch runtime.GOOS {
+		case "darwin":
+			return "Install Docker Desktop (Homebrew: brew install --cask docker) and ensure docker is in PATH"
+		case "linux":
+			return "Install Docker Engine/CLI and ensure docker is in PATH (for example: apt install docker.io docker-compose-plugin, dnf install docker docker-compose-plugin, or snap install docker)"
+		default:
+			return "Install Docker CLI and daemon, then ensure docker is in PATH"
+		}
+	default:
+		return fmt.Sprintf("Install %s or ensure it is available in PATH", bin)
+	}
+}
+
 func checkExecutable(bin string, versionArgs []string, id, label string) doctorCheck {
 	path, err := exec.LookPath(bin)
 	if err != nil {
@@ -686,7 +710,7 @@ func checkExecutable(bin string, versionArgs []string, id, label string) doctorC
 			ID:      id,
 			Status:  doctorStatusWarn,
 			Message: fmt.Sprintf("%s not found in PATH", label),
-			Hint:    fmt.Sprintf("Install %s or ensure it is available in PATH", bin),
+			Hint:    installHintForBinary(bin),
 		}
 	}
 	cmd := exec.Command(bin, versionArgs...)

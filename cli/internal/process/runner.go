@@ -1,8 +1,10 @@
 package process
 
 import (
+	"errors"
 	"fmt"
 	"github.com/misaelzapata/fastfn/cli/embed/runtime"
+	"net"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -10,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 )
 
 type RunConfig struct {
@@ -17,6 +20,39 @@ type RunConfig struct {
 	HotReload bool
 	VerifyTLS bool
 	Watch     bool
+}
+
+func ensurePortAvailable(hostPort string) error {
+	ln, err := net.Listen("tcp", "127.0.0.1:"+hostPort)
+	if err != nil {
+		return fmt.Errorf("FN_HOST_PORT=%s is already in use; stop the existing process or set FN_HOST_PORT to another port", hostPort)
+	}
+	_ = ln.Close()
+	return nil
+}
+
+func ensureSocketPathAvailable(socketPath string) error {
+	info, err := os.Stat(socketPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("failed to inspect runtime socket %s: %w", socketPath, err)
+	}
+	if info.Mode()&os.ModeSocket == 0 {
+		return fmt.Errorf("runtime socket path exists but is not a unix socket: %s", socketPath)
+	}
+
+	conn, dialErr := net.DialTimeout("unix", socketPath, 200*time.Millisecond)
+	if dialErr == nil {
+		_ = conn.Close()
+		return fmt.Errorf("runtime socket already in use: %s", socketPath)
+	}
+
+	if rmErr := os.Remove(socketPath); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {
+		return fmt.Errorf("failed to remove stale runtime socket %s: %w", socketPath, rmErr)
+	}
+	return nil
 }
 
 var nativeDefaultRuntimes = []string{"python", "node", "php", "lua"}
@@ -113,8 +149,12 @@ func RunNative(cfg RunConfig) error {
 	if hostPort == "" {
 		hostPort = "8080"
 	}
-	if _, err := strconv.Atoi(hostPort); err != nil {
+	portNum, err := strconv.Atoi(hostPort)
+	if err != nil || portNum < 1 || portNum > 65535 {
 		return fmt.Errorf("invalid FN_HOST_PORT %q", hostPort)
+	}
+	if err := ensurePortAvailable(hostPort); err != nil {
+		return err
 	}
 
 	// 3. Generate Nginx Config
@@ -137,6 +177,13 @@ func RunNative(cfg RunConfig) error {
 	socketDir := filepath.Join(runtimeDir, "sockets")
 	if err := os.MkdirAll(socketDir, 0755); err != nil {
 		return err
+	}
+	socketByRuntime := map[string]string{
+		"python": filepath.Join(socketDir, "fn-python.sock"),
+		"node":   filepath.Join(socketDir, "fn-node.sock"),
+		"php":    filepath.Join(socketDir, "fn-php.sock"),
+		"rust":   filepath.Join(socketDir, "fn-rust.sock"),
+		"go":     filepath.Join(socketDir, "fn-go.sock"),
 	}
 
 	pythonCmd := "python3"
@@ -189,6 +236,14 @@ func RunNative(cfg RunConfig) error {
 	for _, rt := range runtimes {
 		selected[rt] = true
 	}
+	for runtimeName, socketPath := range socketByRuntime {
+		if !selected[runtimeName] {
+			continue
+		}
+		if err := ensureSocketPathAvailable(socketPath); err != nil {
+			return err
+		}
+	}
 
 	runtimesDir := filepath.Join(runtimeDir, "srv", "fn", "runtimes")
 	logsDir := filepath.Join(runtimeDir, "openresty", "logs")
@@ -221,11 +276,11 @@ func RunNative(cfg RunConfig) error {
 	baseEnv := []string{
 		"FN_FUNCTIONS_ROOT=" + cfg.FnDir,
 		"FN_SOCKET_BASE_DIR=" + socketDir,
-		"FN_PY_SOCKET=" + filepath.Join(socketDir, "fn-python.sock"),
-		"FN_NODE_SOCKET=" + filepath.Join(socketDir, "fn-node.sock"),
-		"FN_PHP_SOCKET=" + filepath.Join(socketDir, "fn-php.sock"),
-		"FN_RUST_SOCKET=" + filepath.Join(socketDir, "fn-rust.sock"),
-		"FN_GO_SOCKET=" + filepath.Join(socketDir, "fn-go.sock"),
+		"FN_PY_SOCKET=" + socketByRuntime["python"],
+		"FN_NODE_SOCKET=" + socketByRuntime["node"],
+		"FN_PHP_SOCKET=" + socketByRuntime["php"],
+		"FN_RUST_SOCKET=" + socketByRuntime["rust"],
+		"FN_GO_SOCKET=" + socketByRuntime["go"],
 		"FN_RUNTIMES=" + strings.Join(runtimes, ","),
 		"FN_HOT_RELOAD=" + reloadVal,
 		"FN_HOT_RELOAD_INTERVAL=2",
@@ -241,42 +296,50 @@ func RunNative(cfg RunConfig) error {
 	pm := NewManager()
 
 	// 6. Register Services
+	runtimeServiceOptions := ServiceOptions{
+		Restart: RestartPolicy{
+			Enabled:        true,
+			MaxAttempts:    0, // unlimited
+			InitialBackoff: 500 * time.Millisecond,
+			MaxBackoff:     8 * time.Second,
+		},
+	}
 	openrestyDir := filepath.Join(runtimeDir, "openresty")
-	pm.AddService("openresty", "openresty", []string{
+	pm.AddServiceWithOptions("openresty", "openresty", []string{
 		"-e", "/dev/stderr",
 		"-p", openrestyDir,
 		"-c", filepath.Base(nginxConf),
 		"-g", "daemon off;",
-	}, baseEnv, openrestyDir)
+	}, baseEnv, openrestyDir, runtimeServiceOptions)
 
 	if selected["python"] {
-		pm.AddService("python", pythonCmd, []string{
+		pm.AddServiceWithOptions("python", pythonCmd, []string{
 			filepath.Join(runtimesDir, "python-daemon.py"),
-		}, baseEnv, runtimesDir)
+		}, baseEnv, runtimesDir, runtimeServiceOptions)
 	}
 
 	if selected["node"] {
-		pm.AddService("node", nodeCmd, []string{
+		pm.AddServiceWithOptions("node", nodeCmd, []string{
 			filepath.Join(runtimesDir, "node-daemon.js"),
-		}, baseEnv, runtimesDir)
+		}, baseEnv, runtimesDir, runtimeServiceOptions)
 	}
 
 	if selected["php"] {
-		pm.AddService("php", phpCmd, []string{
+		pm.AddServiceWithOptions("php", phpCmd, []string{
 			filepath.Join(runtimesDir, "php-daemon.py"),
-		}, baseEnv, runtimesDir)
+		}, baseEnv, runtimesDir, runtimeServiceOptions)
 	}
 
 	if selected["rust"] {
-		pm.AddService("rust", pythonCmd, []string{
+		pm.AddServiceWithOptions("rust", pythonCmd, []string{
 			filepath.Join(runtimesDir, "rust-daemon.py"),
-		}, baseEnv, runtimesDir)
+		}, baseEnv, runtimesDir, runtimeServiceOptions)
 	}
 
 	if selected["go"] {
-		pm.AddService("go", pythonCmd, []string{
+		pm.AddServiceWithOptions("go", pythonCmd, []string{
 			filepath.Join(runtimesDir, "go-daemon.py"),
-		}, append(baseEnv, "FN_GO_BIN="+goCmd), runtimesDir)
+		}, append(baseEnv, "FN_GO_BIN="+goCmd), runtimesDir, runtimeServiceOptions)
 	}
 
 	// 7. Start All
@@ -305,9 +368,14 @@ func RunNative(cfg RunConfig) error {
 	// 8. Wait for Interrupt
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	<-sigChan
-
-	fmt.Println("\nStopping services...")
-	pm.StopAll()
-	return nil
+	select {
+	case <-sigChan:
+		fmt.Println("\nStopping services...")
+		pm.StopAll()
+		return nil
+	case <-pm.Done():
+		fmt.Println("\nCritical service stopped; shutting down...")
+		pm.StopAll()
+		return fmt.Errorf("native services stopped unexpectedly; see logs above")
+	}
 }

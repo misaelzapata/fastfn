@@ -232,3 +232,55 @@ Architecture rule (locked):
   - split `/openresty/console/console.js` into ES modules (no bundler required).
   - extend asset server to allow multiple static files under `/console/assets/*`.
   - keep console disabled by default and local-only by default.
+
+27. VHS demos completion (realistic terminal flows)
+- Status: planned
+- Priority: medium
+- Goal:
+  - finish and publish a stable VHS pack with realistic local flows (Node, Python, Rust).
+  - keep short paths/commands and human-like terminal rhythm.
+  - verify generated artifacts render consistently before docs release.
+  - include one CRUD/file-creation flow and one trust/security-oriented flow.
+
+28. Security confidence section (public docs)
+- Status: completed (2026-02-19)
+- Priority: high
+- Goal:
+  - create a dedicated "safe to use" docs section (EN/ES) focused on operator confidence.
+  - present plain-language safeguards, defaults, and hardening checklist.
+  - include "what is protected by default" vs "what you must configure in production".
+
+29. Homebrew requirements closure (Brew + runtime deps)
+- Status: in_progress
+- Priority: high
+- Goal:
+  - ensure Homebrew install path covers runtime requirements in a clear way:
+    - native mode: OpenResty installed via Homebrew (`brew install openresty`).
+    - docker mode: Docker CLI + daemon guidance (Desktop/engine).
+  - align doctor/check hints with exact install commands.
+  - close the tap-side change to wire required deps where feasible before website push.
+
+30. Internal docs separation before website release
+- Status: planned
+- Priority: high
+- Goal:
+  - remove/segregate internal-only docs from public website output.
+  - keep internal planning/status docs in repo but outside public docs surface.
+  - add release gate to prevent publishing internal docs by mistake.
+
+31. Multiple workers architecture analysis
+- Status: completed (2026-02-19)
+- Priority: high
+- Goal:
+  - evaluate complexity/risks for daemon-internal workers vs multi-daemon fan-out.
+  - provide phased recommendation and rollout order.
+  - output:
+    - `docs/internal/MULTI_WORKERS_ANALYSIS.md`
+
+32. Runtime restart + socket safety hardening
+- Status: completed (2026-02-19)
+- Priority: high
+- Goal:
+  - restart runtime services by default with backoff.
+  - enforce startup socket preflight (active socket fail, stale socket cleanup).
+  - align native/docker startup behavior and embed parity.

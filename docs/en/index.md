@@ -82,6 +82,7 @@ This documentation follows the strict **[Diátaxis](https://diataxis.fr/)** fram
 *   [Runtime Contract](./reference/runtime-contract.md)
 *   [Built-in Functions](./reference/builtin-functions.md)
 *   [Operational Recipes](./how-to/operational-recipes.md)
+*   [Security Confidence Checklist](./how-to/security-confidence.md)
 
 ## Extended Tutorials
 

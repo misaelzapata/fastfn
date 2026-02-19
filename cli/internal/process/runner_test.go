@@ -1,9 +1,15 @@
 package process
 
 import (
+	"fmt"
+	"net"
+	"os"
+	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestSelectNativeRuntimes_DefaultSkipsUnavailableSilently(t *testing.T) {
@@ -142,5 +148,93 @@ func TestSelectNativeRuntimes_ExplicitEmptyCSVFallsBackToDefault(t *testing.T) {
 	}
 	if !reflect.DeepEqual(selected, []string{"node", "lua"}) {
 		t.Fatalf("unexpected runtimes: %v", selected)
+	}
+}
+
+func TestEnsurePortAvailable_DetectsConflict(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen failed: %v", err)
+	}
+	defer ln.Close()
+
+	addr := ln.Addr().String()
+	parts := strings.Split(addr, ":")
+	if len(parts) < 2 {
+		t.Fatalf("unexpected listener address: %s", addr)
+	}
+	port := parts[len(parts)-1]
+
+	if err := ensurePortAvailable(port); err == nil {
+		t.Fatalf("expected port conflict error for port %s", port)
+	}
+}
+
+func TestEnsurePortAvailable_AcceptsFreePort(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen failed: %v", err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	_ = ln.Close()
+
+	if err := ensurePortAvailable(strconv.Itoa(port)); err != nil {
+		t.Fatalf("expected free port %d, got error: %v", port, err)
+	}
+}
+
+func TestEnsureSocketPathAvailable_AllowsMissingPath(t *testing.T) {
+	socketPath := filepath.Join(t.TempDir(), "missing.sock")
+	if err := ensureSocketPathAvailable(socketPath); err != nil {
+		t.Fatalf("expected missing socket path to pass preflight, got: %v", err)
+	}
+}
+
+func TestEnsureSocketPathAvailable_DetectsActiveSocket(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("/tmp", "fastfn-sock-")
+	if err != nil {
+		t.Fatalf("failed to create short temp dir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
+	socketPath := filepath.Join(tmpDir, fmt.Sprintf("active-%d.sock", time.Now().UnixNano()))
+	ln, err := net.Listen("unix", socketPath)
+	if err != nil {
+		t.Fatalf("failed to listen on unix socket: %v", err)
+	}
+	defer ln.Close()
+
+	if err := ensureSocketPathAvailable(socketPath); err == nil {
+		t.Fatalf("expected active socket preflight error for %s", socketPath)
+	}
+}
+
+func TestEnsureSocketPathAvailable_RemovesStaleSocket(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("/tmp", "fastfn-sock-")
+	if err != nil {
+		t.Fatalf("failed to create short temp dir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
+	socketPath := filepath.Join(tmpDir, fmt.Sprintf("stale-%d.sock", time.Now().UnixNano()))
+	ln, err := net.Listen("unix", socketPath)
+	if err != nil {
+		t.Fatalf("failed to listen on unix socket: %v", err)
+	}
+	_ = ln.Close()
+
+	if err := ensureSocketPathAvailable(socketPath); err != nil {
+		t.Fatalf("expected stale socket cleanup, got: %v", err)
+	}
+	if _, err := os.Stat(socketPath); !os.IsNotExist(err) {
+		t.Fatalf("expected stale socket to be removed, stat err=%v", err)
+	}
+}
+
+func TestEnsureSocketPathAvailable_RejectsNonSocketPath(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "not-a-socket")
+	if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+		t.Fatalf("failed to create placeholder file: %v", err)
+	}
+	if err := ensureSocketPathAvailable(p); err == nil {
+		t.Fatalf("expected error when preflight path is not a unix socket")
 	}
 }

@@ -2,15 +2,34 @@
 
 This page covers:
 
-- Installing FastFN via Homebrew (recommended).
+- Homebrew channel status and usage (planned rollout).
 - Publishing a new release and updating the Homebrew tap (maintainers).
 
-## Install (users)
+> Status: Homebrew tap rollout is planned.  
+> If tap/formula is not available yet in your environment, use source install (below) for now.
+
+## Install (users, once tap is available)
 
 ```bash
 brew tap misaelzapata/homebrew-fastfn
 brew install fastfn
 fastfn --version
+```
+
+## Runtime requirements (by mode)
+
+`brew install fastfn` installs the CLI. Runtime requirements depend on mode:
+
+- `native` (`fastfn dev --native`, `fastfn run --native`): requires `openresty`.
+- `docker` (`fastfn dev` by default): requires Docker CLI + a running daemon.
+
+Planned bootstrap (macOS + Homebrew):
+
+```bash
+brew tap misaelzapata/homebrew-fastfn
+brew install fastfn openresty
+brew install --cask docker
+fastfn doctor
 ```
 
 Upgrade:
@@ -66,4 +85,3 @@ After the workflow finishes:
 
 - GitHub Releases contains the new version and binary archives.
 - `misaelzapata/homebrew-fastfn` has an updated `Formula/fastfn.rb`.
-

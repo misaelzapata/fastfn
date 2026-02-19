@@ -48,6 +48,17 @@ const preinstallState = {
   startedAtMs: 0,
   finishedAtMs: 0,
 };
+const INVOKE_ADAPTER_NATIVE = "native";
+const INVOKE_ADAPTER_AWS_LAMBDA = "aws-lambda";
+const INVOKE_ADAPTER_CLOUDFLARE_WORKER = "cloudflare-worker";
+const FORBIDDEN_OUTBOUND_HEADERS = new Set([
+  "host",
+  "content-length",
+  "connection",
+  "transfer-encoding",
+  "expect",
+  "keep-alive",
+]);
 
 function readFunctionConfig(modulePath) {
   try {
@@ -79,6 +90,309 @@ function resolveHandlerName(fnConfig) {
     throw new Error("invoke.handler must be a valid identifier");
   }
   return name;
+}
+
+function resolveInvokeAdapter(fnConfig) {
+  const invoke = fnConfig && typeof fnConfig === "object" ? fnConfig.invoke : null;
+  const raw = invoke && typeof invoke === "object" ? invoke.adapter : null;
+  if (typeof raw !== "string") {
+    return INVOKE_ADAPTER_NATIVE;
+  }
+  const normalized = raw.trim().toLowerCase();
+  if (!normalized || normalized === "native" || normalized === "none" || normalized === "default") {
+    return INVOKE_ADAPTER_NATIVE;
+  }
+  if (
+    normalized === "aws-lambda" ||
+    normalized === "lambda" ||
+    normalized === "apigw-v2" ||
+    normalized === "api-gateway-v2"
+  ) {
+    return INVOKE_ADAPTER_AWS_LAMBDA;
+  }
+  if (
+    normalized === "cloudflare-worker" ||
+    normalized === "cloudflare-workers" ||
+    normalized === "worker" ||
+    normalized === "workers"
+  ) {
+    return INVOKE_ADAPTER_CLOUDFLARE_WORKER;
+  }
+  throw new Error(`invoke.adapter unsupported: ${raw}`);
+}
+
+function getHeaderCaseInsensitive(headers, name) {
+  const target = String(name || "").toLowerCase();
+  const src = headers && typeof headers === "object" ? headers : {};
+  for (const key of Object.keys(src)) {
+    if (String(key).toLowerCase() === target) {
+      return String(src[key]);
+    }
+  }
+  return "";
+}
+
+function buildRawPath(event) {
+  if (!event || typeof event !== "object" || Array.isArray(event)) {
+    return "/";
+  }
+  const raw = typeof event.raw_path === "string" && event.raw_path
+    ? event.raw_path
+    : (typeof event.path === "string" && event.path ? event.path : "/");
+  if (/^https?:\/\//i.test(raw)) {
+    return raw;
+  }
+  if (raw.startsWith("/")) {
+    return raw;
+  }
+  return `/${raw}`;
+}
+
+function encodeQueryString(query) {
+  if (!query || typeof query !== "object" || Array.isArray(query)) {
+    return "";
+  }
+  const sp = new URLSearchParams();
+  for (const [k, v] of Object.entries(query)) {
+    if (v === undefined || v === null) {
+      continue;
+    }
+    if (Array.isArray(v)) {
+      for (const item of v) {
+        if (item === undefined || item === null) {
+          continue;
+        }
+        sp.append(String(k), String(item));
+      }
+      continue;
+    }
+    sp.append(String(k), String(v));
+  }
+  return sp.toString();
+}
+
+function buildRawQueryString(event) {
+  if (event && typeof event === "object" && typeof event.raw_path === "string") {
+    const idx = event.raw_path.indexOf("?");
+    if (idx >= 0 && idx < event.raw_path.length - 1) {
+      return event.raw_path.slice(idx + 1);
+    }
+  }
+  return encodeQueryString(event && typeof event === "object" ? event.query : null);
+}
+
+function buildLambdaEvent(event) {
+  const e = event && typeof event === "object" && !Array.isArray(event) ? event : {};
+  const headers = e.headers && typeof e.headers === "object" && !Array.isArray(e.headers) ? { ...e.headers } : {};
+  const rawPathWithQuery = buildRawPath(e);
+  const qIdx = rawPathWithQuery.indexOf("?");
+  const rawPath = qIdx >= 0 ? rawPathWithQuery.slice(0, qIdx) : rawPathWithQuery;
+  const rawQueryString = buildRawQueryString(e);
+  const query = e.query && typeof e.query === "object" && !Array.isArray(e.query) ? { ...e.query } : null;
+  const params = e.params && typeof e.params === "object" && !Array.isArray(e.params) ? { ...e.params } : null;
+  const cookieHeader = getHeaderCaseInsensitive(headers, "cookie");
+  const cookies = cookieHeader
+    ? cookieHeader.split(";").map((x) => x.trim()).filter(Boolean)
+    : undefined;
+  const hasBase64Body = e.is_base64 === true && typeof e.body_base64 === "string";
+  const body = hasBase64Body
+    ? e.body_base64
+    : (typeof e.body === "string" ? e.body : (e.body == null ? "" : String(e.body)));
+  const method = String(e.method || "GET").toUpperCase();
+  const client = e.client && typeof e.client === "object" ? e.client : {};
+  const context = e.context && typeof e.context === "object" ? e.context : {};
+  return {
+    version: "2.0",
+    routeKey: `${method} ${rawPath}`,
+    rawPath,
+    rawQueryString,
+    cookies,
+    headers,
+    queryStringParameters: query,
+    pathParameters: params,
+    requestContext: {
+      requestId: String(context.request_id || e.id || ""),
+      http: {
+        method,
+        path: rawPath,
+        sourceIp: String(client.ip || ""),
+        userAgent: String(client.ua || ""),
+      },
+      timeEpoch: Number(e.ts || Date.now()),
+    },
+    body,
+    isBase64Encoded: hasBase64Body,
+  };
+}
+
+function buildLambdaContext(event) {
+  const e = event && typeof event === "object" && !Array.isArray(event) ? event : {};
+  const context = e.context && typeof e.context === "object" ? e.context : {};
+  const timeoutMs = Number(context.timeout_ms || 0);
+  return {
+    awsRequestId: String(context.request_id || e.id || ""),
+    functionName: String(context.function_name || ""),
+    functionVersion: String(context.version || "$LATEST"),
+    invokedFunctionArn: String(context.invoked_function_arn || ""),
+    memoryLimitInMB: String(context.memory_limit_mb || ""),
+    callbackWaitsForEmptyEventLoop: false,
+    getRemainingTimeInMillis() {
+      return timeoutMs > 0 ? timeoutMs : 0;
+    },
+    done() {},
+    fail() {},
+    succeed() {},
+    fastfn: context,
+  };
+}
+
+function buildWorkersUrl(event) {
+  const e = event && typeof event === "object" && !Array.isArray(event) ? event : {};
+  const headers = e.headers && typeof e.headers === "object" && !Array.isArray(e.headers) ? e.headers : {};
+  const rawPath = buildRawPath(e);
+  if (/^https?:\/\//i.test(rawPath)) {
+    return rawPath;
+  }
+  const proto = getHeaderCaseInsensitive(headers, "x-forwarded-proto") || "http";
+  const host = getHeaderCaseInsensitive(headers, "host") || "127.0.0.1";
+  return `${proto}://${host}${rawPath}`;
+}
+
+function buildWorkersHeaders(event) {
+  const e = event && typeof event === "object" && !Array.isArray(event) ? event : {};
+  const headers = e.headers && typeof e.headers === "object" && !Array.isArray(e.headers) ? e.headers : {};
+  const out = {};
+  for (const [k, v] of Object.entries(headers)) {
+    const name = String(k || "").toLowerCase();
+    if (!name || FORBIDDEN_OUTBOUND_HEADERS.has(name)) {
+      continue;
+    }
+    out[k] = String(v);
+  }
+  return out;
+}
+
+function buildWorkersRequest(event) {
+  const e = event && typeof event === "object" && !Array.isArray(event) ? event : {};
+  const method = String(e.method || "GET").toUpperCase();
+  const headers = buildWorkersHeaders(e);
+  const init = {
+    method,
+    headers,
+  };
+  if (method !== "GET" && method !== "HEAD") {
+    if (e.is_base64 === true && typeof e.body_base64 === "string") {
+      init.body = Buffer.from(e.body_base64, "base64");
+    } else if (typeof e.body === "string") {
+      init.body = e.body;
+    } else if (e.body !== undefined && e.body !== null) {
+      init.body = String(e.body);
+    }
+  }
+  return new Request(buildWorkersUrl(e), init);
+}
+
+function buildWorkersContext(event) {
+  const e = event && typeof event === "object" && !Array.isArray(event) ? event : {};
+  const context = e.context && typeof e.context === "object" ? e.context : {};
+  return {
+    requestId: String(context.request_id || e.id || ""),
+    waitUntil(promise) {
+      if (promise && typeof promise.then === "function") {
+        Promise.resolve(promise).catch((err) => {
+          console.error(
+            JSON.stringify({
+              t: new Date().toISOString(),
+              component: "node_daemon",
+              event: "wait_until_rejection",
+              error: String(err && err.message ? err.message : err),
+            })
+          );
+        });
+      }
+    },
+    passThroughOnException() {},
+  };
+}
+
+function resolveInvokeTarget(mod, handlerName, invokeAdapter) {
+  if (invokeAdapter === INVOKE_ADAPTER_CLOUDFLARE_WORKER) {
+    if (mod && typeof mod.fetch === "function") {
+      return { fn: mod.fetch, thisArg: mod };
+    }
+    if (mod && mod.default && typeof mod.default.fetch === "function") {
+      return { fn: mod.default.fetch, thisArg: mod.default };
+    }
+    if (mod && typeof mod[handlerName] === "function") {
+      return { fn: mod[handlerName], thisArg: mod };
+    }
+    throw new Error("cloudflare-worker adapter requires fetch(request, env, ctx)");
+  }
+
+  if (mod && typeof mod[handlerName] === "function") {
+    return { fn: mod[handlerName], thisArg: mod };
+  }
+  if (mod && mod.default && typeof mod.default[handlerName] === "function") {
+    return { fn: mod.default[handlerName], thisArg: mod.default };
+  }
+  throw new Error(`${handlerName}(event) is required`);
+}
+
+function buildInvoker(target, invokeAdapter) {
+  if (invokeAdapter === INVOKE_ADAPTER_AWS_LAMBDA) {
+    return async (event) => {
+      const lambdaEvent = buildLambdaEvent(event);
+      const lambdaContext = buildLambdaContext(event);
+      return new Promise((resolve, reject) => {
+        const expectsCallback = Number(target.fn.length || 0) >= 3;
+        let settled = false;
+        const settle = (err, value) => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          if (err !== null && err !== undefined) {
+            reject(err instanceof Error ? err : new Error(String(err)));
+            return;
+          }
+          resolve(value);
+        };
+
+        const callback = (err, value) => {
+          settle(err, value);
+        };
+
+        let returned;
+        try {
+          returned = target.fn.call(target.thisArg, lambdaEvent, lambdaContext, callback);
+        } catch (err) {
+          settle(err);
+          return;
+        }
+
+        if (returned && typeof returned.then === "function") {
+          Promise.resolve(returned).then(
+            (value) => settle(null, value),
+            (err) => settle(err)
+          );
+          return;
+        }
+
+        if (!expectsCallback || returned !== undefined) {
+          settle(null, returned);
+        }
+      });
+    };
+  }
+  if (invokeAdapter === INVOKE_ADAPTER_CLOUDFLARE_WORKER) {
+    return async (event) => {
+      const request = buildWorkersRequest(event);
+      const env = event && typeof event.env === "object" && !Array.isArray(event.env) ? event.env : {};
+      const ctx = buildWorkersContext(event);
+      return target.fn.call(target.thisArg, request, env, ctx);
+    };
+  }
+  return async (event) => target.fn.call(target.thisArg, event);
 }
 
 function extractSharedDeps(fnConfig) {
@@ -558,7 +872,43 @@ function normalizeMagicResponse(value, status = 200, headers = {}) {
   };
 }
 
-function normalizeResponse(resp) {
+function isFetchResponse(resp) {
+  return typeof Response === "function" && resp instanceof Response;
+}
+
+async function normalizeFetchResponse(resp) {
+  const status = Number(resp.status || 200);
+  if (!Number.isInteger(status) || status < 100 || status > 599) {
+    throw new Error("status must be a valid HTTP code");
+  }
+  const headers = {};
+  resp.headers.forEach((value, key) => {
+    headers[key] = value;
+  });
+
+  const bodyBuffer = Buffer.from(await resp.arrayBuffer());
+  if (bodyBuffer.length === 0) {
+    return { status, headers, body: "" };
+  }
+  if (expectsBinaryContentType(headers)) {
+    return {
+      status,
+      headers: withDefaultHeader(headers, "Content-Type", "application/octet-stream"),
+      is_base64: true,
+      body_base64: bodyBuffer.toString("base64"),
+    };
+  }
+  return {
+    status,
+    headers,
+    body: bodyBuffer.toString("utf8"),
+  };
+}
+
+async function normalizeResponse(resp) {
+  if (isFetchResponse(resp)) {
+    return normalizeFetchResponse(resp);
+  }
   if (!resp || typeof resp !== "object") {
     return normalizeMagicResponse(resp);
   }
@@ -1164,13 +1514,13 @@ function withStrictFs(modulePath, extraRoots, work) {
   return strictFsContext.run(policy, () => work());
 }
 
-function loadHandler(modulePath, extraNodeModulePaths, handlerName) {
+function loadHandler(modulePath, extraNodeModulePaths, handlerName, invokeAdapter) {
   const stat = fs.statSync(modulePath);
   const mtimeMs = stat.mtimeMs;
   const extraSig = Array.isArray(extraNodeModulePaths) && extraNodeModulePaths.length > 0
     ? extraNodeModulePaths.map((p) => String(p)).sort().join(";")
     : "";
-  const cacheKey = `${modulePath}::${extraSig}::${String(handlerName || "handler")}`;
+  const cacheKey = `${modulePath}::${extraSig}::${String(handlerName || "handler")}::${String(invokeAdapter || INVOKE_ADAPTER_NATIVE)}`;
 
   if (handlerCache.has(cacheKey)) {
     const cached = handlerCache.get(cacheKey);
@@ -1192,17 +1542,15 @@ function loadHandler(modulePath, extraNodeModulePaths, handlerName) {
   } else {
     mod = require(resolved);
   }
-  const fn = mod && mod[handlerName];
-  if (typeof fn !== "function") {
-    throw new Error(`${handlerName}(event) is required`);
-  }
+  const target = resolveInvokeTarget(mod, handlerName, invokeAdapter);
+  const invoker = buildInvoker(target, invokeAdapter);
 
   handlerCache.set(cacheKey, {
-    handler: fn,
+    handler: invoker,
     mtimeMs,
   });
 
-  return fn;
+  return invoker;
 }
 
 function isBenignSocketError(err) {
@@ -1270,6 +1618,7 @@ async function handleRequest(req) {
   const fnConfig = readFunctionConfig(sourcePath);
   const strictFsEnabled = isFunctionStrictFsEnabled(fnConfig);
   const handlerName = resolveHandlerName(fnConfig);
+  const invokeAdapter = resolveInvokeAdapter(fnConfig);
   const sharedDeps = extractSharedDeps(fnConfig);
   const extraRoots = [];
   const extraNodeModules = [];
@@ -1288,7 +1637,7 @@ async function handleRequest(req) {
   const fnEnv = readFunctionEnv(sourcePath);
   ensureNodeDependencies(sourcePath);
   const execPath = ensureTsBuild(sourcePath, extraNodeModules);
-  const handler = loadHandler(execPath, extraNodeModules, handlerName);
+  const handler = loadHandler(execPath, extraNodeModules, handlerName, invokeAdapter);
   const eventWithEnv = { ...event };
   if (fnEnv && Object.keys(fnEnv).length > 0) {
     eventWithEnv.env = { ...(eventWithEnv.env || {}), ...fnEnv };
@@ -1296,7 +1645,7 @@ async function handleRequest(req) {
   const response = strictFsEnabled
     ? await withStrictFs(sourcePath, extraRoots, () => handler(eventWithEnv))
     : await handler(eventWithEnv);
-  return normalizeResponse(response);
+  return await normalizeResponse(response);
 }
 
 function runtimePoolKey(fnName, version) {
@@ -1577,6 +1926,48 @@ function ensureSocketDir(socketPath) {
   fs.mkdirSync(path.dirname(socketPath), { recursive: true });
 }
 
+function prepareSocketPath(socketPath, done) {
+  if (!fs.existsSync(socketPath)) {
+    done();
+    return;
+  }
+
+  const st = fs.lstatSync(socketPath);
+  if (!st.isSocket()) {
+    done(new Error(`runtime socket path exists and is not a unix socket: ${socketPath}`));
+    return;
+  }
+
+  let settled = false;
+  const finish = (err) => {
+    if (settled) {
+      return;
+    }
+    settled = true;
+    done(err || null);
+  };
+
+  const probe = net.createConnection(socketPath);
+  probe.setTimeout(200);
+  probe.once("connect", () => {
+    probe.end();
+    finish(new Error(`runtime socket already in use: ${socketPath}`));
+  });
+  probe.once("timeout", () => {
+    probe.destroy();
+    finish(new Error(`runtime socket probe timeout: ${socketPath}`));
+  });
+  probe.once("error", () => {
+    try {
+      fs.unlinkSync(socketPath);
+    } catch (err) {
+      finish(err);
+      return;
+    }
+    finish(null);
+  });
+}
+
 function parseFrames(socket, onFrame) {
   let buffer = Buffer.alloc(0);
   socket.on("error", (err) => {
@@ -1677,18 +2068,21 @@ function parseFrames(socket, onFrame) {
 
 function main() {
   ensureSocketDir(SOCKET_PATH);
+  prepareSocketPath(SOCKET_PATH, (prepErr) => {
+    if (prepErr) {
+      console.error(String(prepErr && prepErr.message ? prepErr.message : prepErr));
+      process.exit(1);
+      return;
+    }
 
-  if (fs.existsSync(SOCKET_PATH)) {
-    fs.unlinkSync(SOCKET_PATH);
-  }
+    const server = net.createServer((socket) => {
+      parseFrames(socket, handleRequestWithProcessPool);
+    });
 
-  const server = net.createServer((socket) => {
-    parseFrames(socket, handleRequestWithProcessPool);
-  });
-
-  server.listen(SOCKET_PATH, () => {
-    fs.chmodSync(SOCKET_PATH, 0o666);
-    preinstallNodeDependenciesOnStart();
+    server.listen(SOCKET_PATH, () => {
+      fs.chmodSync(SOCKET_PATH, 0o666);
+      preinstallNodeDependenciesOnStart();
+    });
   });
 }
 

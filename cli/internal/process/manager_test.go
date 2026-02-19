@@ -132,6 +132,72 @@ func TestManager_LogPrefix(t *testing.T) {
 	}
 }
 
+func TestManager_RestartsServiceWhenConfigured(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("skipping integration test requiring bash")
+	}
+
+	stdout, stderr := captureOutput(func() {
+		mgr := NewManager()
+		defer mgr.StopAll()
+
+		mgr.AddServiceWithOptions(
+			"restart-me",
+			"bash",
+			[]string{"-c", "echo boot; exit 1"},
+			nil,
+			".",
+			ServiceOptions{
+				Restart: RestartPolicy{
+					Enabled:        true,
+					MaxAttempts:    2,
+					InitialBackoff: 10 * time.Millisecond,
+					MaxBackoff:     10 * time.Millisecond,
+				},
+			},
+		)
+
+		if err := mgr.StartAll(); err != nil {
+			t.Fatalf("StartAll failed: %v", err)
+		}
+		time.Sleep(200 * time.Millisecond)
+	})
+
+	if strings.Count(stdout, "[restart-me] boot") < 2 {
+		t.Fatalf("expected service to restart and print boot multiple times; stdout=%q", stdout)
+	}
+	if !strings.Contains(stderr, "[restart-me] Restarting in") {
+		t.Fatalf("expected restart log in stderr; stderr=%q", stderr)
+	}
+}
+
+func TestManager_FailFastCancelsManagerContext(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("skipping integration test requiring bash")
+	}
+
+	mgr := NewManager()
+	defer mgr.StopAll()
+
+	mgr.AddServiceWithOptions(
+		"critical",
+		"bash",
+		[]string{"-c", "exit 1"},
+		nil,
+		".",
+		ServiceOptions{FailFast: true},
+	)
+	if err := mgr.StartAll(); err != nil {
+		t.Fatalf("StartAll failed: %v", err)
+	}
+
+	select {
+	case <-mgr.Done():
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("expected manager context cancellation after fail-fast service exit")
+	}
+}
+
 func TestMergedServiceEnv_RemovesNoColorWhenForceColorPresent(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	t.Setenv("FORCE_COLOR", "1")

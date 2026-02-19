@@ -97,6 +97,7 @@ nav:
       - Tools: en/how-to/tools.md
       - Zero-Config Routing: en/how-to/zero-config-routing.md
       - Authentication: en/how-to/authentication.md
+      - Security Confidence: en/how-to/security-confidence.md
       - Console Access: en/how-to/console-admin-access.md
       - Manage Functions: en/how-to/manage-functions.md
       - Telegram Bot (Cron): en/how-to/telegram-digest.md
@@ -115,6 +116,7 @@ nav:
       - Auth & Secrets: en/tutorial/auth-and-secrets.md
       - Doctor Domains: en/articles/doctor-domains-and-ci.md
       - IP Geolocation: en/articles/ip-geolocation-with-maxmind-and-ipapi.md
+      - Workers Compatibility (Beta): en/articles/workers-compatibility-beta.md
       - Artistic QRs: en/tutorial/artistic-qrs.md
     - Reference:
       - CLI Reference: en/reference/cli.md
@@ -162,6 +164,7 @@ nav:
       - "Receta: Digest Telegram (Cron)": es/como-hacer/telegram-digest.md
       - "Receta: Bot E2E": es/como-hacer/telegram-e2e.md
       - Ejecutar y Probar: es/como-hacer/ejecutar-y-probar.md
+      - "Antes de salir a producción: checklist de seguridad": es/como-hacer/checklist-seguridad-produccion.md
       - Desplegar a Producción: es/como-hacer/desplegar-a-produccion.md
       - Herramientas (Tools): es/como-hacer/herramientas.md
       - Contribuir: es/como-hacer/contribuir.md
@@ -177,6 +180,7 @@ nav:
       - QRs Artísticos: es/tutorial/qrs-artisticos.md
       - Doctor Dominios + CI: es/articulos/doctor-dominios-y-ci.md
       - Geolocalizacion IP: es/articulos/geolocalizacion-ip-con-maxmind-e-ipapi.md
+      - Workers Compatibility (Beta): es/articulos/workers-compat-beta.md
     - Referencia:
       - CLI Reference: es/referencia/cli-reference.md
       - Configuración fastfn.json: es/referencia/config-fastfn.md

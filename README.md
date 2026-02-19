@@ -50,6 +50,8 @@ FastFN is built for teams that want the speed of local files and the shape of pr
 Homebrew:
 
 ```bash
+# Planned channel (tap rollout in progress).
+# If tap/formula is not available yet, use the source install below.
 brew tap misaelzapata/homebrew-fastfn
 brew install fastfn
 ```

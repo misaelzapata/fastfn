@@ -6,8 +6,8 @@ import (
 )
 
 type Dependency struct {
-	Name    string
-	Command string // e.g., "openresty" or "nginx"
+	Name     string
+	Command  string // e.g., "openresty" or "nginx"
 	Optional bool
 }
 
@@ -15,7 +15,7 @@ type Dependency struct {
 func CheckDocker() error {
 	// 1. Check binary
 	if _, err := exec.LookPath("docker"); err != nil {
-		return fmt.Errorf("Docker is not installed or not in PATH. Please install from https://docs.docker.com/get-docker/")
+		return fmt.Errorf("Docker is not installed or not in PATH. Install Docker Desktop/Engine (macOS/Homebrew: brew install --cask docker; Linux: apt/dnf/snap packages)")
 	}
 
 	// 2. Check daemon status
@@ -30,7 +30,7 @@ func CheckDocker() error {
 // CheckDependencies verifies that required tools are in the PATH for NATIVE mode
 func CheckDependencies() error {
 	var missing []string
-	
+
 	// Define required deps for Native mode
 	required := []Dependency{
 		{Name: "OpenResty", Command: "openresty", Optional: false},
@@ -50,7 +50,7 @@ func CheckDependencies() error {
 	}
 
 	if len(missing) > 0 {
-		return fmt.Errorf("missing required dependencies for Native mode: %v. Please install them or use Docker mode", missing)
+		return fmt.Errorf("missing required dependencies for Native mode: %v. Install required runtimes (OpenResty via Homebrew or distro package) or use Docker mode", missing)
 	}
 
 	return nil

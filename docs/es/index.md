@@ -68,6 +68,7 @@ Esta documentación sigue el framework **[Diátaxis](https://diataxis.fr/)** par
 *   [Contrato del Runtime](./referencia/contrato-runtime.md)
 *   [Funciones incluidas](./referencia/funciones-ejemplo.md)
 *   [Recetas operativas](./como-hacer/recetas-operativas.md)
+*   [Antes de salir a producción: checklist de seguridad](./como-hacer/checklist-seguridad-produccion.md)
 
 ## Tutoriales extendidos
 

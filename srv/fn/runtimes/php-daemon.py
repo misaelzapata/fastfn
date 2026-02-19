@@ -4,6 +4,7 @@ import os
 import re
 import shutil
 import socket
+import stat
 import struct
 import subprocess
 import threading
@@ -563,6 +564,28 @@ def _handle_request_with_pool(req: Dict[str, Any]) -> Dict[str, Any]:
 def _ensure_socket_dir(path: str) -> None:
     Path(path).parent.mkdir(parents=True, exist_ok=True)
 
+def _prepare_socket_path(path: str) -> None:
+    if not os.path.exists(path):
+        return
+
+    mode = os.stat(path).st_mode
+    if not stat.S_ISSOCK(mode):
+        raise RuntimeError(f"runtime socket path exists and is not a unix socket: {path}")
+
+    probe = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    probe.settimeout(0.2)
+    try:
+        probe.connect(path)
+    except OSError:
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+    else:
+        raise RuntimeError(f"runtime socket already in use: {path}")
+    finally:
+        probe.close()
+
 
 def _serve_conn(conn: socket.socket) -> None:
     with conn:
@@ -584,9 +607,7 @@ def _serve_conn(conn: socket.socket) -> None:
 
 def main() -> None:
     _ensure_socket_dir(SOCKET_PATH)
-
-    if os.path.exists(SOCKET_PATH):
-        os.remove(SOCKET_PATH)
+    _prepare_socket_path(SOCKET_PATH)
 
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server:
         server.bind(SOCKET_PATH)

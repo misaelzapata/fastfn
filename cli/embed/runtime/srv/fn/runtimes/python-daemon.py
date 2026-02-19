@@ -5,6 +5,7 @@ import base64
 import os
 import re
 import socket
+import stat
 import struct
 import subprocess
 import sys
@@ -15,7 +16,7 @@ import time
 from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from pathlib import Path
 from contextlib import contextmanager
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Optional
 
 SOCKET_PATH = os.environ.get("FN_PY_SOCKET", "/tmp/fastfn/fn-python.sock")
 MAX_FRAME_BYTES = int(os.environ.get("FN_MAX_FRAME_BYTES", str(2 * 1024 * 1024)))
@@ -36,6 +37,9 @@ PACKS_DIR = BASE_DIR / "functions" / ".fastfn" / "packs" / "python"
 _NAME_RE = re.compile(r"^[A-Za-z0-9._/\-\[\]]+$")
 _VERSION_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 _HANDLER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_INVOKE_ADAPTER_NATIVE = "native"
+_INVOKE_ADAPTER_AWS_LAMBDA = "aws-lambda"
+_INVOKE_ADAPTER_CLOUDFLARE_WORKER = "cloudflare-worker"
 
 _HANDLER_CACHE: Dict[str, Dict[str, Any]] = {}
 _REQ_CACHE: Dict[str, bool] = {}
@@ -233,7 +237,26 @@ def _resolve_handler_name(fn_config: Dict[str, Any]) -> str:
     return name
 
 
-def _ensure_pack_requirements(pack_dir: Path) -> Path | None:
+def _resolve_invoke_adapter(fn_config: Dict[str, Any]) -> str:
+    invoke = fn_config.get("invoke")
+    if not isinstance(invoke, dict):
+        return _INVOKE_ADAPTER_NATIVE
+
+    raw = invoke.get("adapter")
+    if not isinstance(raw, str):
+        return _INVOKE_ADAPTER_NATIVE
+
+    normalized = raw.strip().lower()
+    if normalized in {"", "native", "none", "default"}:
+        return _INVOKE_ADAPTER_NATIVE
+    if normalized in {"aws-lambda", "lambda", "apigw-v2", "api-gateway-v2"}:
+        return _INVOKE_ADAPTER_AWS_LAMBDA
+    if normalized in {"cloudflare-worker", "cloudflare-workers", "worker", "workers"}:
+        return _INVOKE_ADAPTER_CLOUDFLARE_WORKER
+    raise ValueError(f"invoke.adapter unsupported: {raw}")
+
+
+def _ensure_pack_requirements(pack_dir: Path) -> Optional[Path]:
     req_file = pack_dir / "requirements.txt"
     if not req_file.is_file() or not _auto_requirements_enabled():
         return None
@@ -283,7 +306,7 @@ def _ensure_pack_requirements(pack_dir: Path) -> Path | None:
 
     _PACK_REQ_CACHE[marker] = True
     return deps_dir
-def _resolve_candidate_path(target: Any) -> Path | None:
+def _resolve_candidate_path(target: Any) -> Optional[Path]:
     if isinstance(target, int):
         return None
     if isinstance(target, bytes):
@@ -307,7 +330,7 @@ def _path_allowed(candidate: Path, allowed_roots: list[Path], function_dir: Path
     return False, "path outside strict function sandbox"
 
 
-def _build_allowed_roots(handler_path: Path, extra_roots: list[Path] | None = None) -> tuple[list[Path], Path]:
+def _build_allowed_roots(handler_path: Path, extra_roots: Optional[list[Path]] = None) -> tuple[list[Path], Path]:
     function_dir = handler_path.parent.resolve(strict=False)
     roots: list[Path] = [function_dir]
 
@@ -336,7 +359,7 @@ def _build_allowed_roots(handler_path: Path, extra_roots: list[Path] | None = No
 
 
 @contextmanager
-def _strict_fs_guard(handler_path: Path, extra_roots: list[Path] | None = None):
+def _strict_fs_guard(handler_path: Path, extra_roots: Optional[list[Path]] = None):
     if not STRICT_FS:
         yield
         return
@@ -953,7 +976,7 @@ class _PersistentWorker:
                 self._mark_dead()
                 raise RuntimeError("worker pipe broken")
 
-    def _read_exact(self, fd: int, n: int, timeout_s: float) -> bytes | None:
+    def _read_exact(self, fd: int, n: int, timeout_s: float) -> Optional[bytes]:
         """Read exactly n bytes with a timeout using select+os.read."""
         import select
         buf = bytearray()
@@ -994,14 +1017,22 @@ class _PersistentWorker:
                 pass
 
 
-def _worker_pool_key(handler_path: Path, handler_name: str, deps_dirs: list[str]) -> str:
-    return f"{handler_path}::{handler_name}::{','.join(sorted(deps_dirs))}"
+def _worker_pool_key(
+    handler_path: Path,
+    handler_name: str,
+    deps_dirs: list[str],
+    invoke_adapter: str = _INVOKE_ADAPTER_NATIVE,
+) -> str:
+    return f"{handler_path}::{handler_name}::{invoke_adapter}::{','.join(sorted(deps_dirs))}"
 
 
 def _get_or_create_worker(
-    handler_path: Path, handler_name: str, deps_dirs: list[str]
+    handler_path: Path,
+    handler_name: str,
+    deps_dirs: list[str],
+    invoke_adapter: str = _INVOKE_ADAPTER_NATIVE,
 ) -> _PersistentWorker:
-    key = _worker_pool_key(handler_path, handler_name, deps_dirs)
+    key = _worker_pool_key(handler_path, handler_name, deps_dirs, invoke_adapter)
     with _SUBPROCESS_POOL_LOCK:
         worker = _SUBPROCESS_POOL.get(key)
         if worker is not None and worker.alive:
@@ -1036,6 +1067,7 @@ def _run_in_subprocess(
     deps_dirs: list[str],
     event: Dict[str, Any],
     timeout_s: float,
+    invoke_adapter: str = _INVOKE_ADAPTER_NATIVE,
 ) -> Dict[str, Any]:
     """Execute a handler in a persistent isolated worker subprocess."""
     fn_env = _read_function_env(handler_path)
@@ -1050,6 +1082,7 @@ def _run_in_subprocess(
     payload = json.dumps({
         "handler_path": str(handler_path),
         "handler_name": handler_name,
+        "invoke_adapter": invoke_adapter,
         "deps_dirs": deps_dirs,
         "event": event_with_env,
     }, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
@@ -1057,13 +1090,13 @@ def _run_in_subprocess(
     # Try the persistent worker first; fall back to one-shot if it dies.
     for attempt in range(2):
         try:
-            worker = _get_or_create_worker(handler_path, handler_name, deps_dirs)
+            worker = _get_or_create_worker(handler_path, handler_name, deps_dirs, invoke_adapter)
             return worker.send_request(payload, timeout_s)
         except TimeoutError:
             return _error_response("python handler timeout", status=504)
         except Exception:
             # Worker died — evict and retry once with a fresh worker.
-            key = _worker_pool_key(handler_path, handler_name, deps_dirs)
+            key = _worker_pool_key(handler_path, handler_name, deps_dirs, invoke_adapter)
             with _SUBPROCESS_POOL_LOCK:
                 dead = _SUBPROCESS_POOL.pop(key, None)
                 if dead is not None:
@@ -1074,7 +1107,7 @@ def _run_in_subprocess(
             if attempt == 1:
                 # Second attempt also failed — fall back to one-shot.
                 return _run_in_subprocess_oneshot(
-                    handler_path, handler_name, deps_dirs, event_with_env, timeout_s
+                    handler_path, handler_name, deps_dirs, event_with_env, timeout_s, invoke_adapter
                 )
 
     return _error_response("worker pool exhausted", status=500)
@@ -1086,11 +1119,13 @@ def _run_in_subprocess_oneshot(
     deps_dirs: list[str],
     event: Dict[str, Any],
     timeout_s: float,
+    invoke_adapter: str = _INVOKE_ADAPTER_NATIVE,
 ) -> Dict[str, Any]:
     """Fallback: one-shot subprocess execution (original model)."""
     payload = json.dumps({
         "handler_path": str(handler_path),
         "handler_name": handler_name,
+        "invoke_adapter": invoke_adapter,
         "deps_dirs": deps_dirs,
         "event": event,
     }, separators=(",", ":"), ensure_ascii=False)
@@ -1133,6 +1168,7 @@ def _handle_request_direct(req: Dict[str, Any]) -> Dict[str, Any]:
     path = _resolve_handler_path(fn_name, version)
     fn_config = _read_function_config(path)
     handler_name = _resolve_handler_name(fn_config)
+    invoke_adapter = _resolve_invoke_adapter(fn_config)
     shared_deps = _extract_shared_deps(fn_config)
 
     # Install deps (idempotent, cached by mtime signature).
@@ -1159,7 +1195,7 @@ def _handle_request_direct(req: Dict[str, Any]) -> Dict[str, Any]:
         deps_dirs.append(str(fn_deps.resolve(strict=False)))
     for root in shared_roots:
         deps_dirs.append(str(root))
-    resp = _run_in_subprocess(path, handler_name, deps_dirs, event, timeout_s)
+    resp = _run_in_subprocess(path, handler_name, deps_dirs, event, timeout_s, invoke_adapter)
     return _normalize_response(resp)
 
 
@@ -1186,6 +1222,29 @@ def _handle_request_with_pool(req: Dict[str, Any]) -> Dict[str, Any]:
 def _ensure_socket_dir(path: str) -> None:
     Path(path).parent.mkdir(parents=True, exist_ok=True)
 
+def _prepare_socket_path(path: str) -> None:
+    if not os.path.exists(path):
+        return
+
+    mode = os.stat(path).st_mode
+    if not stat.S_ISSOCK(mode):
+        raise RuntimeError(f"runtime socket path exists and is not a unix socket: {path}")
+
+    probe = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    probe.settimeout(0.2)
+    try:
+        probe.connect(path)
+    except OSError:
+        # Not connectable: stale socket path from a previous crash/run.
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+    else:
+        raise RuntimeError(f"runtime socket already in use: {path}")
+    finally:
+        probe.close()
+
 
 def _serve_conn(conn: socket.socket) -> None:
     with conn:
@@ -1209,8 +1268,7 @@ def main() -> None:
     _ensure_socket_dir(SOCKET_PATH)
     _preinstall_requirements_on_start()
 
-    if os.path.exists(SOCKET_PATH):
-        os.remove(SOCKET_PATH)
+    _prepare_socket_path(SOCKET_PATH)
 
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server:
         server.bind(SOCKET_PATH)
