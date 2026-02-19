@@ -1,5 +1,13 @@
 # Ejecutar y probar
 
+## Ficha rapida
+
+- Complejidad: Intermedia
+- Tiempo tipico: 20-40 minutos
+- Usala cuando: necesitas validar plataforma completa en local o CI
+- Resultado: salud, ruteo, OpenAPI y tests quedan verificados
+
+
 Esta guia define un flujo de validacion real para usar FastFN como plataforma FaaS en serio.
 
 Esta ordenada por etapas para que puedas usarla igual en local y en CI.

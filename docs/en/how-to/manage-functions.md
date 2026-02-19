@@ -1,5 +1,13 @@
 # Manage Functions (Console API)
 
+## Quick View
+
+- Complexity: Intermediate
+- Typical time: 15-25 minutes
+- Use this when: you need CRUD and config updates through Console API
+- Outcome: functions can be created, updated, invoked, and removed safely
+
+
 Practical CRUD lifecycle using `/_fn/*` endpoints.
 
 ## Important: function paths are configurable

@@ -1,5 +1,13 @@
 # Antes de salir a producción: checklist de seguridad
 
+## Ficha rapida
+
+- Complejidad: Intermedia
+- Tiempo tipico: 15-25 minutos
+- Usala cuando: vas a salir a produccion y quieres un baseline seguro
+- Resultado: queda claro que esta protegido por default y que debes configurar
+
+
 Esta página es una sección práctica para operar FastFN con confianza antes de usarlo en producción.
 
 ## Qué viene protegido por default

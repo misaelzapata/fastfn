@@ -1,5 +1,13 @@
 # Security Confidence Checklist
 
+## Quick View
+
+- Complexity: Intermediate
+- Typical time: 15-25 minutes
+- Use this when: you are preparing production security baseline
+- Outcome: default protections and required hardening steps are explicit
+
+
 This page is a practical security section for teams that want confidence before using FastFN in real environments.
 
 ## What is safe by default

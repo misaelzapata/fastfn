@@ -1,5 +1,13 @@
 # FastAPI / Next.js Style Playbook
 
+## Quick View
+
+- Complexity: Advanced
+- Typical time: 45-90 minutes
+- Use this when: you are migrating a FastAPI or Next.js API surface
+- Outcome: route and policy parity are validated with rollout checkpoints
+
+
 This is the operational playbook for teams migrating from:
 
 - FastAPI-style backend APIs

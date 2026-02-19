@@ -1,5 +1,13 @@
 # Herramientas (Función-a-Función + HTTP Limitado)
 
+## Ficha rapida
+
+- Complejidad: Intermedia
+- Tiempo tipico: 15-25 minutos
+- Usala cuando: quieres usar tool calling seguro con allowlists
+- Resultado: las tools quedan operativas con controles explicitos
+
+
 En FastFN, las "tools" (herramientas) son un patrón **seguro y opt-in** que usan algunos ejemplos (Telegram, WhatsApp) para:
 
 - llamar a otras funciones de FastFN (`fn` tool), y

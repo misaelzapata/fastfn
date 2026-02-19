@@ -1,5 +1,13 @@
 # Recetas operativas (copiar y pegar)
 
+## Ficha rapida
+
+- Complejidad: Basica
+- Tiempo tipico: 5-15 minutos
+- Usala cuando: necesitas checks operativos de copiar y pegar
+- Resultado: diagnosticas rapido problemas comunes
+
+
 Recetas practicas con objetivo, comando, resultado esperado y diagnostico rapido.
 
 ## Receta 1: salud de plataforma

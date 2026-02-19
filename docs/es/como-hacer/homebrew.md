@@ -1,5 +1,13 @@
 # Instalar y Publicar (Homebrew)
 
+## Ficha rapida
+
+- Complejidad: Basica
+- Tiempo tipico: 5-10 minutos
+- Usala cuando: necesitas instalar o actualizar FastFN por Homebrew
+- Resultado: queda claro el camino de instalacion y prerequisitos
+
+
 Esta pagina cubre:
 
 - Estado del canal Homebrew y su uso (despliegue planificado).

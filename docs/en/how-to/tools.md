@@ -1,5 +1,13 @@
 # Tools (Function-to-Function + Limited HTTP)
 
+## Quick View
+
+- Complexity: Intermediate
+- Typical time: 15-25 minutes
+- Use this when: you need safe tool calling with fn and http allowlists
+- Outcome: tools run with explicit security controls
+
+
 FastFN "tools" are a **safe, opt-in** pattern used by some example bots (Telegram, WhatsApp) to:
 
 - call other FastFN functions (`fn` tool), and

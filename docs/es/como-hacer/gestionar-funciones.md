@@ -1,5 +1,13 @@
 # Gestionar funciones (API de consola)
 
+## Ficha rapida
+
+- Complejidad: Intermedia
+- Tiempo tipico: 15-25 minutos
+- Usala cuando: necesitas CRUD y cambios de config por Console API
+- Resultado: puedes crear, actualizar, invocar y eliminar funciones con control
+
+
 Flujo CRUD practico usando endpoints `/_fn/*`.
 
 ## Importante: rutas de funciones configurables

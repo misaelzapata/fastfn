@@ -1,5 +1,13 @@
 # Deploying to Production
 
+## Quick View
+
+- Complexity: Intermediate
+- Typical time: 20-30 minutes
+- Use this when: you are moving from local dev to production runtime
+- Outcome: production run mode and edge hardening are correctly configured
+
+
 FastFN is designed to run in production using the same engine as development, but with hot reload disabled and safer defaults.
 
 ## Production Modes

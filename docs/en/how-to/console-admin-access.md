@@ -1,5 +1,13 @@
 # Console and Admin Access
 
+## Quick View
+
+- Complexity: Intermediate
+- Typical time: 10-15 minutes
+- Use this when: you want to harden /console and /_fn endpoints
+- Outcome: console and admin API are exposed only as intended
+
+
 This guide is intentionally focused on the **admin surface only**:
 
 - `/console`

@@ -1,5 +1,13 @@
 # Contribuir
 
+## Ficha rapida
+
+- Complejidad: Basica
+- Tiempo tipico: 5-10 minutos
+- Usala cuando: vas a preparar un cambio o PR
+- Resultado: sigues el flujo esperado del repo y sus checks
+
+
 1. Crea una rama de trabajo.
 2. Haz cambios pequenos y enfocados.
 3. Actualiza docs cuando cambie API o comportamiento.

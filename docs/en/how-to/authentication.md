@@ -1,5 +1,13 @@
 # Authentication and Access Control
 
+## Quick View
+
+- Complexity: Intermediate
+- Typical time: 10-15 minutes
+- Use this when: you need to separate platform admin access from function-level auth
+- Outcome: admin surface and business auth rules are clearly scoped
+
+
 This guide separates two concerns that are usually mixed:
 
 1. Platform administration access (`/console`, `/_fn/*`)

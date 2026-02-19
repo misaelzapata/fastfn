@@ -1,5 +1,13 @@
 # Operational Recipes
 
+## Quick View
+
+- Complexity: Basic
+- Typical time: 5-15 minutes
+- Use this when: you need copy and paste operational checks during dev or incidents
+- Outcome: common runtime and API issues are quickly triaged
+
+
 This page is for copy/paste operations with context and expected outcomes.
 
 ## Recipe 1: check platform health

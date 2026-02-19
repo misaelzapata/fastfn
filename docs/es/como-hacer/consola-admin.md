@@ -1,5 +1,13 @@
 # Consola y administración
 
+## Ficha rapida
+
+- Complejidad: Intermedia
+- Tiempo tipico: 10-15 minutos
+- Usala cuando: necesitas endurecer /console y /_fn
+- Resultado: la superficie admin queda expuesta solo como corresponde
+
+
 Esta guia esta enfocada **solo** en la superficie administrativa:
 
 - `/console`

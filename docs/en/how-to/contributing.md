@@ -1,5 +1,13 @@
 # Contributing
 
+## Quick View
+
+- Complexity: Basic
+- Typical time: 5-10 minutes
+- Use this when: you are preparing a change or pull request
+- Outcome: you follow the expected repo workflow and checks
+
+
 Read first:
 
 - `README.md`

@@ -1,5 +1,13 @@
 # Telegram AI Digest (cron)
 
+## Ficha rapida
+
+- Complejidad: Intermedia
+- Tiempo tipico: 15-30 minutos
+- Usala cuando: quieres programar un digest de Telegram con resumen opcional
+- Resultado: quedan listos secretos, schedule y ejecucion
+
+
 Esta funcion envia un digest periodico a tu chat de Telegram usando fuentes gratuitas (sin keys para clima/noticias) y un resumen opcional con IA.
 
 ## Funcion

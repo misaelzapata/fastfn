@@ -1,5 +1,13 @@
 # Install and Release (Homebrew)
 
+## Quick View
+
+- Complexity: Basic
+- Typical time: 5-10 minutes
+- Use this when: you need install and upgrade paths via Homebrew
+- Outcome: CLI install path and runtime prerequisites are clear
+
+
 This page covers:
 
 - Homebrew channel status and usage (planned rollout).

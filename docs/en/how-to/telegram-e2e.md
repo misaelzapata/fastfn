@@ -1,5 +1,13 @@
 # Telegram E2E (Send a Real Message)
 
+## Quick View
+
+- Complexity: Intermediate
+- Typical time: 15-25 minutes
+- Use this when: you need to validate real Telegram send flow end-to-end
+- Outcome: token and chat wiring are verified with a real message
+
+
 This guide verifies a real end-to-end path:
 
 `fastfn` -> `telegram-send` -> Telegram Bot API -> your Telegram app.

@@ -1,5 +1,13 @@
 # Zero-Config Routing (Next.js Style / File-Based Dynamic Routing)
 
+## Quick View
+
+- Complexity: Intermediate
+- Typical time: 15-25 minutes
+- Use this when: you want filesystem routes with predictable precedence
+- Outcome: route discovery and conflict behavior are deterministic
+
+
 FastFN supports file-based routing with automatic runtime detection. You can ship endpoints without writing `fn.config.json` for each function.
 
 ## 1. Runtime Auto-Discovery

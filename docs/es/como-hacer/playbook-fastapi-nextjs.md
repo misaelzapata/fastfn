@@ -1,5 +1,13 @@
 # Playbook estilo FastAPI / Next.js
 
+## Ficha rapida
+
+- Complejidad: Avanzada
+- Tiempo tipico: 45-90 minutos
+- Usala cuando: migras APIs estilo FastAPI o Next.js
+- Resultado: validas paridad de rutas y politica con checkpoints de rollout
+
+
 Este playbook es para equipos que migran desde:
 
 - APIs estilo FastAPI

@@ -1,5 +1,13 @@
 # Run and Test
 
+## Quick View
+
+- Complexity: Intermediate
+- Typical time: 20-40 minutes
+- Use this when: you need full platform validation locally or in CI
+- Outcome: health, routing, OpenAPI and test gates are verified
+
+
 This guide is the practical validation flow for teams treating FastFN as a serious FaaS platform.
 
 It is organized as a staged checklist so you can run it locally and in CI with the same criteria.

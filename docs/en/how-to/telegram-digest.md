@@ -1,5 +1,13 @@
 # Telegram AI Digest (cron)
 
+## Quick View
+
+- Complexity: Intermediate
+- Typical time: 15-30 minutes
+- Use this when: you want scheduled Telegram digests with optional AI summary
+- Outcome: digest flow runs with correct secrets and schedule
+
+
 This function sends a periodic digest to your Telegram chat using free sources (no API keys required for weather/news) and optional AI summarization.
 
 ## Function

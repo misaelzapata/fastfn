@@ -1,5 +1,13 @@
 # Desplegar a Producción
 
+## Ficha rapida
+
+- Complejidad: Intermedia
+- Tiempo tipico: 20-30 minutos
+- Usala cuando: pasas de dev local a ejecucion de produccion
+- Resultado: modo run y hardening de edge quedan configurados
+
+
 FastFN está pensado para correr en producción usando el mismo motor que en desarrollo, pero con hot reload deshabilitado y defaults más seguros.
 
 ## Modos de Producción

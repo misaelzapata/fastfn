@@ -310,7 +310,7 @@ Architecture rule (locked):
   - then expand tutorials for migration tracks (FastAPI-style and Next.js-style teams).
 
 35. Unified how-to complexity format (EN/ES)
-- Status: in_progress
+- Status: completed (2026-02-19)
 - Priority: high
 - Goal:
   - enforce one structure across all how-to guides:
