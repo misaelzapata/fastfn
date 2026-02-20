@@ -174,66 +174,22 @@ lcov_path.write_text(lcov_text)
 print(f"lua lcov export: files={file_count} path={lcov_path}")
 PY
 
-# Emit empty-but-valid coverage artifacts when an optional runtime suite is absent.
-write_stub_runtime_coverage() {
-  local xml_path="$1"
-  local json_path="$2"
-  local txt_path="$3"
-  local reason="$4"
-
-  cat >"$xml_path" <<'XML'
-<?xml version="1.0" ?>
-<coverage version="coverage.py" timestamp="0" lines-valid="0" lines-covered="0" line-rate="0" branches-valid="0" branches-covered="0" branch-rate="0" complexity="0">
-  <sources>
-    <source>.</source>
-  </sources>
-  <packages />
-</coverage>
-XML
-
-  cat >"$json_path" <<'JSON'
-{"meta":{"version":"coverage.py","timestamp":"","branch_coverage":true,"show_contexts":false},"files":{},"totals":{"covered_lines":0,"num_statements":0,"percent_covered":0,"percent_covered_display":"0","missing_lines":0,"excluded_lines":0}}
-JSON
-
-  printf '%s\n' "$reason" >"$txt_path"
-}
-
 echo "== php runtime coverage =="
-if [[ -f "$PHP_RUNTIME_TEST_FILE" ]]; then
-  python3 -m coverage erase
-  python3 -m coverage run --branch --source="$ROOT_DIR/srv/fn/runtimes" "$PHP_RUNTIME_TEST_FILE"
-  python3 -m coverage xml --include="$ROOT_DIR/srv/fn/runtimes/php-daemon.py" -o "$OUT_DIR/php-runtime-coverage.xml"
-  python3 -m coverage json --include="$ROOT_DIR/srv/fn/runtimes/php-daemon.py" -o "$OUT_DIR/php-runtime-coverage.json"
-  python3 -m coverage report --include="$ROOT_DIR/srv/fn/runtimes/php-daemon.py" > "$OUT_DIR/php-runtime-coverage.txt"
-else
-  msg="php runtime coverage skipped (missing test file: $PHP_RUNTIME_TEST_FILE)"
-  echo "$msg"
-  write_stub_runtime_coverage \
-    "$OUT_DIR/php-runtime-coverage.xml" \
-    "$OUT_DIR/php-runtime-coverage.json" \
-    "$OUT_DIR/php-runtime-coverage.txt" \
-    "$msg"
-fi
+python3 -m coverage erase
+python3 -m coverage run --branch --source="$ROOT_DIR/srv/fn/runtimes" "$PHP_RUNTIME_TEST_FILE"
+python3 -m coverage xml --include="$ROOT_DIR/srv/fn/runtimes/php-daemon.py" -o "$OUT_DIR/php-runtime-coverage.xml"
+python3 -m coverage json --include="$ROOT_DIR/srv/fn/runtimes/php-daemon.py" -o "$OUT_DIR/php-runtime-coverage.json"
+python3 -m coverage report --include="$ROOT_DIR/srv/fn/runtimes/php-daemon.py" > "$OUT_DIR/php-runtime-coverage.txt"
 
 echo "== rust runtime coverage =="
-if [[ -f "$RUST_RUNTIME_TEST_FILE" ]]; then
-  python3 -m coverage erase
-  python3 -m coverage run --branch --source="$ROOT_DIR/srv/fn/runtimes" "$RUST_RUNTIME_TEST_FILE"
-  if [[ -f "$RUST_HANDLER_TEST_FILE" ]] && command -v rustc >/dev/null 2>&1 && command -v cargo >/dev/null 2>&1; then
-    python3 -m coverage run -a --branch --source="$ROOT_DIR/srv/fn/runtimes" "$RUST_HANDLER_TEST_FILE"
-  fi
-  python3 -m coverage xml --include="$ROOT_DIR/srv/fn/runtimes/rust-daemon.py" -o "$OUT_DIR/rust-runtime-coverage.xml"
-  python3 -m coverage json --include="$ROOT_DIR/srv/fn/runtimes/rust-daemon.py" -o "$OUT_DIR/rust-runtime-coverage.json"
-  python3 -m coverage report --include="$ROOT_DIR/srv/fn/runtimes/rust-daemon.py" > "$OUT_DIR/rust-runtime-coverage.txt"
-else
-  msg="rust runtime coverage skipped (missing test file: $RUST_RUNTIME_TEST_FILE)"
-  echo "$msg"
-  write_stub_runtime_coverage \
-    "$OUT_DIR/rust-runtime-coverage.xml" \
-    "$OUT_DIR/rust-runtime-coverage.json" \
-    "$OUT_DIR/rust-runtime-coverage.txt" \
-    "$msg"
+python3 -m coverage erase
+python3 -m coverage run --branch --source="$ROOT_DIR/srv/fn/runtimes" "$RUST_RUNTIME_TEST_FILE"
+if [[ -f "$RUST_HANDLER_TEST_FILE" ]] && command -v rustc >/dev/null 2>&1 && command -v cargo >/dev/null 2>&1; then
+  python3 -m coverage run -a --branch --source="$ROOT_DIR/srv/fn/runtimes" "$RUST_HANDLER_TEST_FILE"
 fi
+python3 -m coverage xml --include="$ROOT_DIR/srv/fn/runtimes/rust-daemon.py" -o "$OUT_DIR/rust-runtime-coverage.xml"
+python3 -m coverage json --include="$ROOT_DIR/srv/fn/runtimes/rust-daemon.py" -o "$OUT_DIR/rust-runtime-coverage.json"
+python3 -m coverage report --include="$ROOT_DIR/srv/fn/runtimes/rust-daemon.py" > "$OUT_DIR/rust-runtime-coverage.txt"
 
 echo "== coverage summary =="
 COVERAGE_ENFORCE_LUA="$ENFORCE_LUA" python3 - "$OUT_DIR" <<'PY'
