@@ -49,6 +49,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage/go-cli-coverage.out
+          disable_search: true
           flags: go-cli
           fail_ci_if_error: false
 
@@ -203,6 +204,13 @@ jobs:
             coverage/node/coverage-summary.json
             coverage/node/lcov.info
             coverage/lua/luacov.report.out
+            coverage/lua/lcov.info
+            coverage/php-runtime-coverage.xml
+            coverage/php-runtime-coverage.json
+            coverage/php-runtime-coverage.txt
+            coverage/rust-runtime-coverage.xml
+            coverage/rust-runtime-coverage.json
+            coverage/rust-runtime-coverage.txt
             coverage/node-coverage.txt
             coverage/lua-coverage.txt
             coverage/summary.md
@@ -213,7 +221,9 @@ jobs:
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage/python-coverage.xml,./coverage/node/lcov.info
+          files: ./coverage/python-coverage.xml,./coverage/node/lcov.info,./coverage/lua/lcov.info,./coverage/php-runtime-coverage.xml,./coverage/rust-runtime-coverage.xml
+          disable_search: true
+          flags: unit-runtime
           fail_ci_if_error: false
 
       - name: Coverage summary
