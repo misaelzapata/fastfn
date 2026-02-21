@@ -140,6 +140,15 @@ def test_serve_conn_ignores_client_disconnect_on_write() -> None:
             pass
 
 
+def test_prepare_socket_path_tolerates_stat_race() -> None:
+    old_stat = go_daemon.os.stat
+    try:
+        go_daemon.os.stat = lambda _p: (_ for _ in ()).throw(FileNotFoundError("gone"))  # type: ignore[assignment]
+        go_daemon._prepare_socket_path("/tmp/fastfn/fn-go.sock")
+    finally:
+        go_daemon.os.stat = old_stat
+
+
 def main() -> None:
     test_write_frame_roundtrip()
     test_write_frame_fallback_for_unserializable_payload()
@@ -149,6 +158,7 @@ def main() -> None:
     test_read_frame_non_object_json()
     test_read_frame_oversized_length()
     test_serve_conn_ignores_client_disconnect_on_write()
+    test_prepare_socket_path_tolerates_stat_race()
     print("go runtime unit tests passed")
 
 
