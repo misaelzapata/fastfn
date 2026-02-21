@@ -637,6 +637,14 @@ def test_additional_edge_branches() -> None:
         rust_daemon._ensure_socket_dir(path)
         assert (Path(tmp) / "sock").is_dir()
 
+    # _prepare_socket_path tolerates stat race (socket removed between checks)
+    old_stat = rust_daemon.os.stat
+    try:
+        rust_daemon.os.stat = lambda _p: (_ for _ in ()).throw(FileNotFoundError("gone"))
+        rust_daemon._prepare_socket_path("/tmp/fastfn/fn-rust.sock")
+    finally:
+        rust_daemon.os.stat = old_stat
+
     old_read = rust_daemon._read_frame
     old_handle = rust_daemon._handle_request_with_pool
     old_write = rust_daemon._write_frame

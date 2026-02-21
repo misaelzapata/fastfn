@@ -685,6 +685,14 @@ def test_additional_edge_branches() -> None:
         php_daemon._ensure_socket_dir(path)
         assert (Path(tmp) / "sock").is_dir()
 
+    # _prepare_socket_path tolerates stat race (socket removed between checks)
+    old_stat = php_daemon.os.stat
+    try:
+        php_daemon.os.stat = lambda _p: (_ for _ in ()).throw(FileNotFoundError("gone"))
+        php_daemon._prepare_socket_path("/tmp/fastfn/fn-php.sock")
+    finally:
+        php_daemon.os.stat = old_stat
+
     # _serve_conn FileNotFoundError / generic / write failure
     old_read = php_daemon._read_frame
     old_handle = php_daemon._handle_request_with_pool

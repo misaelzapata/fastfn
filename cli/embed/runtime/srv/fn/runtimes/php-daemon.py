@@ -565,10 +565,10 @@ def _ensure_socket_dir(path: str) -> None:
     Path(path).parent.mkdir(parents=True, exist_ok=True)
 
 def _prepare_socket_path(path: str) -> None:
-    if not os.path.exists(path):
+    try:
+        mode = os.stat(path).st_mode
+    except FileNotFoundError:
         return
-
-    mode = os.stat(path).st_mode
     if not stat.S_ISSOCK(mode):
         raise RuntimeError(f"runtime socket path exists and is not a unix socket: {path}")
 
