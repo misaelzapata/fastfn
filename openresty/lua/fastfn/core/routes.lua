@@ -1,5 +1,6 @@
 local cjson = require "cjson.safe"
 local invoke_rules = require "fastfn.core.invoke_rules"
+local home_rules = require "fastfn.core.home"
 local watchdog = require "fastfn.core.watchdog"
 
 local M = {}
@@ -1091,6 +1092,74 @@ local function sort_dynamic_routes(mapped_routes)
   return keys
 end
 
+local function normalize_home_alias_target_route(rel_dir, raw)
+  local value = tostring(raw or ""):gsub("^%s+", ""):gsub("%s+$", "")
+  if value == "" then
+    return nil
+  end
+  if value:find("^[Hh][Tt][Tt][Pp][Ss]?://") then
+    return nil
+  end
+
+  if value:sub(1, 1) == "/" then
+    return normalize_single_route(value)
+  end
+
+  local segments = split_rel_segments(rel_dir)
+  for token in tostring(value):gmatch("[^/]+") do
+    local normalized = normalize_route_token(token)
+    if normalized then
+      segments[#segments + 1] = normalized
+    end
+  end
+  local route = "/" .. table.concat(segments, "/")
+  return normalize_single_route(route)
+end
+
+local function maybe_add_directory_home_alias(cfg, rel_dir, discovered)
+  if type(cfg) ~= "table" then
+    return
+  end
+  local spec = home_rules.extract_home_spec(cfg)
+  if type(spec) ~= "table" or type(spec.home_function) ~= "string" then
+    return
+  end
+
+  local folder_segments = split_rel_segments(rel_dir)
+  local folder_route = "/" .. table.concat(folder_segments, "/")
+  folder_route = normalize_single_route(folder_route)
+  if not folder_route or folder_route == "/" then
+    return
+  end
+
+  local target_route = normalize_home_alias_target_route(rel_dir, spec.home_function)
+  if not target_route or target_route == "/" or target_route == folder_route then
+    return
+  end
+
+  local existing_alias = nil
+  local matched_target = nil
+  for _, item in ipairs(discovered) do
+    if item.route == folder_route then
+      existing_alias = item
+    end
+    if item.route == target_route and not matched_target then
+      matched_target = item
+    end
+  end
+  if existing_alias or not matched_target then
+    return
+  end
+
+  discovered[#discovered + 1] = {
+    route = folder_route,
+    runtime = matched_target.runtime,
+    target = matched_target.target,
+    methods = matched_target.methods,
+    allow_hosts = matched_target.allow_hosts,
+  }
+end
+
 local function detect_file_based_routes_in_dir(abs_dir, rel_dir)
   local cfg = read_json_file(abs_dir .. "/fn.config.json")
   if is_explicit_fn_config(cfg) then
@@ -1167,6 +1236,7 @@ local function detect_file_based_routes_in_dir(abs_dir, rel_dir)
         end
     end
   end
+  maybe_add_directory_home_alias(cfg, rel_dir, discovered)
   return discovered
 end
 

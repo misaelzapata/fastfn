@@ -1,3 +1,17 @@
+local home = require("fastfn.core.home")
+
+local action = home.resolve_home_action(os.getenv("FN_FUNCTIONS_ROOT"))
+for _, warning in ipairs(action.warnings or {}) do
+  ngx.log(ngx.WARN, tostring(warning))
+end
+
+if action.mode == "function" then
+  return ngx.exec(action.path, action.args)
+end
+if action.mode == "redirect" then
+  return ngx.redirect(action.location, ngx.HTTP_MOVED_TEMPORARILY)
+end
+
 ngx.status = 200
 ngx.header["Content-Type"] = "text/html; charset=utf-8"
 
@@ -98,6 +112,19 @@ ngx.say([[
           <pre>FN_UI_ENABLED=1
 FN_CONSOLE_API_ENABLED=1
 FN_CONSOLE_WRITE_ENABLED=0</pre>
+        </article>
+
+        <article class="card">
+          <h2>Home Routing</h2>
+          <p>Override <code>/</code> with redirect or internal function execution.</p>
+          <pre>FN_HOME_FUNCTION=/showcase
+# or
+FN_HOME_REDIRECT=/_fn/docs
+
+# Root fn.config.json (if present under FN_FUNCTIONS_ROOT)
+{
+  "home": { "route": "/showcase" }
+}</pre>
         </article>
 
         <article class="card">

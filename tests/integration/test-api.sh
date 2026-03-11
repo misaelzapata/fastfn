@@ -305,6 +305,33 @@ assert_download_attachment() {
   rm -f "$headers_file" "$body_file"
 }
 
+assert_redirect_location() {
+  local path="$1"
+  local expected_status="$2"
+  local expected_location="$3"
+
+  local headers_file body_file code
+  headers_file="$(mktemp)"
+  body_file="$(mktemp)"
+  code="$(curl_fastfn -sS -D "$headers_file" -o "$body_file" -w '%{http_code}' "${BASE_URL}$path")"
+  if [[ "$code" != "$expected_status" ]]; then
+    echo "FAIL GET $path expected redirect status=$expected_status got=$code"
+    cat "$body_file" || true
+    cat "$headers_file" || true
+    rm -f "$headers_file" "$body_file"
+    exit 1
+  fi
+
+  if ! grep -qi "^location: ${expected_location}\r\?$" "$headers_file"; then
+    echo "FAIL GET $path expected Location: $expected_location"
+    cat "$headers_file" || true
+    rm -f "$headers_file" "$body_file"
+    exit 1
+  fi
+
+  rm -f "$headers_file" "$body_file"
+}
+
 assert_invoke_uses_mapped_route() {
   local catalog
   catalog="$(curl_fastfn -sS "${BASE_URL}/_fn/catalog")"
@@ -1504,6 +1531,22 @@ assert_status GET "/_fn/catalog" "404"
 assert_status GET "/_fn/ui-state" "404"
 assert_status GET "/console" "404"
 assert_status GET "/docs/a/b" "200"
+stop_stack
+
+echo "== Phase 3b: Home routing (env + fn.config) =="
+start_stack "tests/fixtures/home-routing" "FN_RUNTIMES=node" "FN_HOME_FUNCTION=/node/home-routing/welcome"
+assert_status GET "/node/home-routing/welcome" "200"
+assert_body_contains GET "/" "\"endpoint\":\"welcome\""
+assert_status GET "/node/home-routing/portal/dashboard" "200"
+assert_body_contains GET "/node/home-routing/portal" "\"endpoint\":\"portal-dashboard\""
+stop_stack
+
+start_stack "tests/fixtures/home-routing" "FN_RUNTIMES=node" "FN_HOME_FUNCTION=/node/home-routing/portal/dashboard"
+assert_body_contains GET "/" "\"endpoint\":\"portal-dashboard\""
+stop_stack
+
+start_stack "tests/fixtures/home-routing" "FN_RUNTIMES=node" "FN_HOME_REDIRECT=/_fn/docs"
+assert_redirect_location "/" "302" "/_fn/docs"
 stop_stack
 
 echo "== Phase 4: Console UI/API matrix =="

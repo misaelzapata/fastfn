@@ -142,6 +142,7 @@ Focused suites:
 bash tests/integration/test-openapi-system.sh
 bash tests/integration/test-openapi-native.sh
 bash tests/integration/test-api.sh
+bash tests/integration/test-home-routing.sh
 bash tests/integration/test-auto-install-inference.sh
 bash tests/integration/test-platform-equivalents.sh
 ```
@@ -161,6 +162,7 @@ Use this checklist before merge/release:
 - [ ] `mapped_route_conflicts` is empty (or intentionally documented)
 - [ ] `test-openapi-system.sh` passes
 - [ ] `test-openapi-native.sh` passes (or explicitly justified for local non-native environments)
+- [ ] `test-home-routing.sh` passes (root `/` override + folder home alias via `fn.config.json`)
 - [ ] `test-auto-install-inference.sh` passes (strict inference + metadata visibility)
 - [ ] `test-platform-equivalents.sh` passes (advanced auth/webhook/jobs/order examples)
 - [ ] docs links added/updated for changed behavior

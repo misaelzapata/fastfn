@@ -82,6 +82,9 @@ echo "== unit: lua (openresty runtime) =="
 echo "== integration: docker compose =="
 "$ROOT_DIR/tests/integration/test-api.sh"
 
+echo "== integration: home routing (env + folder fn.config home) =="
+bash "$ROOT_DIR/tests/integration/test-home-routing.sh"
+
 echo "== integration: auto-install inference =="
 bash "$ROOT_DIR/tests/integration/test-auto-install-inference.sh"
 

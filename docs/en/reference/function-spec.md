@@ -335,10 +335,15 @@ Main fields:
 - `invoke.allow_hosts`: (Optional) Host allowlist for those routes (array).
 - `invoke.force-url`: (Optional) If `true`, this function is allowed to override an already-mapped URL.
 - `invoke.adapter`: (Beta, Node/Python) compatibility mode for external handler styles (`native`, `aws-lambda`, `cloudflare-worker`).
+- `home`: (Optional, directory overlay) Home mapping for folder/root:
+  - `home.route` or `home.function`: internal path to execute as home.
+  - `home.redirect`: URL/path to redirect as home (`302`).
 
 Notes:
 - By default, FastFN does not silently override an existing URL mapping.
 - In file-routes layout, a `fn.config.json` that does not declare a function identity (`runtime`/`name`/`entrypoint`) is treated as a **policy overlay** for all file routes under that folder (and nested folders). This is the recommended way to set `timeout_ms`, `max_concurrency`, `invoke.allow_hosts`, etc.
+- In file-routes layout, folder overlays can define `home.route` to alias folder root (for example `/portal`) to another discovered route in that folder (for example `/portal/dashboard`).
+- Root-level `fn.config.json` can define `home.route`/`home.redirect` to override `/` without editing Nginx.
 - Use `invoke.force-url: true` only when you intentionally want this function to take a route from another function (for example during a migration).
 - Version-scoped configs (for example `node/my-fn/v2/fn.config.json`) never take over an existing URL by themselves; use `FN_FORCE_URL=1` if you need a version route to win.
 - Global override: set `FN_FORCE_URL=1` (or `fastfn dev --force-url`) to treat all config/policy routes as forced.
@@ -358,6 +363,9 @@ Example with advanced fields:
     "force-url": false,
     "routes": ["/my-api", "/my-api/*"],
     "allow_hosts": ["api.example.com"]
+  },
+  "home": {
+    "route": "/my-api"
   },
   "keep_warm": {
     "enabled": true,

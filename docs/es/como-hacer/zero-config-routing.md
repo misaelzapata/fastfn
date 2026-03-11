@@ -80,6 +80,72 @@ FN_ZERO_CONFIG_IGNORE_DIRS="build,dist,tmp" fastfn dev .
 }
 ```
 
+### Home por carpeta (`fn.config.json`)
+
+Puedes definir un "home" de carpeta sin crear `index.*`.
+
+Ejemplo:
+
+```text
+portal/
+  fn.config.json
+  get.dashboard.js
+```
+
+`portal/fn.config.json`:
+
+```json
+{
+  "home": {
+    "route": "dashboard"
+  }
+}
+```
+
+Resultado:
+
+- `GET /portal/dashboard` -> manejado por `portal/get.dashboard.js`
+- `GET /portal` -> mismo handler (alias home de carpeta)
+
+Notas:
+
+- `home.route` puede ser absoluto (`/portal/dashboard`) o relativo (`dashboard`).
+- Para alias de carpeta, FastFN resuelve `home.route` contra rutas detectadas en esa misma carpeta.
+
+### Comportamiento de home raíz (`/`)
+
+Por defecto, FastFN mantiene una landing interna en `/`. Puedes overridearla:
+
+```bash
+# Dispatch interno (sin 302): ejecuta handler mapeado en /showcase
+FN_HOME_FUNCTION=/showcase fastfn dev .
+
+# Redirect (302)
+FN_HOME_REDIRECT=/_fn/docs fastfn dev .
+```
+
+O desde `fn.config.json` en el root (cuando ese archivo existe en el `FN_FUNCTIONS_ROOT` efectivo):
+
+```json
+{
+  "home": {
+    "route": "/showcase"
+  }
+}
+```
+
+`home` soporta:
+
+- `route` (o `function`): path interno para ejecutar en `/`
+- `redirect`: URL/path para redirigir desde `/` (302)
+
+Precedencia (de mayor a menor):
+
+1. `FN_HOME_FUNCTION`
+2. `FN_HOME_REDIRECT`
+3. `home` en `fn.config.json` raíz
+4. landing interna por defecto
+
 ## 3. Precedencia (Importante)
 
 FastFN fusiona rutas desde múltiples fuentes:

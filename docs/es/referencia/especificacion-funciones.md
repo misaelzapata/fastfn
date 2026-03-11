@@ -213,6 +213,9 @@ Campos clave:
 - `invoke.routes` (mapeo opcional de endpoint publico)
 - `invoke.force-url` (opcional, si `true` puede sobrescribir una URL ya mapeada)
 - `invoke.adapter` (Beta, Node/Python): modo de compatibilidad (`native`, `aws-lambda`, `cloudflare-worker`)
+- `home` (opcional, overlay por carpeta/root):
+  - `home.route` o `home.function`: path interno a ejecutar como home.
+  - `home.redirect`: URL/path para redirección home (`302`).
 - `invoke.summary`
 - `invoke.query`
 - `invoke.body`
@@ -236,6 +239,9 @@ Ejemplo:
     "summary": "Mi funcion",
     "query": {"name": "World"},
     "body": ""
+  },
+  "home": {
+    "route": "/api/mi-funcion"
   }
 }
 ```
@@ -246,6 +252,8 @@ Notas:
 - En runtimes Node y Python, esa función debe existir/exportarse en el mismo archivo.
 - `invoke.routes` es opcional.
 - Si existe, cada ruta debe ser absoluta (por ejemplo `/api/mi-funcion`).
+- En layout por archivos, `home.route` permite aliasar la raíz de una carpeta (por ejemplo `/portal`) hacia otra ruta detectada en esa carpeta (por ejemplo `/portal/dashboard`).
+- En `fn.config.json` raíz, `home.route`/`home.redirect` permite override de `/` sin editar Nginx.
 - Prefijos reservados no permitidos (`/_fn`, `/console`, `/docs`).
 - Conflictos de rutas devuelven `409`.
 - Por defecto, FastFN no sobrescribe silenciosamente un mapeo de URL existente.

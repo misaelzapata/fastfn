@@ -147,6 +147,7 @@ Suites focalizadas:
 bash tests/integration/test-openapi-system.sh
 bash tests/integration/test-openapi-native.sh
 bash tests/integration/test-api.sh
+bash tests/integration/test-home-routing.sh
 bash tests/integration/test-auto-install-inference.sh
 bash tests/integration/test-platform-equivalents.sh
 ```
@@ -164,6 +165,7 @@ Criterio de aceptacion:
 - [ ] `mapped_route_conflicts` vacio (o conflicto documentado)
 - [ ] `test-openapi-system.sh` en verde
 - [ ] `test-openapi-native.sh` en verde (o justificado fuera de entorno native)
+- [ ] `test-home-routing.sh` en verde (override de `/` + home por carpeta vía `fn.config.json`)
 - [ ] `test-auto-install-inference.sh` en verde (inferencia strict + metadata visible)
 - [ ] `test-platform-equivalents.sh` en verde (ejemplos avanzados de auth/webhook/jobs/orders)
 - [ ] docs y links internos actualizados con el cambio

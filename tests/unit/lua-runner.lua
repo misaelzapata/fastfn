@@ -391,6 +391,84 @@ local function test_invoke_rules()
   assert_eq(invoke_routes[2], "/api/b", "invoke routes second")
 end
 
+local function test_home_rules()
+  local cjson = require("cjson.safe")
+  local home = require("fastfn.core.home")
+
+  local uniq = tostring(math.floor((ngx and ngx.now and ngx.now() or os.time()) * 1000000))
+  local root = "/tmp/fastfn-lua-home-" .. uniq
+  rm_rf(root)
+  mkdir_p(root)
+
+  with_env({ FN_HOME_FUNCTION = "/landing", FN_HOME_REDIRECT = false }, function()
+    local action = home.resolve_home_action(root)
+    assert_eq(action.mode, "function", "home env function mode")
+    assert_eq(action.path, "/landing", "home env function path")
+    assert_eq(action.source, "env:FN_HOME_FUNCTION", "home env function source")
+  end)
+
+  with_env({ FN_HOME_FUNCTION = "portal/dashboard?tab=main", FN_HOME_REDIRECT = false }, function()
+    local action = home.resolve_home_action(root)
+    assert_eq(action.mode, "function", "home env relative mode")
+    assert_eq(action.path, "/portal/dashboard", "home env relative path")
+    assert_eq(action.args, "tab=main", "home env relative args")
+  end)
+
+  with_env({ FN_HOME_FUNCTION = "/", FN_HOME_REDIRECT = "/_fn/docs" }, function()
+    local action = home.resolve_home_action(root)
+    assert_eq(action.mode, "redirect", "home fallback to redirect when function invalid")
+    assert_eq(action.location, "/_fn/docs", "home fallback redirect location")
+  end)
+
+  with_env({ FN_HOME_FUNCTION = false, FN_HOME_REDIRECT = "https://example.com/docs" }, function()
+    local action = home.resolve_home_action(root)
+    assert_eq(action.mode, "redirect", "home env external redirect mode")
+    assert_eq(action.location, "https://example.com/docs", "home env external redirect location")
+  end)
+
+  write_file(
+    root .. "/fn.config.json",
+    cjson.encode({
+      home = {
+        route = "welcome",
+      },
+    }) .. "\n"
+  )
+
+  with_env({ FN_HOME_FUNCTION = false, FN_HOME_REDIRECT = false }, function()
+    local action = home.resolve_home_action(root)
+    assert_eq(action.mode, "function", "home config route mode")
+    assert_eq(action.path, "/welcome", "home config route path")
+    assert_eq(action.source, "config:fn.config.json", "home config source")
+  end)
+
+  write_file(
+    root .. "/fn.config.json",
+    cjson.encode({
+      home = {
+        redirect = "/_fn/docs",
+      },
+    }) .. "\n"
+  )
+
+  with_env({ FN_HOME_FUNCTION = false, FN_HOME_REDIRECT = false }, function()
+    local action = home.resolve_home_action(root)
+    assert_eq(action.mode, "redirect", "home config redirect mode")
+    assert_eq(action.location, "/_fn/docs", "home config redirect location")
+  end)
+
+  local invoke_home = home.extract_home_spec({
+    invoke = {
+      home = {
+        route = "dashboard",
+      },
+    },
+  })
+  assert_eq(invoke_home.home_function, "dashboard", "extract invoke.home route")
+
+  rm_rf(root)
+end
+
 local function test_openapi_builder()
   local openapi = require("fastfn.core.openapi")
   local function find_param(params, name)
@@ -5013,6 +5091,7 @@ local function main()
   run_test("test_gateway_utils", test_gateway_utils)
   run_test("test_fn_limits", test_fn_limits)
   run_test("test_invoke_rules", test_invoke_rules)
+  run_test("test_home_rules", test_home_rules)
   run_test("test_openapi_builder", test_openapi_builder)
   run_test("test_ui_state_endpoint_guards", test_ui_state_endpoint_guards)
   run_test("test_ui_state_endpoint_full_behavior", test_ui_state_endpoint_full_behavior)

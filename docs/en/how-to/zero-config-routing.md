@@ -84,6 +84,72 @@ FN_ZERO_CONFIG_IGNORE_DIRS="build,dist,tmp" fastfn dev .
 }
 ```
 
+### Folder-defined home alias (`fn.config.json`)
+
+You can define a folder "home route" without creating `index.*`.
+
+Example:
+
+```text
+portal/
+  fn.config.json
+  get.dashboard.js
+```
+
+`portal/fn.config.json`:
+
+```json
+{
+  "home": {
+    "route": "dashboard"
+  }
+}
+```
+
+Result:
+
+- `GET /portal/dashboard` -> handled by `portal/get.dashboard.js`
+- `GET /portal` -> same handler (folder home alias)
+
+Notes:
+
+- `home.route` can be absolute (`/portal/dashboard`) or relative (`dashboard`).
+- For folder aliases, FastFN resolves `home.route` against routes discovered in that same folder.
+
+### Root home behavior (`/`)
+
+FastFN keeps a built-in landing page at `/` by default. You can override it:
+
+```bash
+# Internal dispatch (no 302): executes mapped handler at /showcase
+FN_HOME_FUNCTION=/showcase fastfn dev .
+
+# Redirect (302)
+FN_HOME_REDIRECT=/_fn/docs fastfn dev .
+```
+
+Or from root `fn.config.json` (when that file exists in the effective `FN_FUNCTIONS_ROOT`):
+
+```json
+{
+  "home": {
+    "route": "/showcase"
+  }
+}
+```
+
+`home` object supports:
+
+- `route` (or `function`): internal path to execute for `/`
+- `redirect`: URL/path to redirect from `/` (302)
+
+Env vars have precedence over `fn.config.json`:
+
+1. `FN_HOME_FUNCTION`
+2. `FN_HOME_REDIRECT`
+3. root `fn.config.json` `home`
+4. built-in landing page
+
 ## 3. Precedence (Important)
 
 FastFN merges routes from multiple sources:
