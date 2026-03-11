@@ -4906,9 +4906,16 @@ local function test_console_data_validation_edges_and_helpers()
     local merged = merge_unique_routes({ "/a", "/b" }, { "/b", "/c" })
     assert_true(type(merged) == "table" and #merged == 3, "merge_unique_routes dedupe")
 
-    local bad_create0, bad_create0_err = data.create_function("python", "bad/name", nil, {})
+    local bad_create0, bad_create0_err = data.create_function("python", "bad:name", nil, {})
     assert_eq(bad_create0, nil, "create_function invalid name")
     assert_true(type(bad_create0_err) == "string" and bad_create0_err:find("invalid function", 1, true) ~= nil, "create_function invalid name error")
+
+    local ns_create, ns_create_err = data.create_function("python", "edge_ns/hello", nil, {
+      summary = "Edge Namespace Create",
+      methods = { "GET" },
+      route = "/edge-ns-hello",
+    })
+    assert_true(ns_create ~= nil, ns_create_err or "create_function namespaced name")
 
     local bad_create1, bad_create1_err = data.create_function("python", "edge_create_invalid_filename", nil, { filename = "../evil.py" })
     assert_eq(bad_create1, nil, "create_function invalid filename")
