@@ -4,6 +4,11 @@ set -eu
 mkdir -p /tmp/fastfn
 chmod 1777 /tmp/fastfn 2>/dev/null || true
 
+# Ensure the functions root is writable by the nginx worker (which runs as nobody).
+# Docker named volumes are created with root ownership, so fix permissions at startup.
+FN_FUNCTIONS_ROOT="${FN_FUNCTIONS_ROOT:-/app/srv/fn/functions}"
+chmod -R a+rwX "$FN_FUNCTIONS_ROOT" 2>/dev/null || true
+
 # Optional Lua coverage for request/integration flows.
 if [ "${FN_LUA_COVERAGE:-0}" = "1" ]; then
   : "${FN_LUA_COVERAGE_STATS:=/tmp/luacov.stats.out}"

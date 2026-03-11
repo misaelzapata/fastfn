@@ -71,6 +71,9 @@ markdown_extensions:
 plugins:
   - search
 
+exclude_docs: |
+  internal/**
+
 nav:
   - Home: index.md
   - English Docs:
@@ -190,9 +193,3 @@ nav:
       - Ciclo de Invocación: es/explicacion/flujo-invocacion.md
       - Modelo de Seguridad: es/explicacion/modelo-seguridad.md
       - Scheduler vs Cron: es/explicacion/scheduler-vs-cron.md
-  - Internal:
-    - Task Queue: internal/TASK_QUEUE.md
-    - Docs Workflow: internal/DOCS_WORKFLOW.md
-    - Context Dump: internal/chat_dump_openresty_faas.md
-    - Future Plans: internal/prefork-plan.md
-    - Overview: internal/README.md

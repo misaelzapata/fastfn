@@ -16,6 +16,37 @@ local function sorted_keys(tbl)
   return keys
 end
 
+local function parse_cookies(cookie_header)
+  local cookies = {}
+  if type(cookie_header) ~= "string" or cookie_header == "" then
+    return cookies
+  end
+  for pair in cookie_header:gmatch("[^;]+") do
+    local k, v = pair:match("^%s*([^=]+)%s*=%s*(.-)%s*$")
+    if k and k ~= "" then
+      cookies[k] = v or ""
+    end
+  end
+  return cookies
+end
+
+local function build_session(req_headers)
+  local raw = ""
+  if type(req_headers) == "table" then
+    raw = req_headers["Cookie"] or req_headers["cookie"] or ""
+  end
+  if raw == "" then
+    return nil
+  end
+  local cookies = parse_cookies(raw)
+  local session_id = cookies["session_id"] or cookies["sessionid"] or cookies["sid"] or nil
+  return {
+    id = session_id,
+    raw = raw,
+    cookies = cookies,
+  }
+end
+
 local function method_allowed(entry_methods, method)
   if type(entry_methods) ~= "table" then
     return true
@@ -303,6 +334,8 @@ end
 local version_label = resolved_version or "default"
 local request_id = "invoke-" .. tostring(math.floor(ngx.now() * 1000)) .. "-" .. tostring(math.random(1000, 9999))
 local start = ngx.now()
+local req_headers = type(payload.headers) == "table" and payload.headers or {}
+local session = build_session(req_headers)
 local request_payload = {
   fn = name,
   version = resolved_version,
@@ -315,8 +348,9 @@ local request_payload = {
     query = query,
     params = params,
     path_params = params,
-    headers = {},
+    headers = req_headers,
     body = type(body) == "string" and body or "",
+    session = session,
     client = { ip = "127.0.0.1", ua = "fastfn-console-invoke" },
     context = {
       request_id = request_id,
@@ -332,6 +366,18 @@ local request_payload = {
     },
   },
 }
+-- Inject secrets vault into event.secrets
+local secrets_list = console.list_secrets() or {}
+if #secrets_list > 0 then
+  local secrets_map = {}
+  local fcache = ngx.shared.fn_cache
+  for _, item in ipairs(secrets_list) do
+    local val = fcache:get("sys:secret:val:" .. item.key)
+    if val then secrets_map[item.key] = val end
+  end
+  request_payload.event.secrets = secrets_map
+end
+
 local res, err_code, err_msg
 if routes.runtime_is_in_process(resolved_runtime, runtime_cfg) then
   res, err_code, err_msg = lua_runtime.call(request_payload)
@@ -353,6 +399,9 @@ for k, v in pairs(res.headers or {}) do
   end
 end
 
+local stdout = type(res.stdout) == "string" and res.stdout ~= "" and res.stdout or nil
+local stderr = type(res.stderr) == "string" and res.stderr ~= "" and res.stderr or nil
+
 if res.is_base64 == true then
   guard.write_json(200, {
     status = res.status,
@@ -362,6 +411,8 @@ if res.is_base64 == true then
     headers = headers,
     is_base64 = true,
     body_base64 = res.body_base64 or "",
+    stdout = stdout,
+    stderr = stderr,
   })
   return
 end
@@ -373,4 +424,6 @@ guard.write_json(200, {
   route_template = route_template,
   headers = headers,
   body = res.body or "",
+  stdout = stdout,
+  stderr = stderr,
 })
