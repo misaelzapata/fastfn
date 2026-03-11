@@ -2115,7 +2115,7 @@ function M.create_function(runtime, name, version, payload)
   if type(runtime) ~= "string" or not runtime:match(NAME_RE) then
     return nil, "invalid runtime"
   end
-  if type(name) ~= "string" or not name:match(NAME_RE) then
+  if type(name) ~= "string" or not name:match(NAME_RE) or name:find("/", 1, true) ~= nil then
     return nil, "invalid function name"
   end
   if version ~= nil and version ~= "" and (type(version) ~= "string" or not version:match(VERSION_RE)) then
