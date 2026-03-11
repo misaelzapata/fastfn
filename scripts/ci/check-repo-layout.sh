@@ -30,6 +30,7 @@ require_dir "tests/fixtures/nextstyle-clean"
 require_dir "tests/fixtures/scheduler-nonblocking"
 require_dir "tests/fixtures/keep-warm"
 require_dir "tests/fixtures/worker-pool"
+require_dir "tests/fixtures/compat"
 
 forbid_path "test"
 forbid_path "test-integration"

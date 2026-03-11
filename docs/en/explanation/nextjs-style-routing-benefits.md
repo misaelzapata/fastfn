@@ -1,5 +1,8 @@
 # Next.js-Style Routing: Practical Benefits in FastFN
 
+
+> Verified status as of **March 10, 2026**.
+> Runtime note: FastFN auto-installs function-local dependencies from `requirements.txt` / `package.json`; host runtimes are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
 This document summarizes why FastFN moved to Next.js-style routing (technical: file-based routing with dynamic-segment conventions) as the default DX and what was validated in real runs.
 
 ## 1. Faster Development Loop
@@ -104,3 +107,23 @@ So internal tooling can be off in hardened environments without sacrificing app 
 - Easier onboarding for teams already using file-based routing conventions.
 - More scalable for monorepos and mixed languages.
 - Cleaner migration path: explicit config and manifest still work where needed.
+
+## Problem
+
+What operational or developer pain this topic solves.
+
+## Mental Model
+
+How to reason about this feature in production-like environments.
+
+## Design Decisions
+
+- Why this behavior exists
+- Tradeoffs accepted
+- When to choose alternatives
+
+## See also
+
+- [Function Specification](../reference/function-spec.md)
+- [HTTP API Reference](../reference/http-api.md)
+- [Run and Test Checklist](../how-to/run-and-test.md)

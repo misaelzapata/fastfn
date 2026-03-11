@@ -1,5 +1,8 @@
 # Runtime Contract
 
+
+> Verified status as of **March 10, 2026**.
+> Runtime note: FastFN auto-installs function-local dependencies from `requirements.txt` / `package.json`; host runtimes are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
 This document defines exactly what OpenResty sends to handlers and what runtimes must return.
 
 ## 1) Internal transport
@@ -7,7 +10,7 @@ This document defines exactly what OpenResty sends to handlers and what runtimes
 - Protocol: Unix socket per runtime (`python`, `node`, `php`, `rust`).
 - Frame format: `4-byte big-endian length + JSON`.
 - Internal request: `{ fn, version, event }`.
-- Internal response: `{ status, headers, body }` or base64 binary payload.
+- Internal response: `{ status, headers, body }` or base64 binary payload. May include `stdout`/`stderr`.
 
 ## 2) What clients send and how handlers receive it
 
@@ -27,6 +30,7 @@ curl -sS 'http://127.0.0.1:8080/risk-score?email=user@example.com' \
 - query string -> `event.query`
 - request headers -> `event.headers`
 - raw body string -> `event.body`
+- parsed cookies -> `event.session`
 - client IP/UA -> `event.client`
 - gateway/policy metadata -> `event.context`
 - function-level env -> `event.env`
@@ -52,6 +56,11 @@ curl -sS 'http://127.0.0.1:8080/risk-score?email=user@example.com' \
       "cookie": "session_id=abc123"
     },
     "body": "",
+    "session": {
+      "id": "abc123",
+      "raw": "session_id=abc123",
+      "cookies": {"session_id": "abc123"}
+    },
     "client": {"ip": "127.0.0.1", "ua": "curl/8.7.1"},
     "context": {
       "request_id": "req-1770795478241-13-311866",
@@ -95,6 +104,10 @@ curl -sS 'http://127.0.0.1:8080/risk-score?email=user@example.com' \
 | `context.max_body_bytes` | `number` | policy | applied body limit |
 | `context.gateway.worker_pid` | `number` | OpenResty | worker pid |
 | `context.debug.enabled` | `boolean` | policy | debug headers policy |
+| `session` | `object` or `null` | gateway | parsed cookies (see below) |
+| `session.id` | `string` or `null` | gateway | auto-detected session id |
+| `session.raw` | `string` | gateway | raw `Cookie` header value |
+| `session.cookies` | `object` | gateway | parsed key:value cookie map |
 | `context.user` | `object` or `null` | `/_fn/invoke` | custom injected context |
 | `env` | `object` | `fn.env.json` | function/version env variables |
 
@@ -117,7 +130,84 @@ Handler receives:
 - `event.context.user.trace_id`
 - `event.context.user.tenant`
 
-## 6) Runtime response contract
+## 6) `event.session` — cookie parsing
+
+The gateway automatically parses the `Cookie` header and exposes it as `event.session`. If no `Cookie` header is present, `event.session` is `null`.
+
+### Shape
+
+```json
+{
+  "id": "abc123",
+  "raw": "session_id=abc123; theme=dark",
+  "cookies": {
+    "session_id": "abc123",
+    "theme": "dark"
+  }
+}
+```
+
+| Field | Description |
+|---|---|
+| `id` | Auto-detected session identifier. Checks `session_id`, `sessionid`, and `sid` cookie names (in that order). `null` if none found. |
+| `raw` | The raw `Cookie` header string as sent by the client. |
+| `cookies` | Parsed key:value map of all cookies. |
+
+### Usage examples
+
+**Python:**
+
+```python
+def handler(event):
+    session = event.get("session") or {}
+    session_id = session.get("id")
+    theme = (session.get("cookies") or {}).get("theme", "light")
+    return {"status": 200, "body": f"session={session_id}, theme={theme}"}
+```
+
+**Node:**
+
+```js
+exports.handler = async (event) => {
+  const session = event.session || {};
+  const sessionId = session.id;
+  const theme = (session.cookies || {}).theme || "light";
+  return { status: 200, body: `session=${sessionId}, theme=${theme}` };
+};
+```
+
+**Lua:**
+
+```lua
+return function(event)
+  local session = event.session or {}
+  local sid = session.id
+  local theme = (session.cookies or {}).theme or "light"
+  return { status = 200, body = "session=" .. tostring(sid) .. ", theme=" .. theme }
+end
+```
+
+**Go:**
+
+```go
+package main
+
+import "fmt"
+
+func Handler(event map[string]interface{}) map[string]interface{} {
+    session, _ := event["session"].(map[string]interface{})
+    sid, _ := session["id"].(string)
+    cookies, _ := session["cookies"].(map[string]interface{})
+    theme, _ := cookies["theme"].(string)
+    if theme == "" { theme = "light" }
+    return map[string]interface{}{
+        "status": 200,
+        "body":   fmt.Sprintf("session=%s, theme=%s", sid, theme),
+    }
+}
+```
+
+## 7) Runtime response contract
 
 ### Text/JSON
 
@@ -139,6 +229,25 @@ Handler receives:
   "body_base64": "iVBORw0KGgo..."
 }
 ```
+
+### Simple response shorthand (runtime-dependent)
+
+Canonical contract is always `{ status, headers, body }` (or `{ is_base64, body_base64 }` for binary).
+Some runtimes also accept shorthand returns and normalize them automatically:
+
+| Runtime | Shorthand support | What gets normalized |
+|---|---|---|
+| Node | yes | primitives/objects without envelope are normalized (for example object -> JSON `200`, string -> `text/plain` or `text/html`) |
+| Python | partial | dict without envelope -> JSON `200`; tuple `(body, status, headers)` also supported |
+| PHP | yes | primitives/arrays/objects are normalized to a valid HTTP response envelope |
+| Lua | yes | values without envelope are normalized to JSON `200` |
+| Go | no | must return explicit envelope object |
+| Rust | no | must return explicit envelope object |
+
+Portable recommendation:
+
+- Use explicit envelope in shared examples and cross-runtime code.
+- Use shorthand only when you intentionally target a specific runtime behavior.
 
 ### Edge passthrough (proxy)
 
@@ -230,7 +339,7 @@ Security:
 }
 ```
 
-## 7) Supported response types
+## 8) Supported response types
 
 - `application/json`
 - `text/html`
@@ -239,7 +348,69 @@ Security:
 
 `/_fn/invoke` wraps non-text responses as base64 so it can always return JSON.
 
-## 8) Strict filesystem mode (default)
+## 9) stdout/stderr capture
+
+All runtimes capture handler output (`print()`, `console.log()`, `eprintln!()`, etc.) and return it alongside the response. This is useful for debugging via Quick Test in the console.
+
+### How it works
+
+| Runtime | stdout capture | stderr capture |
+|---|---|---|
+| Python | `print()`, `sys.stdout.write()` | `sys.stderr.write()` |
+| Node | `console.log()`, `console.info()`, `console.debug()` | `console.error()`, `console.warn()` |
+| Lua | `print()` | — |
+| PHP | `echo`, `print` (subprocess stdout) | `error_log()`, `fwrite(STDERR, ...)` (subprocess stderr) |
+| Go | `fmt.Println()` (subprocess stdout) | `fmt.Fprintln(os.Stderr, ...)` (subprocess stderr) |
+| Rust | `println!()` (subprocess stdout) | `eprintln!()` (subprocess stderr) |
+
+### Response fields
+
+The runtime adds `stdout` and `stderr` to the response JSON when output is captured:
+
+```json
+{
+  "status": 200,
+  "headers": {"Content-Type": "application/json"},
+  "body": "{\"ok\":true}",
+  "stdout": "debug: processing request\nuser_id=42",
+  "stderr": "warning: deprecated field used"
+}
+```
+
+Fields are omitted when empty (no output).
+
+### Debug headers
+
+When `context.debug.enabled` is `true`, the gateway exposes captured output as response headers:
+
+- `X-Fn-Stdout` — captured stdout (truncated to 4096 bytes)
+- `X-Fn-Stderr` — captured stderr (truncated to 4096 bytes)
+
+### Quick Test
+
+The `/_fn/invoke` endpoint returns `stdout` and `stderr` in the response JSON. The console Quick Test panel displays these in collapsible sections.
+
+### Example
+
+```python
+def handler(event):
+    name = (event.get("query") or {}).get("name", "world")
+    print(f"handling request for {name}")   # captured in stdout
+    return {"status": 200, "body": f"Hello, {name}!"}
+```
+
+Quick Test response:
+
+```json
+{
+  "status": 200,
+  "latency_ms": 12,
+  "body": "Hello, world!",
+  "stdout": "handling request for world"
+}
+```
+
+## 10) Strict filesystem mode (default)
 
 `fastfn` runs handlers with strict filesystem mode enabled by default:
 
@@ -263,3 +434,32 @@ Implementation note:
 Important:
 
 - this is a runtime-level sandbox, not kernel-level isolation (cgroups/seccomp/chroot).
+
+## Runtime Contract Diagram
+
+```mermaid
+flowchart TD
+  A["Gateway event"] --> B["Runtime adapter"]
+  B --> C["User handler"]
+  C --> D["Normalized FastFN response"]
+```
+
+## Contract
+
+Defines expected request/response shape, configuration fields, and behavioral guarantees.
+
+## End-to-End Example
+
+Use the examples in this page as canonical templates for implementation and testing.
+
+## Edge Cases
+
+- Missing configuration fallbacks
+- Route conflicts and precedence
+- Runtime-specific nuances
+
+## See also
+
+- [Function Specification](function-spec.md)
+- [HTTP API Reference](http-api.md)
+- [Run and Test Checklist](../how-to/run-and-test.md)

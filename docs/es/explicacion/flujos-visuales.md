@@ -1,5 +1,8 @@
 # Flujos visuales
 
+
+> Estado verificado al **10 de marzo de 2026**.
+> Nota de runtime: FastFN auto-instala dependencias locales por función desde `requirements.txt` / `package.json`; en `fastfn dev --native` necesitas runtimes instalados en host, mientras que `fastfn dev` depende de Docker daemon activo.
 ## Flujo de invocación pública
 
 ```mermaid
@@ -41,3 +44,23 @@ flowchart TD
   F -- "No" --> G["502 respuesta inválida"]
   F -- "Sí" --> H["Devolver status/body de función"]
 ```
+
+## Problema
+
+Qué dolor operativo o de DX resuelve este tema.
+
+## Modelo Mental
+
+Cómo razonar esta feature en entornos similares a producción.
+
+## Decisiones de Diseño
+
+- Por qué existe este comportamiento
+- Qué tradeoffs se aceptan
+- Cuándo conviene una alternativa
+
+## Ver también
+
+- [Especificación de Funciones](../referencia/especificacion-funciones.md)
+- [Referencia API HTTP](../referencia/api-http.md)
+- [Checklist Ejecutar y Probar](../como-hacer/ejecutar-y-probar.md)

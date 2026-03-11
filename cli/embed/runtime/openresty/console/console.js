@@ -2040,6 +2040,7 @@ class ConsoleApp {
         : '';
     }
     this.renderScheduleState(detail);
+    this.renderDependencyResolution(detail);
 
     if (env) env.value = stringifyPretty(envView);
     this.setEnvDictFromPayload(envView);
@@ -2075,6 +2076,35 @@ class ConsoleApp {
     stateEl.textContent = parts.length > 0
       ? `Scheduler state: ${parts.join(' | ')}`
       : 'Scheduler state: no runs yet.';
+  }
+
+  renderDependencyResolution(detail) {
+    const el = document.getElementById('configDependencyResolution');
+    if (!el) return;
+
+    const dep = detail?.metadata?.dependency_resolution;
+    if (!dep || typeof dep !== 'object') {
+      el.textContent = 'No auto-install activity yet.';
+      return;
+    }
+
+    const inferredImports = Array.isArray(dep.inferred_imports) ? dep.inferred_imports : [];
+    const resolvedPackages = Array.isArray(dep.resolved_packages) ? dep.resolved_packages : [];
+    const unresolvedImports = Array.isArray(dep.unresolved_imports) ? dep.unresolved_imports : [];
+    const lines = [
+      `runtime: ${String(dep.runtime || detail?.runtime || '')}`,
+      `mode: ${String(dep.mode || 'manifest')}`,
+      `manifest_path: ${String(dep.manifest_path || '-')}`,
+      `manifest_generated: ${dep.manifest_generated === true ? 'true' : 'false'}`,
+      `last_install_status: ${String(dep.last_install_status || 'unknown')}`,
+      `lockfile_path: ${dep.lockfile_path ? String(dep.lockfile_path) : '-'}`,
+      `inferred_imports: ${inferredImports.length > 0 ? inferredImports.join(', ') : '-'}`,
+      `resolved_packages: ${resolvedPackages.length > 0 ? resolvedPackages.join(', ') : '-'}`,
+      `unresolved_imports: ${unresolvedImports.length > 0 ? unresolvedImports.join(', ') : '-'}`,
+      `last_error: ${dep.last_error ? String(dep.last_error) : '-'}`,
+      `updated_at: ${dep.updated_at ? String(dep.updated_at) : '-'}`,
+    ];
+    el.textContent = lines.join('\n');
   }
 
   collectApiRoutes(detail) {

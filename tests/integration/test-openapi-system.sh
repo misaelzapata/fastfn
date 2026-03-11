@@ -12,6 +12,20 @@ FN_ADMIN_TOKEN="${FN_ADMIN_TOKEN:-test-admin-token}"
 TEST_SUFFIX="${TEST_SUFFIX:-$$}"
 COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-fastfn-openapi-system-${TEST_SUFFIX}}"
 
+TEST_HOST="${TEST_HOST:-127.0.0.1}"
+TEST_PORT="${TEST_PORT:-${FN_HOST_PORT:-8080}}"
+BASE_URL="${BASE_URL:-http://${TEST_HOST}:${TEST_PORT}}"
+BASE_HOSTPORT="${BASE_HOSTPORT:-${TEST_HOST}:${TEST_PORT}}"
+CURL_CONNECT_TIMEOUT_SECS="${CURL_CONNECT_TIMEOUT_SECS:-2}"
+CURL_MAX_TIME_SECS="${CURL_MAX_TIME_SECS:-30}"
+
+export FN_HOST_PORT="${FN_HOST_PORT:-$TEST_PORT}"
+export FASTFN_TEST_BASE_URL="$BASE_URL"
+
+curl_fastfn() {
+  curl --connect-timeout "$CURL_CONNECT_TIMEOUT_SECS" --max-time "$CURL_MAX_TIME_SECS" "$@"
+}
+
 STACK_PID=""
 STACK_LOG=""
 STACK_EXIT_FILE=""
@@ -72,7 +86,7 @@ wait_for_health() {
     fi
 
     local code
-    code="$(curl -sS -o /tmp/fastfn-openapi-system-health.out -w '%{http_code}' 'http://127.0.0.1:8080/_fn/health' 2>/dev/null || true)"
+    code="$(curl_fastfn -sS -o /tmp/fastfn-openapi-system-health.out -w '%{http_code}' "${BASE_URL}/_fn/health" 2>/dev/null || true)"
     if [[ "$code" == "200" ]]; then
       ready=1
       break
@@ -116,7 +130,7 @@ wait_for_runtime_up() {
   local ready=0
   for _ in $(seq 1 "$WAIT_SECS"); do
     local health_json
-    health_json="$(curl -sS 'http://127.0.0.1:8080/_fn/health' 2>/dev/null || true)"
+    health_json="$(curl_fastfn -sS "${BASE_URL}/_fn/health" 2>/dev/null || true)"
     if HEALTH_JSON="$health_json" RUNTIME="$runtime" python3 - <<'PY' >/dev/null 2>&1
 import json
 import os
@@ -138,14 +152,14 @@ PY
 
   if [[ "$ready" != "1" ]]; then
     echo "FAIL runtime did not become healthy: $runtime"
-    curl -sS 'http://127.0.0.1:8080/_fn/health' || true
+    curl_fastfn -sS "${BASE_URL}/_fn/health" || true
     return 1
   fi
 }
 
 assert_experimental_runtimes_off_by_default() {
   local health_json
-  health_json="$(curl -sS 'http://127.0.0.1:8080/_fn/health')"
+  health_json="$(curl_fastfn -sS "${BASE_URL}/_fn/health")"
   HEALTH_JSON="$health_json" python3 - <<'PY'
 import json
 import os
@@ -219,14 +233,14 @@ stop_stack() {
 
 assert_config_files_hidden() {
   local code
-  code="$(curl -sS -o /tmp/fastfn-openapi-fastfn-json.out -w '%{http_code}' 'http://127.0.0.1:8080/fastfn.json')"
+  code="$(curl_fastfn -sS -o /tmp/fastfn-openapi-fastfn-json.out -w '%{http_code}' "${BASE_URL}/fastfn.json")"
   if [[ "$code" != "404" ]]; then
     echo "FAIL GET /fastfn.json expected=404 got=$code"
     cat /tmp/fastfn-openapi-fastfn-json.out || true
     exit 1
   fi
 
-  code="$(curl -sS -o /tmp/fastfn-openapi-fastfn-toml.out -w '%{http_code}' 'http://127.0.0.1:8080/fastfn.toml')"
+  code="$(curl_fastfn -sS -o /tmp/fastfn-openapi-fastfn-toml.out -w '%{http_code}' "${BASE_URL}/fastfn.toml")"
   if [[ "$code" != "404" ]]; then
     echo "FAIL GET /fastfn.toml expected=404 got=$code"
     cat /tmp/fastfn-openapi-fastfn-toml.out || true
@@ -236,7 +250,7 @@ assert_config_files_hidden() {
 
 assert_home_quick_invoke_is_live_openapi_based() {
   local home_html='/tmp/openapi-system-home.out'
-  curl -sS 'http://127.0.0.1:8080/' >"$home_html"
+  curl_fastfn -sS "${BASE_URL}/" >"$home_html"
 
   if grep -q "Current demos (forms, polyglot SQLite, JSON, HTML/CSV/PNG, QR, WhatsApp, Gmail, Telegram)." "$home_html"; then
     echo "FAIL home quick invoke still shows stale static demo list"
@@ -251,7 +265,7 @@ assert_home_quick_invoke_is_live_openapi_based() {
 
 assert_openapi_functions_only_default_and_admin_functional() {
   local openapi_json
-  openapi_json="$(curl -sS 'http://127.0.0.1:8080/_fn/openapi.json')"
+  openapi_json="$(curl_fastfn -sS "${BASE_URL}/_fn/openapi.json")"
   OPENAPI_JSON="$openapi_json" python3 - <<'PY'
 import json
 import os
@@ -265,14 +279,14 @@ assert not internal, f"internal paths must be hidden by default: {internal[:10]}
 PY
 
   local health_code catalog_code
-  health_code="$(curl -sS -o /tmp/openapi-system-default-health.out -w '%{http_code}' 'http://127.0.0.1:8080/_fn/health')"
+  health_code="$(curl_fastfn -sS -o /tmp/openapi-system-default-health.out -w '%{http_code}' "${BASE_URL}/_fn/health")"
   if [[ "$health_code" != "200" ]]; then
     echo "FAIL /_fn/health should stay functional while hidden from OpenAPI"
     cat /tmp/openapi-system-default-health.out || true
     exit 1
   fi
 
-  catalog_code="$(curl -sS -o /tmp/openapi-system-default-catalog.out -w '%{http_code}' 'http://127.0.0.1:8080/_fn/catalog')"
+  catalog_code="$(curl_fastfn -sS -o /tmp/openapi-system-default-catalog.out -w '%{http_code}' "${BASE_URL}/_fn/catalog")"
   if [[ "$catalog_code" != "200" ]]; then
     echo "FAIL /_fn/catalog should stay functional while hidden from OpenAPI"
     cat /tmp/openapi-system-default-catalog.out || true
@@ -283,8 +297,8 @@ PY
 assert_openapi_internal_contract() {
   local openapi_json
   local catalog_json
-  openapi_json="$(curl -sS 'http://127.0.0.1:8080/_fn/openapi.json')"
-  catalog_json="$(curl -sS 'http://127.0.0.1:8080/_fn/catalog')"
+  openapi_json="$(curl_fastfn -sS "${BASE_URL}/_fn/openapi.json")"
+  catalog_json="$(curl_fastfn -sS "${BASE_URL}/_fn/catalog")"
   OPENAPI_JSON="$openapi_json" CATALOG_JSON="$catalog_json" python3 - <<'PY'
 import json
 import os
@@ -457,8 +471,8 @@ assert_ad_hoc_route_exported() {
 
   local create_code cfg_code code_code reload_code delete_code probe_get_code probe_post_code
 
-  create_code="$(curl -sS -o /tmp/openapi-system-create.out -w '%{http_code}' -X POST \
-    "http://127.0.0.1:8080/_fn/function?runtime=node&name=${fn_name}" \
+  create_code="$(curl_fastfn -sS -o /tmp/openapi-system-create.out -w '%{http_code}' -X POST \
+    "${BASE_URL}/_fn/function?runtime=node&name=${fn_name}" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN" \
     -H 'Content-Type: application/json' \
     --data '{"methods":["GET"],"summary":"OpenAPI ad-hoc probe"}')"
@@ -468,8 +482,8 @@ assert_ad_hoc_route_exported() {
     exit 1
   fi
 
-  cfg_code="$(curl -sS -o /tmp/openapi-system-cfg.out -w '%{http_code}' -X PUT \
-    "http://127.0.0.1:8080/_fn/function-config?runtime=node&name=${fn_name}" \
+  cfg_code="$(curl_fastfn -sS -o /tmp/openapi-system-cfg.out -w '%{http_code}' -X PUT \
+    "${BASE_URL}/_fn/function-config?runtime=node&name=${fn_name}" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN" \
     -H 'Content-Type: application/json' \
     --data "{\"invoke\":{\"methods\":[\"GET\",\"POST\"],\"routes\":[\"${route_base}\",\"${route_catchall}\"],\"allow_hosts\":[\"api.allowed.test\"]}}")"
@@ -479,8 +493,8 @@ assert_ad_hoc_route_exported() {
     exit 1
   fi
 
-  code_code="$(curl -sS -o /tmp/openapi-system-code.out -w '%{http_code}' -X PUT \
-    "http://127.0.0.1:8080/_fn/function-code?runtime=node&name=${fn_name}" \
+  code_code="$(curl_fastfn -sS -o /tmp/openapi-system-code.out -w '%{http_code}' -X PUT \
+    "${BASE_URL}/_fn/function-code?runtime=node&name=${fn_name}" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN" \
     -H 'Content-Type: application/json' \
     --data '{"code":"exports.handler = async (event) => ({ status: 200, headers: { \"Content-Type\": \"application/json\" }, body: JSON.stringify({ ok: true, params: event.path_params || {} }) });\n"}')"
@@ -490,8 +504,8 @@ assert_ad_hoc_route_exported() {
     exit 1
   fi
 
-  reload_code="$(curl -sS -o /tmp/openapi-system-reload.out -w '%{http_code}' -X POST \
-    'http://127.0.0.1:8080/_fn/reload' \
+  reload_code="$(curl_fastfn -sS -o /tmp/openapi-system-reload.out -w '%{http_code}' -X POST \
+    "${BASE_URL}/_fn/reload" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN")"
   if [[ "$reload_code" != "200" ]]; then
     echo "FAIL reload expected=200 got=$reload_code"
@@ -501,18 +515,18 @@ assert_ad_hoc_route_exported() {
   # Ensure the target runtime is actually healthy before probing the new route.
   wait_for_runtime_up "node"
 
-  probe_get_code="$(curl -sS -o /tmp/openapi-system-probe-get.out -w '%{http_code}' \
+  probe_get_code="$(curl_fastfn -sS -o /tmp/openapi-system-probe-get.out -w '%{http_code}' \
     -H 'Host: api.allowed.test' \
-    "http://127.0.0.1:8080/openapi-probe-${TEST_SUFFIX}/42")"
+    "${BASE_URL}/openapi-probe-${TEST_SUFFIX}/42")"
   if [[ "$probe_get_code" != "200" ]]; then
     echo "FAIL ad-hoc probe GET expected=200 got=$probe_get_code"
     cat /tmp/openapi-system-probe-get.out || true
     exit 1
   fi
 
-  probe_post_code="$(curl -sS -o /tmp/openapi-system-probe-post.out -w '%{http_code}' -X POST \
+  probe_post_code="$(curl_fastfn -sS -o /tmp/openapi-system-probe-post.out -w '%{http_code}' -X POST \
     -H 'Host: api.allowed.test' \
-    "http://127.0.0.1:8080/openapi-probe-${TEST_SUFFIX}/42/extra/segments" \
+    "${BASE_URL}/openapi-probe-${TEST_SUFFIX}/42/extra/segments" \
     -H 'Content-Type: application/json' \
     --data '{"probe":true}')"
   if [[ "$probe_post_code" != "200" ]]; then
@@ -522,9 +536,9 @@ assert_ad_hoc_route_exported() {
   fi
 
   local probe_blocked_code
-  probe_blocked_code="$(curl -sS -o /tmp/openapi-system-probe-blocked.out -w '%{http_code}' \
+  probe_blocked_code="$(curl_fastfn -sS -o /tmp/openapi-system-probe-blocked.out -w '%{http_code}' \
     -H 'Host: denied.test' \
-    "http://127.0.0.1:8080/openapi-probe-${TEST_SUFFIX}/42")"
+    "${BASE_URL}/openapi-probe-${TEST_SUFFIX}/42")"
   if [[ "$probe_blocked_code" != "421" ]]; then
     echo "FAIL ad-hoc probe host allowlist expected=421 got=$probe_blocked_code"
     cat /tmp/openapi-system-probe-blocked.out || true
@@ -537,7 +551,7 @@ assert_ad_hoc_route_exported() {
   fi
 
   local openapi_json
-  openapi_json="$(curl -sS 'http://127.0.0.1:8080/_fn/openapi.json')"
+  openapi_json="$(curl_fastfn -sS "${BASE_URL}/_fn/openapi.json")"
   OPENAPI_JSON="$openapi_json" OPENAPI_ROUTE="$openapi_route" OPENAPI_CATCHALL="$openapi_catchall" python3 - <<'PY'
 import json
 import os
@@ -557,8 +571,8 @@ wild_ops = paths[openapi_catchall]
 assert "get" in wild_ops and "post" in wild_ops, "ad-hoc catch-all methods missing in openapi"
 PY
 
-  delete_code="$(curl -sS -o /tmp/openapi-system-delete.out -w '%{http_code}' -X DELETE \
-    "http://127.0.0.1:8080/_fn/function?runtime=node&name=${fn_name}" \
+  delete_code="$(curl_fastfn -sS -o /tmp/openapi-system-delete.out -w '%{http_code}' -X DELETE \
+    "${BASE_URL}/_fn/function?runtime=node&name=${fn_name}" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN")"
   if [[ "$delete_code" != "200" ]]; then
     echo "FAIL delete ad-hoc function expected=200 got=$delete_code"
@@ -566,8 +580,8 @@ PY
     exit 1
   fi
 
-  reload_code="$(curl -sS -o /tmp/openapi-system-reload-delete.out -w '%{http_code}' -X POST \
-    'http://127.0.0.1:8080/_fn/reload' \
+  reload_code="$(curl_fastfn -sS -o /tmp/openapi-system-reload-delete.out -w '%{http_code}' -X POST \
+    "${BASE_URL}/_fn/reload" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN")"
   if [[ "$reload_code" != "200" ]]; then
     echo "FAIL reload after delete expected=200 got=$reload_code"
@@ -575,7 +589,7 @@ PY
     exit 1
   fi
 
-  openapi_json="$(curl -sS 'http://127.0.0.1:8080/_fn/openapi.json')"
+  openapi_json="$(curl_fastfn -sS "${BASE_URL}/_fn/openapi.json")"
   OPENAPI_JSON="$openapi_json" OPENAPI_ROUTE="$openapi_route" OPENAPI_CATCHALL="$openapi_catchall" python3 - <<'PY'
 import json
 import os
@@ -594,8 +608,8 @@ assert_edge-proxy_denies_control_plane_paths() {
 
   local create_code cfg_code code_code reload_code call_code delete_code
 
-  create_code="$(curl -sS -o /tmp/openapi-system-edge-ssrf-create.out -w '%{http_code}' -X POST \
-    "http://127.0.0.1:8080/_fn/function?runtime=node&name=${fn_name}" \
+  create_code="$(curl_fastfn -sS -o /tmp/openapi-system-edge-ssrf-create.out -w '%{http_code}' -X POST \
+    "${BASE_URL}/_fn/function?runtime=node&name=${fn_name}" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN" \
     -H 'Content-Type: application/json' \
     --data '{"methods":["GET"],"summary":"Edge SSRF control-plane probe"}')"
@@ -605,19 +619,19 @@ assert_edge-proxy_denies_control_plane_paths() {
     exit 1
   fi
 
-  cfg_code="$(curl -sS -o /tmp/openapi-system-edge-ssrf-cfg.out -w '%{http_code}' -X PUT \
-    "http://127.0.0.1:8080/_fn/function-config?runtime=node&name=${fn_name}" \
+  cfg_code="$(curl_fastfn -sS -o /tmp/openapi-system-edge-ssrf-cfg.out -w '%{http_code}' -X PUT \
+    "${BASE_URL}/_fn/function-config?runtime=node&name=${fn_name}" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN" \
     -H 'Content-Type: application/json' \
-    --data "{\"invoke\":{\"methods\":[\"GET\"],\"routes\":[\"${route}\"]},\"edge\":{\"base_url\":\"http://127.0.0.1:8080\",\"allow_hosts\":[\"127.0.0.1:8080\"],\"allow_private\":true}}")"
+    --data "{\"invoke\":{\"methods\":[\"GET\"],\"routes\":[\"${route}\"]},\"edge\":{\"base_url\":\"${BASE_URL}\",\"allow_hosts\":[\"${BASE_HOSTPORT}\"],\"allow_private\":true}}")"
   if [[ "$cfg_code" != "200" ]]; then
     echo "FAIL configure edge ssrf function expected=200 got=$cfg_code"
     cat /tmp/openapi-system-edge-ssrf-cfg.out || true
     exit 1
   fi
 
-  code_code="$(curl -sS -o /tmp/openapi-system-edge-ssrf-code.out -w '%{http_code}' -X PUT \
-    "http://127.0.0.1:8080/_fn/function-code?runtime=node&name=${fn_name}" \
+  code_code="$(curl_fastfn -sS -o /tmp/openapi-system-edge-ssrf-code.out -w '%{http_code}' -X PUT \
+    "${BASE_URL}/_fn/function-code?runtime=node&name=${fn_name}" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN" \
     -H 'Content-Type: application/json' \
     --data '{"code":"exports.handler = async () => ({ proxy: { path: \"/_fn/health\", method: \"GET\", headers: { \"x-edge\": \"1\" } } });\n"}')"
@@ -627,8 +641,8 @@ assert_edge-proxy_denies_control_plane_paths() {
     exit 1
   fi
 
-  reload_code="$(curl -sS -o /tmp/openapi-system-edge-ssrf-reload.out -w '%{http_code}' -X POST \
-    'http://127.0.0.1:8080/_fn/reload' \
+  reload_code="$(curl_fastfn -sS -o /tmp/openapi-system-edge-ssrf-reload.out -w '%{http_code}' -X POST \
+    "${BASE_URL}/_fn/reload" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN")"
   if [[ "$reload_code" != "200" ]]; then
     echo "FAIL reload after edge ssrf update expected=200 got=$reload_code"
@@ -636,8 +650,8 @@ assert_edge-proxy_denies_control_plane_paths() {
     exit 1
   fi
 
-  call_code="$(curl -sS -o /tmp/openapi-system-edge-ssrf-call.out -w '%{http_code}' \
-    "http://127.0.0.1:8080${route}")"
+  call_code="$(curl_fastfn -sS -o /tmp/openapi-system-edge-ssrf-call.out -w '%{http_code}' \
+    "${BASE_URL}${route}")"
   if [[ "$call_code" != "502" ]]; then
     echo "FAIL edge ssrf call expected=502 got=$call_code"
     cat /tmp/openapi-system-edge-ssrf-call.out || true
@@ -649,8 +663,8 @@ assert_edge-proxy_denies_control_plane_paths() {
     exit 1
   fi
 
-  delete_code="$(curl -sS -o /tmp/openapi-system-edge-ssrf-delete.out -w '%{http_code}' -X DELETE \
-    "http://127.0.0.1:8080/_fn/function?runtime=node&name=${fn_name}" \
+  delete_code="$(curl_fastfn -sS -o /tmp/openapi-system-edge-ssrf-delete.out -w '%{http_code}' -X DELETE \
+    "${BASE_URL}/_fn/function?runtime=node&name=${fn_name}" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN")"
   if [[ "$delete_code" != "200" ]]; then
     echo "FAIL delete edge ssrf function expected=200 got=$delete_code"
@@ -658,8 +672,8 @@ assert_edge-proxy_denies_control_plane_paths() {
     exit 1
   fi
 
-  reload_code="$(curl -sS -o /tmp/openapi-system-edge-ssrf-reload-delete.out -w '%{http_code}' -X POST \
-    'http://127.0.0.1:8080/_fn/reload' \
+  reload_code="$(curl_fastfn -sS -o /tmp/openapi-system-edge-ssrf-reload-delete.out -w '%{http_code}' -X POST \
+    "${BASE_URL}/_fn/reload" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN")"
   if [[ "$reload_code" != "200" ]]; then
     echo "FAIL reload after edge ssrf delete expected=200 got=$reload_code"
@@ -673,8 +687,8 @@ assert_force_url_global_controls_policy_override() {
   fn_name="conflict_policy_${TEST_SUFFIX}"
   route="/conflict-route"
 
-  create_code="$(curl -sS -o /tmp/openapi-system-force-url-create.out -w '%{http_code}' -X POST \
-    "http://127.0.0.1:8080/_fn/function?runtime=node&name=${fn_name}" \
+  create_code="$(curl_fastfn -sS -o /tmp/openapi-system-force-url-create.out -w '%{http_code}' -X POST \
+    "${BASE_URL}/_fn/function?runtime=node&name=${fn_name}" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN" \
     -H 'Content-Type: application/json' \
     --data '{"methods":["GET"],"summary":"force-url policy override probe"}')"
@@ -684,8 +698,8 @@ assert_force_url_global_controls_policy_override() {
     exit 1
   fi
 
-  cfg_code="$(curl -sS -o /tmp/openapi-system-force-url-cfg.out -w '%{http_code}' -X PUT \
-    "http://127.0.0.1:8080/_fn/function-config?runtime=node&name=${fn_name}" \
+  cfg_code="$(curl_fastfn -sS -o /tmp/openapi-system-force-url-cfg.out -w '%{http_code}' -X PUT \
+    "${BASE_URL}/_fn/function-config?runtime=node&name=${fn_name}" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN" \
     -H 'Content-Type: application/json' \
     --data "{\"invoke\":{\"methods\":[\"GET\"],\"routes\":[\"${route}\"]}}")"
@@ -695,8 +709,8 @@ assert_force_url_global_controls_policy_override() {
     exit 1
   fi
 
-  code_code="$(curl -sS -o /tmp/openapi-system-force-url-code.out -w '%{http_code}' -X PUT \
-    "http://127.0.0.1:8080/_fn/function-code?runtime=node&name=${fn_name}" \
+  code_code="$(curl_fastfn -sS -o /tmp/openapi-system-force-url-code.out -w '%{http_code}' -X PUT \
+    "${BASE_URL}/_fn/function-code?runtime=node&name=${fn_name}" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN" \
     -H 'Content-Type: application/json' \
     --data '{"code":"exports.handler = async () => ({ status: 200, headers: { \"Content-Type\": \"application/json\" }, body: JSON.stringify({ ok: true, source: \"policy\" }) });\n"}')"
@@ -706,8 +720,8 @@ assert_force_url_global_controls_policy_override() {
     exit 1
   fi
 
-  reload_code="$(curl -sS -o /tmp/openapi-system-force-url-reload.out -w '%{http_code}' -X POST \
-    'http://127.0.0.1:8080/_fn/reload' \
+  reload_code="$(curl_fastfn -sS -o /tmp/openapi-system-force-url-reload.out -w '%{http_code}' -X POST \
+    "${BASE_URL}/_fn/reload" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN")"
   if [[ "$reload_code" != "200" ]]; then
     echo "FAIL reload after force-url update expected=200 got=$reload_code"
@@ -715,8 +729,8 @@ assert_force_url_global_controls_policy_override() {
     exit 1
   fi
 
-  call_code="$(curl -sS -o /tmp/openapi-system-force-url-call.out -w '%{http_code}' \
-    "http://127.0.0.1:8080${route}")"
+  call_code="$(curl_fastfn -sS -o /tmp/openapi-system-force-url-call.out -w '%{http_code}' \
+    "${BASE_URL}${route}")"
   if [[ "$call_code" != "200" ]]; then
     echo "FAIL force-url call expected=200 got=$call_code"
     cat /tmp/openapi-system-force-url-call.out || true
@@ -739,8 +753,8 @@ assert_force_url_global_controls_policy_override() {
     fi
   fi
 
-  delete_code="$(curl -sS -o /tmp/openapi-system-force-url-delete.out -w '%{http_code}' -X DELETE \
-    "http://127.0.0.1:8080/_fn/function?runtime=node&name=${fn_name}" \
+  delete_code="$(curl_fastfn -sS -o /tmp/openapi-system-force-url-delete.out -w '%{http_code}' -X DELETE \
+    "${BASE_URL}/_fn/function?runtime=node&name=${fn_name}" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN")"
   if [[ "$delete_code" != "200" ]]; then
     echo "FAIL delete force-url function expected=200 got=$delete_code"
@@ -748,8 +762,8 @@ assert_force_url_global_controls_policy_override() {
     exit 1
   fi
 
-  reload_code="$(curl -sS -o /tmp/openapi-system-force-url-reload-delete.out -w '%{http_code}' -X POST \
-    'http://127.0.0.1:8080/_fn/reload' \
+  reload_code="$(curl_fastfn -sS -o /tmp/openapi-system-force-url-reload-delete.out -w '%{http_code}' -X POST \
+    "${BASE_URL}/_fn/reload" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN")"
   if [[ "$reload_code" != "200" ]]; then
     echo "FAIL reload after force-url delete expected=200 got=$reload_code"
@@ -769,8 +783,8 @@ assert_go_runtime_ad_hoc_route_exported() {
 
   wait_for_runtime_up "go"
 
-  create_code="$(curl -sS -o /tmp/openapi-system-go-create.out -w '%{http_code}' -X POST \
-    "http://127.0.0.1:8080/_fn/function?runtime=go&name=${fn_name}" \
+  create_code="$(curl_fastfn -sS -o /tmp/openapi-system-go-create.out -w '%{http_code}' -X POST \
+    "${BASE_URL}/_fn/function?runtime=go&name=${fn_name}" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN" \
     -H 'Content-Type: application/json' \
     --data '{"methods":["GET"],"summary":"OpenAPI Go runtime probe"}')"
@@ -784,8 +798,8 @@ assert_go_runtime_ad_hoc_route_exported() {
   cat >"$cfg_payload" <<JSON
 {"invoke":{"methods":["GET"],"routes":["${route}"],"allow_hosts":["go.allowed.test"]}}
 JSON
-  cfg_code="$(curl -sS -o /tmp/openapi-system-go-cfg.out -w '%{http_code}' -X PUT \
-    "http://127.0.0.1:8080/_fn/function-config?runtime=go&name=${fn_name}" \
+  cfg_code="$(curl_fastfn -sS -o /tmp/openapi-system-go-cfg.out -w '%{http_code}' -X PUT \
+    "${BASE_URL}/_fn/function-config?runtime=go&name=${fn_name}" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN" \
     -H 'Content-Type: application/json' \
     --data @"$cfg_payload")"
@@ -800,8 +814,8 @@ JSON
   cat >"$code_payload" <<'JSON'
 {"code":"package main\n\nimport \"encoding/json\"\n\nfunc handler(event map[string]interface{}) map[string]interface{} {\n  body, _ := json.Marshal(map[string]interface{}{\"ok\": true, \"runtime\": \"go\"})\n  return map[string]interface{}{\n    \"status\": 200,\n    \"headers\": map[string]interface{}{\"Content-Type\": \"application/json\"},\n    \"body\": string(body),\n  }\n}\n"}
 JSON
-  code_code="$(curl -sS -o /tmp/openapi-system-go-code.out -w '%{http_code}' -X PUT \
-    "http://127.0.0.1:8080/_fn/function-code?runtime=go&name=${fn_name}" \
+  code_code="$(curl_fastfn -sS -o /tmp/openapi-system-go-code.out -w '%{http_code}' -X PUT \
+    "${BASE_URL}/_fn/function-code?runtime=go&name=${fn_name}" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN" \
     -H 'Content-Type: application/json' \
     --data @"$code_payload")"
@@ -812,8 +826,8 @@ JSON
     exit 1
   fi
 
-  reload_code="$(curl -sS -o /tmp/openapi-system-go-reload.out -w '%{http_code}' -X POST \
-    'http://127.0.0.1:8080/_fn/reload' \
+  reload_code="$(curl_fastfn -sS -o /tmp/openapi-system-go-reload.out -w '%{http_code}' -X POST \
+    "${BASE_URL}/_fn/reload" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN")"
   if [[ "$reload_code" != "200" ]]; then
     echo "FAIL reload after go update expected=200 got=$reload_code"
@@ -821,9 +835,9 @@ JSON
     exit 1
   fi
 
-  ok_code="$(curl -sS -o /tmp/openapi-system-go-ok.out -w '%{http_code}' \
+  ok_code="$(curl_fastfn -sS -o /tmp/openapi-system-go-ok.out -w '%{http_code}' \
     -H 'Host: go.allowed.test' \
-    "http://127.0.0.1:8080${route}")"
+    "${BASE_URL}${route}")"
   if [[ "$ok_code" != "200" ]]; then
     echo "FAIL go ad-hoc route expected=200 got=$ok_code"
     cat /tmp/openapi-system-go-ok.out || true
@@ -835,9 +849,9 @@ JSON
     exit 1
   fi
 
-  denied_code="$(curl -sS -o /tmp/openapi-system-go-denied.out -w '%{http_code}' \
+  denied_code="$(curl_fastfn -sS -o /tmp/openapi-system-go-denied.out -w '%{http_code}' \
     -H 'Host: denied-go.test' \
-    "http://127.0.0.1:8080${route}")"
+    "${BASE_URL}${route}")"
   if [[ "$denied_code" != "421" ]]; then
     echo "FAIL go ad-hoc allow_hosts denied request expected=421 got=$denied_code"
     cat /tmp/openapi-system-go-denied.out || true
@@ -850,7 +864,7 @@ JSON
   fi
 
   local openapi_json
-  openapi_json="$(curl -sS 'http://127.0.0.1:8080/_fn/openapi.json')"
+  openapi_json="$(curl_fastfn -sS "${BASE_URL}/_fn/openapi.json")"
   OPENAPI_JSON="$openapi_json" OPENAPI_ROUTE="$openapi_route" python3 - <<'PY'
 import json
 import os
@@ -862,8 +876,8 @@ assert route in paths, f"go ad-hoc route missing from openapi: {route}"
 assert "get" in (paths.get(route) or {}), f"go ad-hoc GET missing from openapi: {route}"
 PY
 
-  delete_code="$(curl -sS -o /tmp/openapi-system-go-delete.out -w '%{http_code}' -X DELETE \
-    "http://127.0.0.1:8080/_fn/function?runtime=go&name=${fn_name}" \
+  delete_code="$(curl_fastfn -sS -o /tmp/openapi-system-go-delete.out -w '%{http_code}' -X DELETE \
+    "${BASE_URL}/_fn/function?runtime=go&name=${fn_name}" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN")"
   if [[ "$delete_code" != "200" ]]; then
     echo "FAIL delete go ad-hoc function expected=200 got=$delete_code"
@@ -871,8 +885,8 @@ PY
     exit 1
   fi
 
-  reload_code="$(curl -sS -o /tmp/openapi-system-go-reload-delete.out -w '%{http_code}' -X POST \
-    'http://127.0.0.1:8080/_fn/reload' \
+  reload_code="$(curl_fastfn -sS -o /tmp/openapi-system-go-reload-delete.out -w '%{http_code}' -X POST \
+    "${BASE_URL}/_fn/reload" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN")"
   if [[ "$reload_code" != "200" ]]; then
     echo "FAIL reload after go delete expected=200 got=$reload_code"
@@ -890,8 +904,8 @@ assert_lua_runtime_ad_hoc_route_exported() {
   local create_code cfg_code code_code reload_code delete_code ok_code denied_code
   local cfg_payload code_payload
 
-  create_code="$(curl -sS -o /tmp/openapi-system-lua-create.out -w '%{http_code}' -X POST \
-    "http://127.0.0.1:8080/_fn/function?runtime=lua&name=${fn_name}" \
+  create_code="$(curl_fastfn -sS -o /tmp/openapi-system-lua-create.out -w '%{http_code}' -X POST \
+    "${BASE_URL}/_fn/function?runtime=lua&name=${fn_name}" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN" \
     -H 'Content-Type: application/json' \
     --data '{"methods":["GET"],"summary":"OpenAPI Lua runtime probe"}')"
@@ -905,8 +919,8 @@ assert_lua_runtime_ad_hoc_route_exported() {
   cat >"$cfg_payload" <<JSON
 {"invoke":{"methods":["GET"],"routes":["${route}"],"allow_hosts":["lua.allowed.test"]}}
 JSON
-  cfg_code="$(curl -sS -o /tmp/openapi-system-lua-cfg.out -w '%{http_code}' -X PUT \
-    "http://127.0.0.1:8080/_fn/function-config?runtime=lua&name=${fn_name}" \
+  cfg_code="$(curl_fastfn -sS -o /tmp/openapi-system-lua-cfg.out -w '%{http_code}' -X PUT \
+    "${BASE_URL}/_fn/function-config?runtime=lua&name=${fn_name}" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN" \
     -H 'Content-Type: application/json' \
     --data @"$cfg_payload")"
@@ -921,8 +935,8 @@ JSON
   cat >"$code_payload" <<'JSON'
 {"code":"local cjson = require(\"cjson.safe\")\nfunction handler(event)\n  return {\n    status = 200,\n    headers = { [\"Content-Type\"] = \"application/json\" },\n    body = cjson.encode({ ok = true, runtime = \"lua\" }),\n  }\nend\n"}
 JSON
-  code_code="$(curl -sS -o /tmp/openapi-system-lua-code.out -w '%{http_code}' -X PUT \
-    "http://127.0.0.1:8080/_fn/function-code?runtime=lua&name=${fn_name}" \
+  code_code="$(curl_fastfn -sS -o /tmp/openapi-system-lua-code.out -w '%{http_code}' -X PUT \
+    "${BASE_URL}/_fn/function-code?runtime=lua&name=${fn_name}" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN" \
     -H 'Content-Type: application/json' \
     --data @"$code_payload")"
@@ -933,8 +947,8 @@ JSON
     exit 1
   fi
 
-  reload_code="$(curl -sS -o /tmp/openapi-system-lua-reload.out -w '%{http_code}' -X POST \
-    'http://127.0.0.1:8080/_fn/reload' \
+  reload_code="$(curl_fastfn -sS -o /tmp/openapi-system-lua-reload.out -w '%{http_code}' -X POST \
+    "${BASE_URL}/_fn/reload" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN")"
   if [[ "$reload_code" != "200" ]]; then
     echo "FAIL reload after lua update expected=200 got=$reload_code"
@@ -942,9 +956,9 @@ JSON
     exit 1
   fi
 
-  ok_code="$(curl -sS -o /tmp/openapi-system-lua-ok.out -w '%{http_code}' \
+  ok_code="$(curl_fastfn -sS -o /tmp/openapi-system-lua-ok.out -w '%{http_code}' \
     -H 'Host: lua.allowed.test' \
-    "http://127.0.0.1:8080${route}")"
+    "${BASE_URL}${route}")"
   if [[ "$ok_code" != "200" ]]; then
     echo "FAIL lua ad-hoc route expected=200 got=$ok_code"
     cat /tmp/openapi-system-lua-ok.out || true
@@ -956,9 +970,9 @@ JSON
     exit 1
   fi
 
-  denied_code="$(curl -sS -o /tmp/openapi-system-lua-denied.out -w '%{http_code}' \
+  denied_code="$(curl_fastfn -sS -o /tmp/openapi-system-lua-denied.out -w '%{http_code}' \
     -H 'Host: denied-lua.test' \
-    "http://127.0.0.1:8080${route}")"
+    "${BASE_URL}${route}")"
   if [[ "$denied_code" != "421" ]]; then
     echo "FAIL lua ad-hoc allow_hosts denied request expected=421 got=$denied_code"
     cat /tmp/openapi-system-lua-denied.out || true
@@ -971,7 +985,7 @@ JSON
   fi
 
   local openapi_json
-  openapi_json="$(curl -sS 'http://127.0.0.1:8080/_fn/openapi.json')"
+  openapi_json="$(curl_fastfn -sS "${BASE_URL}/_fn/openapi.json")"
   OPENAPI_JSON="$openapi_json" OPENAPI_ROUTE="$openapi_route" python3 - <<'PY'
 import json
 import os
@@ -983,8 +997,8 @@ assert route in paths, f"lua ad-hoc route missing from openapi: {route}"
 assert "get" in (paths.get(route) or {}), f"lua ad-hoc GET missing from openapi: {route}"
 PY
 
-  delete_code="$(curl -sS -o /tmp/openapi-system-lua-delete.out -w '%{http_code}' -X DELETE \
-    "http://127.0.0.1:8080/_fn/function?runtime=lua&name=${fn_name}" \
+  delete_code="$(curl_fastfn -sS -o /tmp/openapi-system-lua-delete.out -w '%{http_code}' -X DELETE \
+    "${BASE_URL}/_fn/function?runtime=lua&name=${fn_name}" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN")"
   if [[ "$delete_code" != "200" ]]; then
     echo "FAIL delete lua ad-hoc function expected=200 got=$delete_code"
@@ -992,8 +1006,8 @@ PY
     exit 1
   fi
 
-  reload_code="$(curl -sS -o /tmp/openapi-system-lua-reload-delete.out -w '%{http_code}' -X POST \
-    'http://127.0.0.1:8080/_fn/reload' \
+  reload_code="$(curl_fastfn -sS -o /tmp/openapi-system-lua-reload-delete.out -w '%{http_code}' -X POST \
+    "${BASE_URL}/_fn/reload" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN")"
   if [[ "$reload_code" != "200" ]]; then
     echo "FAIL reload after lua delete expected=200 got=$reload_code"
@@ -1014,8 +1028,8 @@ assert_shared_deps_node_pack_runtime() {
 module.exports = () => ({ ok: true, source: "shared_pack" });
 JS
 
-  create_code="$(curl -sS -o /tmp/openapi-system-shared-create.out -w '%{http_code}' -X POST \
-    "http://127.0.0.1:8080/_fn/function?runtime=node&name=${fn_name}" \
+  create_code="$(curl_fastfn -sS -o /tmp/openapi-system-shared-create.out -w '%{http_code}' -X POST \
+    "${BASE_URL}/_fn/function?runtime=node&name=${fn_name}" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN" \
     -H 'Content-Type: application/json' \
     --data '{"methods":["GET"],"summary":"Node shared_deps pack probe"}')"
@@ -1025,8 +1039,8 @@ JS
     exit 1
   fi
 
-  cfg_code="$(curl -sS -o /tmp/openapi-system-shared-cfg.out -w '%{http_code}' -X PUT \
-    "http://127.0.0.1:8080/_fn/function-config?runtime=node&name=${fn_name}" \
+  cfg_code="$(curl_fastfn -sS -o /tmp/openapi-system-shared-cfg.out -w '%{http_code}' -X PUT \
+    "${BASE_URL}/_fn/function-config?runtime=node&name=${fn_name}" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN" \
     -H 'Content-Type: application/json' \
     --data "{\"shared_deps\":[\"${pack_name}\"],\"invoke\":{\"methods\":[\"GET\"],\"routes\":[\"${route}\"]}}")"
@@ -1036,8 +1050,8 @@ JS
     exit 1
   fi
 
-  code_code="$(curl -sS -o /tmp/openapi-system-shared-code.out -w '%{http_code}' -X PUT \
-    "http://127.0.0.1:8080/_fn/function-code?runtime=node&name=${fn_name}" \
+  code_code="$(curl_fastfn -sS -o /tmp/openapi-system-shared-code.out -w '%{http_code}' -X PUT \
+    "${BASE_URL}/_fn/function-code?runtime=node&name=${fn_name}" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN" \
     -H 'Content-Type: application/json' \
     --data "{\"code\":\"exports.handler = async () => { const fromPack = require('${pack_name}'); return { status: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(fromPack()) }; };\\n\"}")"
@@ -1047,8 +1061,8 @@ JS
     exit 1
   fi
 
-  reload_code="$(curl -sS -o /tmp/openapi-system-shared-reload.out -w '%{http_code}' -X POST \
-    'http://127.0.0.1:8080/_fn/reload' \
+  reload_code="$(curl_fastfn -sS -o /tmp/openapi-system-shared-reload.out -w '%{http_code}' -X POST \
+    "${BASE_URL}/_fn/reload" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN")"
   if [[ "$reload_code" != "200" ]]; then
     echo "FAIL reload after shared_deps update expected=200 got=$reload_code"
@@ -1056,8 +1070,8 @@ JS
     exit 1
   fi
 
-  invoke_code="$(curl -sS -o /tmp/openapi-system-shared-invoke.out -w '%{http_code}' \
-    "http://127.0.0.1:8080${route}")"
+  invoke_code="$(curl_fastfn -sS -o /tmp/openapi-system-shared-invoke.out -w '%{http_code}' \
+    "${BASE_URL}${route}")"
   if [[ "$invoke_code" != "200" ]]; then
     echo "FAIL shared_deps route expected=200 got=$invoke_code"
     cat /tmp/openapi-system-shared-invoke.out || true
@@ -1069,8 +1083,8 @@ JS
     exit 1
   fi
 
-  delete_code="$(curl -sS -o /tmp/openapi-system-shared-delete.out -w '%{http_code}' -X DELETE \
-    "http://127.0.0.1:8080/_fn/function?runtime=node&name=${fn_name}" \
+  delete_code="$(curl_fastfn -sS -o /tmp/openapi-system-shared-delete.out -w '%{http_code}' -X DELETE \
+    "${BASE_URL}/_fn/function?runtime=node&name=${fn_name}" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN")"
   if [[ "$delete_code" != "200" ]]; then
     echo "FAIL delete shared_deps function expected=200 got=$delete_code"
@@ -1089,8 +1103,8 @@ assert_virtual_host_route_routing() {
 
   local create_a_code create_b_code cfg_a_code cfg_b_code code_a_code code_b_code reload_code delete_a_code delete_b_code
 
-  create_a_code="$(curl -sS -o /tmp/openapi-system-vhost-create-a.out -w '%{http_code}' -X POST \
-    "http://127.0.0.1:8080/_fn/function?runtime=node&name=${fn_alpha}" \
+  create_a_code="$(curl_fastfn -sS -o /tmp/openapi-system-vhost-create-a.out -w '%{http_code}' -X POST \
+    "${BASE_URL}/_fn/function?runtime=node&name=${fn_alpha}" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN" \
     -H 'Content-Type: application/json' \
     --data '{"methods":["GET"],"summary":"Virtual host alpha"}')"
@@ -1100,8 +1114,8 @@ assert_virtual_host_route_routing() {
     exit 1
   fi
 
-  create_b_code="$(curl -sS -o /tmp/openapi-system-vhost-create-b.out -w '%{http_code}' -X POST \
-    "http://127.0.0.1:8080/_fn/function?runtime=node&name=${fn_beta}" \
+  create_b_code="$(curl_fastfn -sS -o /tmp/openapi-system-vhost-create-b.out -w '%{http_code}' -X POST \
+    "${BASE_URL}/_fn/function?runtime=node&name=${fn_beta}" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN" \
     -H 'Content-Type: application/json' \
     --data '{"methods":["GET"],"summary":"Virtual host beta"}')"
@@ -1111,8 +1125,8 @@ assert_virtual_host_route_routing() {
     exit 1
   fi
 
-  cfg_a_code="$(curl -sS -o /tmp/openapi-system-vhost-cfg-a.out -w '%{http_code}' -X PUT \
-    "http://127.0.0.1:8080/_fn/function-config?runtime=node&name=${fn_alpha}" \
+  cfg_a_code="$(curl_fastfn -sS -o /tmp/openapi-system-vhost-cfg-a.out -w '%{http_code}' -X PUT \
+    "${BASE_URL}/_fn/function-config?runtime=node&name=${fn_alpha}" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN" \
     -H 'Content-Type: application/json' \
     --data "{\"invoke\":{\"methods\":[\"GET\"],\"routes\":[\"${shared_route}\"],\"allow_hosts\":[\"alpha.example.test\"]}}")"
@@ -1122,8 +1136,8 @@ assert_virtual_host_route_routing() {
     exit 1
   fi
 
-  cfg_b_code="$(curl -sS -o /tmp/openapi-system-vhost-cfg-b.out -w '%{http_code}' -X PUT \
-    "http://127.0.0.1:8080/_fn/function-config?runtime=node&name=${fn_beta}" \
+  cfg_b_code="$(curl_fastfn -sS -o /tmp/openapi-system-vhost-cfg-b.out -w '%{http_code}' -X PUT \
+    "${BASE_URL}/_fn/function-config?runtime=node&name=${fn_beta}" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN" \
     -H 'Content-Type: application/json' \
     --data "{\"invoke\":{\"methods\":[\"GET\"],\"routes\":[\"${shared_route}\"],\"allow_hosts\":[\"beta.example.test\"]}}")"
@@ -1133,8 +1147,8 @@ assert_virtual_host_route_routing() {
     exit 1
   fi
 
-  code_a_code="$(curl -sS -o /tmp/openapi-system-vhost-code-a.out -w '%{http_code}' -X PUT \
-    "http://127.0.0.1:8080/_fn/function-code?runtime=node&name=${fn_alpha}" \
+  code_a_code="$(curl_fastfn -sS -o /tmp/openapi-system-vhost-code-a.out -w '%{http_code}' -X PUT \
+    "${BASE_URL}/_fn/function-code?runtime=node&name=${fn_alpha}" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN" \
     -H 'Content-Type: application/json' \
     --data '{"code":"exports.handler = async () => ({ status: 200, headers: { \"Content-Type\": \"application/json\" }, body: JSON.stringify({ tenant: \"alpha\" }) });\n"}')"
@@ -1144,8 +1158,8 @@ assert_virtual_host_route_routing() {
     exit 1
   fi
 
-  code_b_code="$(curl -sS -o /tmp/openapi-system-vhost-code-b.out -w '%{http_code}' -X PUT \
-    "http://127.0.0.1:8080/_fn/function-code?runtime=node&name=${fn_beta}" \
+  code_b_code="$(curl_fastfn -sS -o /tmp/openapi-system-vhost-code-b.out -w '%{http_code}' -X PUT \
+    "${BASE_URL}/_fn/function-code?runtime=node&name=${fn_beta}" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN" \
     -H 'Content-Type: application/json' \
     --data '{"code":"exports.handler = async () => ({ status: 200, headers: { \"Content-Type\": \"application/json\" }, body: JSON.stringify({ tenant: \"beta\" }) });\n"}')"
@@ -1155,8 +1169,8 @@ assert_virtual_host_route_routing() {
     exit 1
   fi
 
-  reload_code="$(curl -sS -o /tmp/openapi-system-vhost-reload.out -w '%{http_code}' -X POST \
-    'http://127.0.0.1:8080/_fn/reload' \
+  reload_code="$(curl_fastfn -sS -o /tmp/openapi-system-vhost-reload.out -w '%{http_code}' -X POST \
+    "${BASE_URL}/_fn/reload" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN")"
   if [[ "$reload_code" != "200" ]]; then
     echo "FAIL reload vhost expected=200 got=$reload_code"
@@ -1165,9 +1179,9 @@ assert_virtual_host_route_routing() {
   fi
 
   local alpha_code
-  alpha_code="$(curl -sS -o /tmp/openapi-system-vhost-alpha.out -w '%{http_code}' \
+  alpha_code="$(curl_fastfn -sS -o /tmp/openapi-system-vhost-alpha.out -w '%{http_code}' \
     -H 'Host: alpha.example.test' \
-    "http://127.0.0.1:8080${shared_route}")"
+    "${BASE_URL}${shared_route}")"
   if [[ "$alpha_code" != "200" ]]; then
     echo "FAIL vhost alpha expected=200 got=$alpha_code"
     cat /tmp/openapi-system-vhost-alpha.out || true
@@ -1180,9 +1194,9 @@ assert_virtual_host_route_routing() {
   fi
 
   local beta_code
-  beta_code="$(curl -sS -o /tmp/openapi-system-vhost-beta.out -w '%{http_code}' \
+  beta_code="$(curl_fastfn -sS -o /tmp/openapi-system-vhost-beta.out -w '%{http_code}' \
     -H 'Host: beta.example.test' \
-    "http://127.0.0.1:8080${shared_route}")"
+    "${BASE_URL}${shared_route}")"
   if [[ "$beta_code" != "200" ]]; then
     echo "FAIL vhost beta expected=200 got=$beta_code"
     cat /tmp/openapi-system-vhost-beta.out || true
@@ -1195,9 +1209,9 @@ assert_virtual_host_route_routing() {
   fi
 
   local denied_code
-  denied_code="$(curl -sS -o /tmp/openapi-system-vhost-denied.out -w '%{http_code}' \
+  denied_code="$(curl_fastfn -sS -o /tmp/openapi-system-vhost-denied.out -w '%{http_code}' \
     -H 'Host: denied.example.test' \
-    "http://127.0.0.1:8080${shared_route}")"
+    "${BASE_URL}${shared_route}")"
   if [[ "$denied_code" != "421" ]]; then
     echo "FAIL vhost denied expected=421 got=$denied_code"
     cat /tmp/openapi-system-vhost-denied.out || true
@@ -1210,7 +1224,7 @@ assert_virtual_host_route_routing() {
   fi
 
   local catalog_json
-  catalog_json="$(curl -sS 'http://127.0.0.1:8080/_fn/catalog')"
+  catalog_json="$(curl_fastfn -sS "${BASE_URL}/_fn/catalog")"
   CATALOG_JSON="$catalog_json" SHARED_ROUTE="$shared_route" python3 - <<'PY'
 import json
 import os
@@ -1226,8 +1240,8 @@ conflicts = obj.get("mapped_route_conflicts") or {}
 assert route not in conflicts, conflicts
 PY
 
-  delete_a_code="$(curl -sS -o /tmp/openapi-system-vhost-delete-a.out -w '%{http_code}' -X DELETE \
-    "http://127.0.0.1:8080/_fn/function?runtime=node&name=${fn_alpha}" \
+  delete_a_code="$(curl_fastfn -sS -o /tmp/openapi-system-vhost-delete-a.out -w '%{http_code}' -X DELETE \
+    "${BASE_URL}/_fn/function?runtime=node&name=${fn_alpha}" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN")"
   if [[ "$delete_a_code" != "200" ]]; then
     echo "FAIL delete vhost_alpha expected=200 got=$delete_a_code"
@@ -1235,8 +1249,8 @@ PY
     exit 1
   fi
 
-  delete_b_code="$(curl -sS -o /tmp/openapi-system-vhost-delete-b.out -w '%{http_code}' -X DELETE \
-    "http://127.0.0.1:8080/_fn/function?runtime=node&name=${fn_beta}" \
+  delete_b_code="$(curl_fastfn -sS -o /tmp/openapi-system-vhost-delete-b.out -w '%{http_code}' -X DELETE \
+    "${BASE_URL}/_fn/function?runtime=node&name=${fn_beta}" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN")"
   if [[ "$delete_b_code" != "200" ]]; then
     echo "FAIL delete vhost_beta expected=200 got=$delete_b_code"
@@ -1244,8 +1258,8 @@ PY
     exit 1
   fi
 
-  reload_code="$(curl -sS -o /tmp/openapi-system-vhost-reload-delete.out -w '%{http_code}' -X POST \
-    'http://127.0.0.1:8080/_fn/reload' \
+  reload_code="$(curl_fastfn -sS -o /tmp/openapi-system-vhost-reload-delete.out -w '%{http_code}' -X POST \
+    "${BASE_URL}/_fn/reload" \
     -H "x-fn-admin-token: $FN_ADMIN_TOKEN")"
   if [[ "$reload_code" != "200" ]]; then
     echo "FAIL reload after vhost delete expected=200 got=$reload_code"
@@ -1257,7 +1271,7 @@ PY
 assert_openapi_server_url_resolution() {
   local openapi_json
 
-  openapi_json="$(curl -sS -H 'Host: api.local.test' 'http://127.0.0.1:8080/_fn/openapi.json')"
+  openapi_json="$(curl_fastfn -sS -H 'Host: api.local.test' "${BASE_URL}/_fn/openapi.json")"
   OPENAPI_JSON="$openapi_json" python3 - <<'PY'
 import json
 import os
@@ -1268,11 +1282,11 @@ assert servers and isinstance(servers[0], dict), "missing servers[0]"
 assert servers[0].get("url") == "http://api.local.test", servers[0].get("url")
 PY
 
-  openapi_json="$(curl -sS \
+  openapi_json="$(curl_fastfn -sS \
     -H 'Host: ignored.local' \
     -H 'X-Forwarded-Proto: https' \
     -H 'X-Forwarded-Host: api.proxy.test' \
-    'http://127.0.0.1:8080/_fn/openapi.json')"
+    "${BASE_URL}/_fn/openapi.json")"
   OPENAPI_JSON="$openapi_json" python3 - <<'PY'
 import json
 import os
@@ -1286,7 +1300,7 @@ PY
 
 assert_openapi_server_url_override() {
   local openapi_json
-  openapi_json="$(curl -sS -H 'Host: random.local' 'http://127.0.0.1:8080/_fn/openapi.json')"
+  openapi_json="$(curl_fastfn -sS -H 'Host: random.local' "${BASE_URL}/_fn/openapi.json")"
   OPENAPI_JSON="$openapi_json" python3 - <<'PY'
 import json
 import os
@@ -1351,5 +1365,154 @@ rm -rf "$CONFIG_DIR"
 echo "== openapi server_url override =="
 start_stack FN_PUBLIC_BASE_URL=https://api.fastfn.example
 assert_openapi_server_url_override
+stop_stack
+
+assert_namespaced_function_crud() {
+  local ns_name ns_deep_name create_code reload_code get_code invoke_code delete_code
+
+  # ---- 1-level namespace (team/hello) ----
+  ns_name="team_${TEST_SUFFIX}/ns-hello"
+
+  create_code="$(curl_fastfn -sS -o /tmp/openapi-system-ns-create.out -w '%{http_code}' -X POST \
+    "${BASE_URL}/_fn/function?runtime=node&name=${ns_name}" \
+    -H "x-fn-admin-token: $FN_ADMIN_TOKEN" \
+    -H 'Content-Type: application/json' \
+    --data '{"code":"exports.handler = async (event) => ({ status: 200, headers: { \"Content-Type\": \"application/json\" }, body: JSON.stringify({ ns: true, name: \"ns-hello\" }) });\n"}')"
+  if [[ "$create_code" != "201" ]]; then
+    echo "FAIL create namespaced function expected=201 got=$create_code"
+    cat /tmp/openapi-system-ns-create.out || true
+    exit 1
+  fi
+
+  reload_code="$(curl_fastfn -sS -o /tmp/openapi-system-ns-reload.out -w '%{http_code}' -X POST \
+    "${BASE_URL}/_fn/reload" \
+    -H "x-fn-admin-token: $FN_ADMIN_TOKEN")"
+  if [[ "$reload_code" != "200" ]]; then
+    echo "FAIL reload after ns create expected=200 got=$reload_code"
+    cat /tmp/openapi-system-ns-reload.out || true
+    exit 1
+  fi
+  wait_for_runtime_up "node"
+
+  # Verify the function is in catalog
+  get_code="$(curl_fastfn -sS -o /tmp/openapi-system-ns-get.out -w '%{http_code}' \
+    "${BASE_URL}/_fn/function?runtime=node&name=${ns_name}" \
+    -H "x-fn-admin-token: $FN_ADMIN_TOKEN")"
+  if [[ "$get_code" != "200" ]]; then
+    echo "FAIL get namespaced function expected=200 got=$get_code"
+    cat /tmp/openapi-system-ns-get.out || true
+    exit 1
+  fi
+
+  # Verify the route preserves slashes: /team_<suffix>/ns-hello
+  invoke_code="$(curl_fastfn -sS -o /tmp/openapi-system-ns-invoke.out -w '%{http_code}' \
+    "${BASE_URL}/team-${TEST_SUFFIX}/ns-hello")"
+  if [[ "$invoke_code" != "200" ]]; then
+    echo "FAIL invoke namespaced function at slash route expected=200 got=$invoke_code"
+    cat /tmp/openapi-system-ns-invoke.out || true
+    exit 1
+  fi
+  if ! grep -q '"ns":true' /tmp/openapi-system-ns-invoke.out; then
+    echo "FAIL invoke namespaced function response body mismatch"
+    cat /tmp/openapi-system-ns-invoke.out || true
+    exit 1
+  fi
+
+  # ---- 2-level namespace (api/v1/resource) ----
+  ns_deep_name="api_${TEST_SUFFIX}/v1/resource"
+
+  create_code="$(curl_fastfn -sS -o /tmp/openapi-system-nsdeep-create.out -w '%{http_code}' -X POST \
+    "${BASE_URL}/_fn/function?runtime=node&name=${ns_deep_name}" \
+    -H "x-fn-admin-token: $FN_ADMIN_TOKEN" \
+    -H 'Content-Type: application/json' \
+    --data '{"code":"exports.handler = async (event) => ({ status: 200, headers: { \"Content-Type\": \"application/json\" }, body: JSON.stringify({ deep: true, path: \"api/v1/resource\" }) });\n"}')"
+  if [[ "$create_code" != "201" ]]; then
+    echo "FAIL create deep namespaced function expected=201 got=$create_code"
+    cat /tmp/openapi-system-nsdeep-create.out || true
+    exit 1
+  fi
+
+  reload_code="$(curl_fastfn -sS -o /tmp/openapi-system-nsdeep-reload.out -w '%{http_code}' -X POST \
+    "${BASE_URL}/_fn/reload" \
+    -H "x-fn-admin-token: $FN_ADMIN_TOKEN")"
+  if [[ "$reload_code" != "200" ]]; then
+    echo "FAIL reload after deep ns create expected=200 got=$reload_code"
+    cat /tmp/openapi-system-nsdeep-reload.out || true
+    exit 1
+  fi
+  wait_for_runtime_up "node"
+
+  # Verify the deep namespaced route preserves slashes: /api-<suffix>/v1/resource
+  invoke_code="$(curl_fastfn -sS -o /tmp/openapi-system-nsdeep-invoke.out -w '%{http_code}' \
+    "${BASE_URL}/api-${TEST_SUFFIX}/v1/resource")"
+  if [[ "$invoke_code" != "200" ]]; then
+    echo "FAIL invoke deep namespaced function at slash route expected=200 got=$invoke_code"
+    cat /tmp/openapi-system-nsdeep-invoke.out || true
+    exit 1
+  fi
+  if ! grep -q '"deep":true' /tmp/openapi-system-nsdeep-invoke.out; then
+    echo "FAIL invoke deep namespaced function response body mismatch"
+    cat /tmp/openapi-system-nsdeep-invoke.out || true
+    exit 1
+  fi
+
+  # Verify catalog lists both
+  local catalog_json
+  catalog_json="$(curl_fastfn -sS "${BASE_URL}/_fn/catalog" \
+    -H "x-fn-admin-token: $FN_ADMIN_TOKEN")"
+  NS_NAME="$ns_name" NS_DEEP="$ns_deep_name" CATALOG_JSON="$catalog_json" python3 - <<'PY'
+import json
+import os
+
+obj = json.loads(os.environ["CATALOG_JSON"])
+ns_name = os.environ["NS_NAME"]
+ns_deep = os.environ["NS_DEEP"]
+
+# Check that both functions appear in the node runtime catalog
+node = obj.get("runtimes", {}).get("node", {})
+functions = node.get("functions", {})
+if isinstance(functions, dict):
+    fn_names = set(functions.keys())
+elif isinstance(functions, list):
+    fn_names = {str(item.get("name")) for item in functions if isinstance(item, dict) and item.get("name")}
+else:
+    fn_names = set()
+assert ns_name in fn_names, f"ns function {ns_name} missing from catalog: {sorted(fn_names)}"
+assert ns_deep in fn_names, f"deep ns function {ns_deep} missing from catalog: {sorted(fn_names)}"
+PY
+
+  # Cleanup: delete both
+  delete_code="$(curl_fastfn -sS -o /tmp/openapi-system-ns-delete.out -w '%{http_code}' -X DELETE \
+    "${BASE_URL}/_fn/function?runtime=node&name=${ns_name}" \
+    -H "x-fn-admin-token: $FN_ADMIN_TOKEN")"
+  if [[ "$delete_code" != "200" ]]; then
+    echo "FAIL delete namespaced function expected=200 got=$delete_code"
+    cat /tmp/openapi-system-ns-delete.out || true
+    exit 1
+  fi
+
+  delete_code="$(curl_fastfn -sS -o /tmp/openapi-system-nsdeep-delete.out -w '%{http_code}' -X DELETE \
+    "${BASE_URL}/_fn/function?runtime=node&name=${ns_deep_name}" \
+    -H "x-fn-admin-token: $FN_ADMIN_TOKEN")"
+  if [[ "$delete_code" != "200" ]]; then
+    echo "FAIL delete deep namespaced function expected=200 got=$delete_code"
+    cat /tmp/openapi-system-nsdeep-delete.out || true
+    exit 1
+  fi
+
+  reload_code="$(curl_fastfn -sS -o /tmp/openapi-system-ns-reload-final.out -w '%{http_code}' -X POST \
+    "${BASE_URL}/_fn/reload" \
+    -H "x-fn-admin-token: $FN_ADMIN_TOKEN")"
+  if [[ "$reload_code" != "200" ]]; then
+    echo "FAIL reload after ns cleanup expected=200 got=$reload_code"
+    cat /tmp/openapi-system-ns-reload-final.out || true
+    exit 1
+  fi
+}
+
+echo "== namespaced function CRUD =="
+start_stack
+assert_namespaced_function_crud
+stop_stack
 
 echo "PASS test-openapi-system.sh"

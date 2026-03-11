@@ -35,6 +35,7 @@ if [[ "$LUA_COVERAGE" == "1" ]]; then
   "${DC[@]}" run --rm --no-deps \
     -v "$ROOT_DIR/tests:/app/tests" \
     -v "$COVERAGE_DIR:/app/coverage/lua" \
+    -e "FASTFN_LUA_TEST_TRACE=${FASTFN_LUA_TEST_TRACE:-}" \
     openresty \
     sh -lc '
       set -e
@@ -122,6 +123,7 @@ else
   echo "[lua] running lua suite..."
   "${DC[@]}" run --rm --no-deps \
     -v "$ROOT_DIR/tests:/app/tests" \
+    -e "FASTFN_LUA_TEST_TRACE=${FASTFN_LUA_TEST_TRACE:-}" \
     openresty \
     sh -lc '
       RESTY_BIN="$(command -v resty || true)"

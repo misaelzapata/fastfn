@@ -1,5 +1,8 @@
 # Architecture
 
+
+> Verified status as of **March 10, 2026**.
+> Runtime note: FastFN auto-installs function-local dependencies from `requirements.txt` / `package.json`; host runtimes are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
 ## Design goals
 
 The platform optimizes for three things at once:
@@ -12,7 +15,17 @@ That is why it keeps OpenResty as the single HTTP edge and uses language runtime
 
 ## Mental model
 
-HTTP client -> OpenResty (public routes like `/hello`) -> runtime (`python`/`node`/`php`/`rust`) -> handler
+FastFN optimizes for fast local development and low operational complexity by keeping OpenResty as the single HTTP edge.
+
+```mermaid
+graph LR
+    Client((HTTP Client)) -->|Request| Gateway[OpenResty Gateway]
+    Gateway -->|Unix Socket| Runtime[Python/Node/PHP/Rust]
+    Runtime -->|Execute| Handler(Your Function)
+    Handler -->|Response| Runtime
+    Runtime -->|Unix Socket| Gateway
+    Gateway -->|Response| Client
+```
 
 In Docker, everything runs in one `openresty` service, including runtime processes.
 
@@ -79,3 +92,52 @@ Built-in controls include:
 - public auth is function-level by default (not centralized)
 
 The tradeoff is intentional: strong local velocity plus practical control.
+
+## Throughput model and scaling reality
+
+FastFN throughput is the product of both layers:
+
+- OpenResty/Nginx (network edge, connection handling, request parsing)
+- runtime execution capacity (Node/Python/PHP/Lua/Rust/Go workers and handler cost)
+
+Adding more workers can increase throughput, but only until the next bottleneck:
+
+- CPU saturation
+- runtime dependency overhead (cold/warm behavior, package loading)
+- per-function limits (`max_concurrency`, `worker_pool.max_workers`, `worker_pool.max_queue`)
+- downstream I/O latency (DB, external APIs)
+
+In other words: worker count helps when runtime capacity is the bottleneck, but does not bypass hard limits at the gateway, network, or external dependencies.
+
+## Future work and technical debt
+
+Current architecture is production-capable, but these are active optimization fronts:
+
+- adaptive worker-pool autosizing per function based on observed latency/error rates
+- better backpressure defaults (queue timeout and overflow strategy by traffic profile)
+- lower IPC overhead in hot paths (framing/serialization improvements)
+- stronger runtime parity for advanced pool behavior across all runtimes
+- clearer, first-class observability for queue wait time vs execution time
+- benchmark matrix standardization (same workload shape across runtimes, reproducible profiles)
+
+These are not blockers for normal usage; they are the next layer for higher percentile performance under burst traffic.
+
+## Problem
+
+What operational or developer pain this topic solves.
+
+## Mental Model
+
+How to reason about this feature in production-like environments.
+
+## Design Decisions
+
+- Why this behavior exists
+- Tradeoffs accepted
+- When to choose alternatives
+
+## See also
+
+- [Function Specification](../reference/function-spec.md)
+- [HTTP API Reference](../reference/http-api.md)
+- [Run and Test Checklist](../how-to/run-and-test.md)

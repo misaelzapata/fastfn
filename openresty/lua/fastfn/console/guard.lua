@@ -9,6 +9,7 @@ local STATE_KEYS = {
   local_only = "console:local_only",
   login_enabled = "console:login_enabled",
   login_api_enabled = "console:login_api_enabled",
+  public_explore = "console:public_explore",
 }
 
 local function state_store()
@@ -91,6 +92,10 @@ function M.login_api_enabled()
     return override
   end
   return auth.api_login_enabled()
+end
+
+function M.public_explore()
+  return resolve_flag("public_explore", "FN_PUBLIC_EXPLORE", false)
 end
 
 function M.request_is_local()
@@ -220,6 +225,7 @@ function M.state_snapshot()
     local_only = M.local_only(),
     login_enabled = M.login_enabled(),
     login_api_enabled = M.login_api_enabled(),
+    public_explore = M.public_explore(),
     current_user = M.current_session_user(),
   }
 end

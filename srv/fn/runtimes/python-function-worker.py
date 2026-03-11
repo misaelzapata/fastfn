@@ -22,15 +22,20 @@ Since each worker runs in its own process, sys.path / sys.modules
 are fully isolated from other functions — no leaks, no locks.
 """
 import importlib.util
+import asyncio
+import base64
 import json
 import os
 import struct
 import sys
 import builtins
 import io
+import inspect
 import subprocess
+import time
 from contextlib import contextmanager
 from pathlib import Path
+from urllib.parse import urlencode
 
 
 _handler_cache: dict = {}
@@ -38,6 +43,9 @@ _handler_cache: dict = {}
 STRICT_FS = os.environ.get("FN_STRICT_FS", "1").lower() not in {"0", "false", "off", "no"}
 STRICT_FS_EXTRA_ALLOW = os.environ.get("FN_STRICT_FS_ALLOW", "")
 _PROTECTED_FN_FILES = {"fn.config.json", "fn.env.json", "fn.test_events.json"}
+_INVOKE_ADAPTER_NATIVE = "native"
+_INVOKE_ADAPTER_AWS_LAMBDA = "aws-lambda"
+_INVOKE_ADAPTER_CLOUDFLARE_WORKER = "cloudflare-worker"
 
 
 def _parse_extra_allow_roots() -> list[Path]:
@@ -220,9 +228,40 @@ def _write_frame(data: bytes) -> None:
     sys.stdout.buffer.flush()
 
 
-def _load_handler(handler_path: str, handler_name: str):
+def _normalize_invoke_adapter(raw: object) -> str:
+    if not isinstance(raw, str):
+        return _INVOKE_ADAPTER_NATIVE
+    normalized = raw.strip().lower()
+    if normalized in {"", "native", "none", "default"}:
+        return _INVOKE_ADAPTER_NATIVE
+    if normalized in {"aws-lambda", "lambda", "apigw-v2", "api-gateway-v2"}:
+        return _INVOKE_ADAPTER_AWS_LAMBDA
+    if normalized in {"cloudflare-worker", "cloudflare-workers", "worker", "workers"}:
+        return _INVOKE_ADAPTER_CLOUDFLARE_WORKER
+    raise RuntimeError(f"invoke.adapter unsupported: {raw}")
+
+
+def _resolve_handler(mod, handler_name: str, invoke_adapter: str):
+    if invoke_adapter == _INVOKE_ADAPTER_CLOUDFLARE_WORKER:
+        fetch_fn = getattr(mod, "fetch", None)
+        if callable(fetch_fn):
+            return fetch_fn
+        fallback = getattr(mod, handler_name, None)
+        if callable(fallback):
+            return fallback
+        raise RuntimeError("cloudflare-worker adapter requires fetch(request, env, ctx)")
+
+    handler = getattr(mod, handler_name, None)
+    if not callable(handler) and handler_name == "handler":
+        handler = getattr(mod, "main", None)
+    if not callable(handler):
+        raise RuntimeError(f"{handler_name}(event) is required")
+    return handler
+
+
+def _load_handler(handler_path: str, handler_name: str, invoke_adapter: str):
     mtime_ns = os.stat(handler_path).st_mtime_ns
-    cache_key = f"{handler_path}::{handler_name}"
+    cache_key = f"{handler_path}::{handler_name}::{invoke_adapter}"
     cached = _handler_cache.get(cache_key)
     if cached is not None and cached["mtime_ns"] == mtime_ns:
         return cached["handler"]
@@ -235,14 +274,308 @@ def _load_handler(handler_path: str, handler_name: str):
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
 
-    handler = getattr(mod, handler_name, None)
-    if not callable(handler) and handler_name == "handler":
-        handler = getattr(mod, "main", None)
-    if not callable(handler):
-        raise RuntimeError(f"{handler_name}(event) is required")
+    handler = _resolve_handler(mod, handler_name, invoke_adapter)
 
     _handler_cache[cache_key] = {"handler": handler, "mtime_ns": mtime_ns}
     return handler
+
+
+def _header_value(headers: dict[str, object], name: str) -> str:
+    target = name.lower()
+    for k, v in headers.items():
+        if str(k).lower() == target:
+            return str(v)
+    return ""
+
+
+def _build_raw_path(event: dict[str, object]) -> str:
+    raw = event.get("raw_path") if isinstance(event.get("raw_path"), str) else event.get("path")
+    if not isinstance(raw, str) or not raw:
+        return "/"
+    if raw.startswith("http://") or raw.startswith("https://"):
+        return raw
+    if raw.startswith("/"):
+        return raw
+    return "/" + raw
+
+
+def _encode_query_string(query: object) -> str:
+    if not isinstance(query, dict):
+        return ""
+    pairs: list[tuple[str, str]] = []
+    for k, v in query.items():
+        if v is None:
+            continue
+        if isinstance(v, list):
+            for item in v:
+                if item is None:
+                    continue
+                pairs.append((str(k), str(item)))
+            continue
+        pairs.append((str(k), str(v)))
+    return urlencode(pairs, doseq=True)
+
+
+def _build_raw_query(event: dict[str, object]) -> str:
+    raw_path = event.get("raw_path")
+    if isinstance(raw_path, str):
+        idx = raw_path.find("?")
+        if idx >= 0 and idx < len(raw_path) - 1:
+            return raw_path[idx + 1 :]
+    return _encode_query_string(event.get("query"))
+
+
+def _build_lambda_event(event: dict[str, object]) -> dict:
+    headers = event.get("headers") if isinstance(event.get("headers"), dict) else {}
+    headers = {str(k): str(v) for k, v in headers.items()}
+    raw_path_q = _build_raw_path(event)
+    q_idx = raw_path_q.find("?")
+    raw_path = raw_path_q[:q_idx] if q_idx >= 0 else raw_path_q
+    raw_query = _build_raw_query(event)
+    query = event.get("query") if isinstance(event.get("query"), dict) else None
+    params = event.get("params") if isinstance(event.get("params"), dict) else None
+    cookie_header = _header_value(headers, "cookie")
+    cookies = [x.strip() for x in cookie_header.split(";") if x.strip()] if cookie_header else None
+
+    has_b64_body = bool(event.get("is_base64") is True and isinstance(event.get("body_base64"), str))
+    if has_b64_body:
+        body = str(event.get("body_base64"))
+    else:
+        body_raw = event.get("body")
+        body = body_raw if isinstance(body_raw, str) else ("" if body_raw is None else str(body_raw))
+
+    method = str(event.get("method") or "GET").upper()
+    client = event.get("client") if isinstance(event.get("client"), dict) else {}
+    context = event.get("context") if isinstance(event.get("context"), dict) else {}
+
+    return {
+        "version": "2.0",
+        "routeKey": f"{method} {raw_path}",
+        "rawPath": raw_path,
+        "rawQueryString": raw_query,
+        "cookies": cookies,
+        "headers": headers,
+        "queryStringParameters": query,
+        "pathParameters": params,
+        "requestContext": {
+            "requestId": str(context.get("request_id") or event.get("id") or ""),
+            "http": {
+                "method": method,
+                "path": raw_path,
+                "sourceIp": str(client.get("ip") or ""),
+                "userAgent": str(client.get("ua") or ""),
+            },
+            "timeEpoch": int(event.get("ts") or 0) or int(time.time() * 1000),
+        },
+        "body": body,
+        "isBase64Encoded": has_b64_body,
+    }
+
+
+class _LambdaContext:
+    def __init__(self, event: dict[str, object]):
+        context = event.get("context") if isinstance(event.get("context"), dict) else {}
+        timeout_ms = int(context.get("timeout_ms") or 0)
+        self.aws_request_id = str(context.get("request_id") or event.get("id") or "")
+        self.awsRequestId = self.aws_request_id
+        self.function_name = str(context.get("function_name") or "")
+        self.functionName = self.function_name
+        self.function_version = str(context.get("version") or "$LATEST")
+        self.functionVersion = self.function_version
+        self.memory_limit_in_mb = str(context.get("memory_limit_mb") or "")
+        self.memoryLimitInMB = self.memory_limit_in_mb
+        self.invoked_function_arn = str(context.get("invoked_function_arn") or "")
+        self.callback_waits_for_empty_event_loop = False
+        self.fastfn = context
+        self._timeout_ms = timeout_ms
+
+    def get_remaining_time_in_millis(self) -> int:
+        return max(0, int(self._timeout_ms))
+
+    def done(self, *_args, **_kwargs) -> None:
+        return None
+
+    def fail(self, *_args, **_kwargs) -> None:
+        return None
+
+    def succeed(self, *_args, **_kwargs) -> None:
+        return None
+
+
+def _build_workers_url(event: dict[str, object]) -> str:
+    raw_path = _build_raw_path(event)
+    if raw_path.startswith("http://") or raw_path.startswith("https://"):
+        return raw_path
+    headers = event.get("headers") if isinstance(event.get("headers"), dict) else {}
+    proto = _header_value({str(k): str(v) for k, v in headers.items()}, "x-forwarded-proto") or "http"
+    host = _header_value({str(k): str(v) for k, v in headers.items()}, "host") or "127.0.0.1"
+    return f"{proto}://{host}{raw_path}"
+
+
+class _WorkersRequest:
+    def __init__(self, event: dict[str, object]):
+        self.method = str(event.get("method") or "GET").upper()
+        headers_raw = event.get("headers") if isinstance(event.get("headers"), dict) else {}
+        self.headers = {str(k): str(v) for k, v in headers_raw.items()}
+        self.url = _build_workers_url(event)
+        if event.get("is_base64") is True and isinstance(event.get("body_base64"), str):
+            try:
+                self.body = base64.b64decode(str(event.get("body_base64")))
+            except Exception:
+                self.body = b""
+        else:
+            body_raw = event.get("body")
+            if isinstance(body_raw, bytes):
+                self.body = body_raw
+            elif isinstance(body_raw, str):
+                self.body = body_raw.encode("utf-8")
+            elif body_raw is None:
+                self.body = b""
+            else:
+                self.body = str(body_raw).encode("utf-8")
+
+    async def text(self) -> str:
+        return self.body.decode("utf-8", errors="replace")
+
+    async def json(self):
+        raw = await self.text()
+        if not raw:
+            return None
+        return json.loads(raw)
+
+
+class _WorkersContext:
+    def __init__(self, event: dict[str, object]):
+        context = event.get("context") if isinstance(event.get("context"), dict) else {}
+        self.request_id = str(context.get("request_id") or event.get("id") or "")
+        self._waitables = []
+
+    def waitUntil(self, awaitable):
+        return self.wait_until(awaitable)
+
+    def wait_until(self, awaitable):
+        if inspect.isawaitable(awaitable):
+            self._waitables.append(awaitable)
+        return None
+
+    def passThroughOnException(self):
+        return None
+
+    def pass_through_on_exception(self):
+        return None
+
+
+def _call_handler(handler, args: list[object], route_params: dict | None = None):
+    try:
+        sig = inspect.signature(handler)
+        params = list(sig.parameters.values())
+        if any(p.kind == inspect.Parameter.VAR_POSITIONAL for p in params):
+            return handler(*args)
+        positional = [
+            p for p in params if p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+        ]
+        argc = len(positional)
+        if argc <= 0:
+            return handler()
+
+        # Inject route params as kwargs when handler declares extra parameters.
+        # e.g. def handler(event, id): ... receives id="42" from event.params
+        if route_params and argc >= 1:
+            has_var_keyword = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params)
+            keyword_only = [p for p in params if p.kind == inspect.Parameter.KEYWORD_ONLY]
+
+            if has_var_keyword:
+                return handler(args[0], **route_params)
+
+            injectable = {}
+            for p in positional[1:]:
+                if p.name in route_params:
+                    injectable[p.name] = route_params[p.name]
+            for p in keyword_only:
+                if p.name in route_params:
+                    injectable[p.name] = route_params[p.name]
+
+            if injectable:
+                return handler(args[0], **injectable)
+
+        return handler(*args[: min(argc, len(args))])
+    except Exception:
+        return handler(*args)
+
+
+def _resolve_awaitable(value):
+    if not inspect.isawaitable(value):
+        return value
+    try:
+        return asyncio.run(value)
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(value)
+        finally:
+            loop.close()
+
+
+def _normalize_response_like_object(resp):
+    status = getattr(resp, "status", 200)
+    headers = getattr(resp, "headers", {})
+    body = getattr(resp, "body", "")
+    out_headers = dict(headers) if isinstance(headers, dict) else {}
+    out: dict = {"status": int(status) if isinstance(status, int) else 200, "headers": out_headers}
+    if isinstance(body, (bytes, bytearray)):
+        out["is_base64"] = True
+        out["body_base64"] = base64.b64encode(bytes(body)).decode("utf-8")
+        return out
+    if body is None:
+        body = ""
+    out["body"] = body if isinstance(body, str) else str(body)
+    return out
+
+
+@contextmanager
+def _patched_process_env(event: dict):
+    env = event.get("env") if isinstance(event.get("env"), dict) else {}
+    if not env:
+        yield
+        return
+
+    tracked: list[str] = []
+    previous: dict[str, str] = {}
+
+    for raw_key, raw_value in env.items():
+        if not isinstance(raw_key, str) or raw_key == "":
+            continue
+        tracked.append(raw_key)
+        if raw_key in os.environ:
+            previous[raw_key] = os.environ[raw_key]
+        if raw_value is None:
+            os.environ.pop(raw_key, None)
+        else:
+            os.environ[raw_key] = str(raw_value)
+
+    try:
+        yield
+    finally:
+        for key in tracked:
+            if key in previous:
+                os.environ[key] = previous[key]
+            else:
+                os.environ.pop(key, None)
+
+
+def _invoke_handler(handler, invoke_adapter: str, event: dict):
+    with _patched_process_env(event):
+        if invoke_adapter == _INVOKE_ADAPTER_AWS_LAMBDA:
+            lambda_event = _build_lambda_event(event)
+            lambda_context = _LambdaContext(event)
+            return _resolve_awaitable(_call_handler(handler, [lambda_event, lambda_context]))
+        if invoke_adapter == _INVOKE_ADAPTER_CLOUDFLARE_WORKER:
+            req = _WorkersRequest(event)
+            env = event.get("env") if isinstance(event.get("env"), dict) else {}
+            ctx = _WorkersContext(event)
+            return _resolve_awaitable(_call_handler(handler, [req, env, ctx]))
+        route_params = event.get("params") if isinstance(event.get("params"), dict) else {}
+        return _resolve_awaitable(_call_handler(handler, [event], route_params=route_params))
 
 
 def _normalize_response(resp):
@@ -253,12 +586,15 @@ def _normalize_response(resp):
         return {"body": body, "status": status, "headers": headers}
     if isinstance(resp, dict):
         return resp
+    if any(hasattr(resp, key) for key in ("status", "headers", "body")):
+        return _normalize_response_like_object(resp)
     raise ValueError("handler response must be an object or tuple")
 
 
 def _handle(payload: dict) -> dict:
     handler_path = payload["handler_path"]
     handler_name = payload.get("handler_name", "handler")
+    invoke_adapter = _normalize_invoke_adapter(payload.get("invoke_adapter", "native"))
     deps_dirs = payload.get("deps_dirs", [])
     event = payload.get("event", {})
 
@@ -269,9 +605,28 @@ def _handle(payload: dict) -> dict:
 
     handler_path_p = Path(handler_path).resolve(strict=False)
     with _strict_fs_guard(handler_path_p, deps_dirs):
-        handler = _load_handler(handler_path, handler_name)
-        resp = handler(event)
-        return _normalize_response(resp)
+        handler = _load_handler(handler_path, handler_name, invoke_adapter)
+
+        # Capture stdout/stderr during handler execution.
+        captured_out = io.StringIO()
+        captured_err = io.StringIO()
+        old_stdout, old_stderr = sys.stdout, sys.stderr
+        sys.stdout = captured_out
+        sys.stderr = captured_err
+        try:
+            resp = _invoke_handler(handler, invoke_adapter, event)
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+
+        result = _normalize_response(resp)
+        stdout_str = captured_out.getvalue()
+        stderr_str = captured_err.getvalue()
+        if stdout_str:
+            result["stdout"] = stdout_str
+        if stderr_str:
+            result["stderr"] = stderr_str
+        return result
 
 
 def _error_resp(exc: Exception) -> dict:

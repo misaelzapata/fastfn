@@ -1,5 +1,8 @@
 # Function Specification
 
+
+> Verified status as of **March 10, 2026**.
+> Runtime note: FastFN auto-installs function-local dependencies from `requirements.txt` / `package.json`; host runtimes are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
 ## Quick Start
 
 The easiest way to conform to this spec is using the CLI:
@@ -12,11 +15,23 @@ This generates the correct folder structure and configuration file.
 
 ## Naming and routing
 
-- Function name: `^[a-zA-Z0-9_-]+$`
+- Function name (flat): `^[a-zA-Z0-9_-]+$`
+- Function name (namespaced): `<segment>/<segment>/.../<name>` where each segment matches `^[a-zA-Z0-9_-]+$`
 - Version: `^[a-zA-Z0-9_.-]+$`
 - Public routes (default):
-  - `/<name>`
+  - `/<name>` (flat)
+  - `/<segment>/<segment>/.../<name>` (namespaced — directory structure maps to routes, Next.js-style)
   - `/<name>@<version>`
+
+Namespaced names map directory structure directly to URL paths. Examples:
+
+| Disk path (under runtime dir) | Function name | Route |
+|-------------------------------|---------------|-------|
+| `hello/app.py` | `hello` | `/hello` |
+| `alice/hello/app.py` | `alice/hello` | `/alice/hello` |
+| `api/v1/users/app.py` | `api/v1/users` | `/api/v1/users` |
+
+Use cases: multi-tenant platforms (`alice/hello`, `bob/greet`), API namespacing (`api/v1/users`), organizational grouping (`team/service/handler`).
 
 ## Runtime support status
 
@@ -80,6 +95,29 @@ lua/quick-hook/handler.lua
 ```
 
 When `fn.config.json` declares a function identity (for example by setting `runtime`, `name`, or `entrypoint`), that directory is treated as a single function.
+
+### Nested namespaces (Next.js-style)
+
+Directory nesting under a runtime folder maps directly to URL paths:
+
+```text
+python/
+  hello/app.py                    # GET /hello
+  api/
+    v1/
+      users/app.py                # GET /api/v1/users
+      orders/app.py               # GET /api/v1/orders
+  alice/
+    dashboard/app.py              # GET /alice/dashboard
+```
+
+Discovery recurses into directories that don't contain a handler file, treating them as namespace segments. A directory that contains a handler file (`app.py`, `handler.js`, etc.) is treated as a function.
+
+**Depth limit**: `FN_NAMESPACE_DEPTH` controls how many levels deep the scanner recurses (default `3`, max `5`). For example, with depth 3 the path `python/a/b/c/app.py` is discovered as function `a/b/c` → route `/a/b/c`.
+
+!!! note "Depth Limits"
+    The `FN_NAMESPACE_DEPTH` setting controls runtime-grouped directories (e.g., `python/`, `node/`).
+    Zero-config file-based routes use a separate, fixed depth limit of **6 levels**.
 
 ## Entry files and handler functions
 
@@ -156,40 +194,112 @@ function handler(event)
 end
 ```
 
+### Simple response shorthand (quick reference)
+
+FastFN's canonical portable response remains:
+
+- `{ status, headers, body }`
+- or binary `{ status, headers, is_base64, body_base64 }`
+
+Runtime shorthand support:
+
+| Runtime | Shorthand support | Notes |
+|---|---|---|
+| Node | yes | non-envelope values are normalized automatically |
+| Python | partial | dict without envelope and tuple returns are normalized |
+| PHP | yes | primitive/array/object returns are normalized |
+| Lua | yes | non-envelope values are normalized as JSON `200` |
+| Go | no | explicit response envelope required |
+| Rust | no | explicit response envelope required |
+
+For cross-runtime parity, prefer explicit envelope responses in docs/examples.
+
 ## Dependency management (auto-install)
 
-FastFN installs dependencies **per function directory** by default.
+FastFN installs dependencies **per function directory** by default, with autonomous inference for Python/Node.
 
-Resolution rules:
+Resolution model:
 
-- A dependency file applies to the handler file in the **same directory** (and anything that handler imports).
-- FastFN does **not** automatically search your repo root for `requirements.txt` / `package.json`.
-- For shared dependencies across many functions, use **packs** (`shared_deps`) instead of a repo-root dependency file.
+- Dependency files are function-local (`python/<fn>/requirements.txt`, `node/<fn>/package.json`, `php/<fn>/composer.json`).
+- FastFN does **not** scan repo root dependency files automatically.
+- For reusable shared installs across many functions, use packs via `shared_deps`.
+- Runtime writes transparent state to `<function_dir>/.fastfn-deps-state.json`.
 
-### Python
+### Python (manifest + inference)
 
-Supported:
+Supported inputs:
 
-- `requirements.txt` next to your handler file.
-- Inline `#@requirements ...` hints at the top of the handler file.
+- `requirements.txt` (explicit manifest).
+- inline `#@requirements ...` hints.
+- import inference when manifest is missing or incomplete.
 
-Toggles:
+Behavior:
 
-- `FN_AUTO_REQUIREMENTS=0` disables auto-install.
-- `FN_PREINSTALL_PY_DEPS_ON_START=1` installs requirements for discovered handlers at runtime start.
-
-### Node.js
-
-Supported:
-
-- `package.json` next to your handler file.
-- If `package-lock.json` is present, FastFN prefers `npm ci` for reproducible installs.
+- If `requirements.txt` is missing and inference resolves imports, FastFN generates it automatically.
+- If `requirements.txt` exists, FastFN appends missing inferred packages without removing your existing pins.
+- After successful install, FastFN writes `requirements.lock.txt` (informational lock snapshot).
 
 Toggles:
 
-- `FN_AUTO_NODE_DEPS=0` disables auto-install.
-- `FN_PREINSTALL_NODE_DEPS_ON_START=1` installs deps for discovered handlers at runtime start.
-- `FN_PREINSTALL_NODE_DEPS_CONCURRENCY=4` controls preinstall concurrency.
+- `FN_AUTO_REQUIREMENTS=0` disables Python auto-install.
+- `FN_AUTO_INFER_PY_DEPS=0` disables Python inference.
+- `FN_AUTO_INFER_WRITE_MANIFEST=0` keeps inference in-memory only (no manifest writes).
+- `FN_AUTO_INFER_STRICT=1` fails fast on unresolved imports.
+- `FN_PREINSTALL_PY_DEPS_ON_START=1` preinstalls discovered handlers during runtime startup.
+
+### Node.js (manifest + inference)
+
+Supported inputs:
+
+- `package.json` (explicit manifest).
+- import/require inference for missing dependencies.
+
+Behavior:
+
+- If `package.json` is missing and imports are inferred, FastFN creates `package.json`.
+- If `package.json` exists, FastFN appends inferred missing dependencies.
+- If lockfile exists, FastFN prefers `npm ci`; otherwise uses `npm install`.
+
+Toggles:
+
+- `FN_AUTO_NODE_DEPS=0` disables Node auto-install.
+- `FN_AUTO_INFER_NODE_DEPS=0` disables Node inference.
+- `FN_AUTO_INFER_WRITE_MANIFEST=0` disables manifest writes from inference.
+- `FN_AUTO_INFER_STRICT=1` fails fast on unresolved imports.
+- `FN_PREINSTALL_NODE_DEPS_ON_START=1` preinstalls discovered handlers on startup.
+- `FN_PREINSTALL_NODE_DEPS_CONCURRENCY=4` controls startup preinstall concurrency.
+
+### PHP (manifest only in this phase)
+
+Supported inputs:
+
+- `composer.json` (plus optional `composer.lock`).
+
+Behavior:
+
+- FastFN runs `composer install` per function when `composer.json` is present.
+- No import-based inference is performed for PHP in this phase.
+
+Toggle:
+
+- `FN_AUTO_PHP_DEPS=0` disables Composer auto-install.
+
+### Strict errors and transparency
+
+- Unresolved inferred imports (when strict mode is on) return actionable runtime errors.
+- Install failures include short actionable tails from pip/npm/composer output.
+- Console API `GET /_fn/function` exposes `metadata.dependency_resolution` for current state.
+
+```mermaid
+flowchart LR
+  A["Function request"] --> B["Load function-local manifest"]
+  B --> C{"Manifest missing/incomplete?"}
+  C -- "No" --> D["Install from manifest"]
+  C -- "Yes (Py/Node)" --> E["Infer imports and write manifest"]
+  E --> D
+  D --> F["Write .fastfn-deps-state.json + lock info"]
+  F --> G["Invoke handler"]
+```
 
 ### Shared dependency packs (`shared_deps`)
 
@@ -224,6 +334,7 @@ Main fields:
 - `invoke.routes`: (Optional) Public URLs for the function (array). Defaults to `/<name>` and `/<name>/*`.
 - `invoke.allow_hosts`: (Optional) Host allowlist for those routes (array).
 - `invoke.force-url`: (Optional) If `true`, this function is allowed to override an already-mapped URL.
+- `invoke.adapter`: (Beta, Node/Python) compatibility mode for external handler styles (`native`, `aws-lambda`, `cloudflare-worker`).
 
 Notes:
 - By default, FastFN does not silently override an existing URL mapping.
@@ -243,6 +354,7 @@ Example with advanced fields:
   "entrypoint": "src/api.py",
   "invoke": {
     "handler": "main",
+    "adapter": "native",
     "force-url": false,
     "routes": ["/my-api", "/my-api/*"],
     "allow_hosts": ["api.example.com"]
@@ -284,6 +396,18 @@ For runtimes with subprocess worker pools (Python and Node; PHP and Lua use runt
 - `max_workers`: Maximum number of subprocesses to spawn.
 - `idle_ttl_seconds`: How long a worker stays alive without requests.
 - `queue_timeout_ms`: How long to wait for a worker to become available before returning `overflow_status` (default 500).
+
+### Invoke adapter (Beta)
+
+Use `invoke.adapter` when you want to port existing handlers with minimal rewrites.
+
+- `native` (default): FastFN contract (`handler(event)`).
+- `aws-lambda`: Node/Python compatibility for Lambda-style handlers.
+- `cloudflare-worker`: Node/Python compatibility for Workers-style handlers (`fetch(request, env, ctx)`).
+
+Node + Lambda callback note:
+
+- In `aws-lambda` mode, Node supports both async handlers and callback-based handlers (`event, context, callback`).
 
 ## Edge passthrough config (`edge`)
 
@@ -391,3 +515,34 @@ Example:
   "PUBLIC_FLAG": {"value": "on", "is_secret": false}
 }
 ```
+
+## Execution Flow Diagram
+
+```mermaid
+flowchart LR
+  A["Incoming HTTP request"] --> B["Route resolution"]
+  B --> C["fn.config policy evaluation"]
+  C --> D["Runtime adapter"]
+  D --> E["Handler response normalization"]
+  E --> F["OpenAPI-consistent output"]
+```
+
+## Contract
+
+Defines expected request/response shape, configuration fields, and behavioral guarantees.
+
+## End-to-End Example
+
+Use the examples in this page as canonical templates for implementation and testing.
+
+## Edge Cases
+
+- Missing configuration fallbacks
+- Route conflicts and precedence
+- Runtime-specific nuances
+
+## See also
+
+- [HTTP API Reference](http-api.md)
+- [Run and Test Checklist](../how-to/run-and-test.md)
+- [Architecture Overview](../explanation/architecture.md)

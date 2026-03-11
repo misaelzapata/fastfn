@@ -1,5 +1,8 @@
 # Desplegar a Producción
 
+
+> Estado verificado al **10 de marzo de 2026**.
+> Nota de runtime: FastFN auto-instala dependencias locales por función desde `requirements.txt` / `package.json`; en `fastfn dev --native` necesitas runtimes instalados en host, mientras que `fastfn dev` depende de Docker daemon activo.
 ## Ficha rapida
 
 - Complejidad: Intermedia
@@ -13,7 +16,7 @@ FastFN está pensado para correr en producción usando el mismo motor que en des
 ## Estado actual
 
 - Modo producción native (`fastfn run --native`): disponible
-- Modo producción docker-first: in progress
+- Modo producción docker-first: disponible para flujos específicos, mientras este documento mantiene `--native` como camino principal.
 
 ## Modos de Producción
 
@@ -38,7 +41,7 @@ Para desarrollo puedes usar `fastfn dev` (modo Docker) mientras instalas OpenRes
 
 ### 2. Contenedor Docker
 
-FastFN soporta modo producción usando `--native`. El wiring de producción 100% basado en Docker está en evolución, pero no es el default todavía.
+FastFN soporta modo producción usando `--native`. Existen flujos docker-first para casos puntuales, pero no son el camino default de este documento.
 
 ## Health Checks
 
@@ -119,3 +122,39 @@ FastFN detecta el server URL público desde `X-Forwarded-Proto` y `X-Forwarded-H
 Si no puedes (o no quieres) forwardear esos headers, setea:
 
 - `FN_PUBLIC_BASE_URL=https://example.com`
+
+## Diagrama de Flujo
+
+```mermaid
+flowchart LR
+  A["Request del cliente"] --> B["Discovery de rutas"]
+  B --> C["Validación de políticas y método"]
+  C --> D["Ejecución del handler runtime"]
+  D --> E["Respuesta HTTP + paridad OpenAPI"]
+```
+
+## Objetivo
+
+Alcance claro, resultado esperado y público al que aplica esta guía.
+
+## Prerrequisitos
+
+- CLI de FastFN disponible
+- Dependencias por modo verificadas (Docker para `fastfn dev`, OpenResty+runtimes para `fastfn dev --native`)
+
+## Checklist de Validación
+
+- Los comandos de ejemplo devuelven estados esperados
+- Las rutas aparecen en OpenAPI cuando aplica
+- Las referencias del final son navegables
+
+## Solución de Problemas
+
+- Si un runtime cae, valida dependencias de host y endpoint de health
+- Si faltan rutas, vuelve a ejecutar discovery y revisa layout de carpetas
+
+## Ver también
+
+- [Especificación de Funciones](../referencia/especificacion-funciones.md)
+- [Referencia API HTTP](../referencia/api-http.md)
+- [Checklist Ejecutar y Probar](ejecutar-y-probar.md)

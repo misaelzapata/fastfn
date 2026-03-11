@@ -1,5 +1,8 @@
 # Polyglot APIs with Next-Style Routing in FastFN
 
+
+> Verified status as of **March 10, 2026**.
+> Runtime note: FastFN auto-installs function-local dependencies from `requirements.txt` / `package.json`; host runtimes are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
 FastFN now supports a practical polyglot workflow: one gateway, one routing model, multiple runtimes in the same app tree.
 
 This article summarizes what that means in real projects and why it reduces operational friction.
@@ -84,3 +87,33 @@ Recommended sequence:
 5. Validate with integration suite before rollout.
 
 Result: one platform contract, language flexibility, and lower operational overhead than maintaining separate gateways per runtime.
+
+## Flow Diagram
+
+```mermaid
+flowchart LR
+  A["Client request"] --> B["Route discovery"]
+  B --> C["Policy and method validation"]
+  C --> D["Runtime handler execution"]
+  D --> E["HTTP response + OpenAPI parity"]
+```
+
+## Problem
+
+What operational or developer pain this topic solves.
+
+## Mental Model
+
+How to reason about this feature in production-like environments.
+
+## Design Decisions
+
+- Why this behavior exists
+- Tradeoffs accepted
+- When to choose alternatives
+
+## See also
+
+- [Function Specification](../reference/function-spec.md)
+- [HTTP API Reference](../reference/http-api.md)
+- [Run and Test Checklist](../how-to/run-and-test.md)

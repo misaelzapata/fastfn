@@ -20,6 +20,16 @@ local DEFAULT_POOL_IDLE_TTL_SECONDS = 300
 local DEFAULT_POOL_QUEUE_TIMEOUT_MS = 0
 local DEFAULT_POOL_QUEUE_POLL_MS = 20
 local DEFAULT_POOL_OVERFLOW_STATUS = 429
+local DEFAULT_ZERO_CONFIG_IGNORE_DIRS = {
+  "node_modules",
+  "vendor",
+  "__pycache__",
+  ".fastfn",
+  ".deps",
+  ".rust-build",
+  "target",
+  "src",
+}
 local CATALOG_SCAN_LOCK_KEY = "catalog:scan:running"
 local CATALOG_WATCHDOG_ACTIVE_KEY = "catalog:watchdog:active"
 local CATALOG_WATCHDOG_BACKEND_KEY = "catalog:watchdog:backend"
@@ -521,6 +531,64 @@ local function split_csv(raw)
   return out
 end
 
+local function normalize_zero_config_dir(raw)
+  local v = tostring(raw or ""):gsub("^%s+", ""):gsub("%s+$", ""):lower()
+  if v == "" then
+    return nil
+  end
+  if v:find("/", 1, true) or v:find("\\", 1, true) then
+    return nil
+  end
+  if v == "." or v == ".." then
+    return nil
+  end
+  return v
+end
+
+local function append_zero_config_ignore_dirs(dst, seen, value)
+  local items = {}
+  if type(value) == "string" then
+    items = split_csv(value)
+  elseif type(value) == "table" then
+    for _, item in ipairs(value) do
+      items[#items + 1] = item
+    end
+  end
+
+  for _, raw in ipairs(items) do
+    local dir = normalize_zero_config_dir(raw)
+    if dir and not seen[dir] then
+      seen[dir] = true
+      dst[#dst + 1] = dir
+    end
+  end
+end
+
+local function load_zero_config_ignore_dirs(functions_root)
+  local out = {}
+  local seen = {}
+
+  append_zero_config_ignore_dirs(out, seen, DEFAULT_ZERO_CONFIG_IGNORE_DIRS)
+
+  local root_cfg = read_json_file(functions_root .. "/fn.config.json")
+  if type(root_cfg) == "table" then
+    local discovery = root_cfg.zero_config
+    if type(discovery) ~= "table" then
+      discovery = root_cfg.discovery
+    end
+    if type(discovery) ~= "table" then
+      discovery = root_cfg.routing
+    end
+    if type(discovery) == "table" then
+      append_zero_config_ignore_dirs(out, seen, discovery.ignore_dirs)
+    end
+    append_zero_config_ignore_dirs(out, seen, root_cfg.zero_config_ignore_dirs)
+  end
+
+  append_zero_config_ignore_dirs(out, seen, os.getenv("FN_ZERO_CONFIG_IGNORE_DIRS"))
+  return out
+end
+
 local function shell_quote(s)
   return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
 end
@@ -585,14 +653,17 @@ local function list_files(path)
 end
 
 local function file_exists(path)
-  local cmd = string.format("[ -f %s ] && echo 1 || true", shell_quote(path))
-  local p = io.popen(cmd)
-  if not p then
+  local f, err = io.open(path, "rb")
+  if not f then
     return false
   end
-  local out = p:read("*l")
-  p:close()
-  return out == "1"
+  -- On Linux, io.open succeeds on directories; detect by attempting a read.
+  local _, read_err = f:read(0)
+  f:close()
+  if read_err then
+    return false
+  end
+  return true
 end
 
 local function has_app_file(path)
@@ -734,10 +805,11 @@ function M.resolve_function_entrypoint(runtime, fn_name, version)
   local direct_file = fn_name:find("/", 1, true) ~= nil or fn_name:match("%.[A-Za-z0-9]+$") ~= nil
   if direct_file then
     local target = resolve_runtime_file_target(functions_root, runtime, fn_name)
-    if not target then
-      return nil, "entrypoint not found"
+    if target then
+      return target
     end
-    return target
+    -- Fall through: name may contain "/" as a namespace separator (e.g. "user/func")
+    -- and still be a directory-based function, so try directory resolution next.
   end
 
   local dir = resolve_runtime_function_dir(functions_root, runtime, fn_name, version)
@@ -931,14 +1003,22 @@ function M.canonical_route_segment_for_name(name)
   if s == "" then
     return nil
   end
-  local lower = string.lower(s)
-  lower = lower:gsub("_+", "-")
-  lower = lower:gsub("[^a-z0-9-]+", "-")
-  lower = lower:gsub("^-+", ""):gsub("-+$", "")
-  if lower == "" then
+  -- For namespaced names, normalize each segment individually and
+  -- preserve "/" so api/v1/users becomes api/v1/users (not api-v1-users).
+  local parts = {}
+  for seg in s:gmatch("[^/]+") do
+    local lower = string.lower(seg)
+    lower = lower:gsub("_+", "-")
+    lower = lower:gsub("[^a-z0-9-]+", "-")
+    lower = lower:gsub("^-+", ""):gsub("-+$", "")
+    if lower ~= "" then
+      parts[#parts + 1] = lower
+    end
+  end
+  if #parts == 0 then
     return nil
   end
-  return lower
+  return table.concat(parts, "/")
 end
 
 local function is_optional_catchall_token(segment)
@@ -1516,6 +1596,9 @@ load_runtime_config = function(force)
       max_concurrency = tonumber(os.getenv("FN_DEFAULT_MAX_CONCURRENCY")) or DEFAULT_MAX_CONCURRENCY,
       max_body_bytes = tonumber(os.getenv("FN_DEFAULT_MAX_BODY_BYTES")) or DEFAULT_MAX_BODY_BYTES,
     },
+    zero_config = {
+      ignore_dirs = load_zero_config_ignore_dirs(functions_root),
+    },
     runtimes = runtimes,
   }
 
@@ -1758,8 +1841,78 @@ function M.discover_functions(force)
 	    end
 	  end
 
+	  -- Collect runtime names to skip them in zero-config discovery (they have their own scan).
+	  local runtime_dirs = {}
+	  for rt, _ in pairs(cfg.runtimes or {}) do
+	    runtime_dirs[rt] = true
+	  end
+  local zero_config_ignore_dirs = {}
+  for _, dir_name in ipairs(((cfg.zero_config or {}).ignore_dirs) or {}) do
+    local normalized = normalize_zero_config_dir(dir_name)
+    if normalized then
+      zero_config_ignore_dirs[normalized] = true
+    end
+  end
+
+  local function should_skip_zero_config_dir(name)
+    local lower = string.lower(tostring(name or ""))
+    if lower == "" then
+      return true
+    end
+    if lower:sub(1, 1) == "." then
+      return true
+    end
+    if zero_config_ignore_dirs[lower] then
+      return true
+    end
+    return false
+  end
+
+  local function runtime_root_exposes_routes(abs_dir, rel_dir, depth)
+    if depth > 6 then
+      return false
+    end
+
+    local manifest_routes, manifest_found = detect_manifest_routes_in_dir(abs_dir, rel_dir)
+    if manifest_found and #manifest_routes > 0 then
+      return true
+    end
+
+    local file_routes = detect_file_based_routes_in_dir(abs_dir, rel_dir)
+    if #file_routes > 0 then
+      return true
+    end
+
+    for _, child_dir in ipairs(list_dirs(abs_dir)) do
+      local child_name = basename(child_dir)
+      if child_name and not should_skip_zero_config_dir(child_name) then
+        local child_rel = (rel_dir and rel_dir ~= "" and rel_dir ~= ".")
+          and (rel_dir .. "/" .. child_name)
+          or child_name
+        if runtime_root_exposes_routes(child_dir, child_rel, depth + 1) then
+          return true
+        end
+      end
+    end
+
+    return false
+  end
+
+  local function should_skip_runtime_named_root_dir(sub_dir, sub_name)
+    if not runtime_dirs[sub_name] then
+      return false
+    end
+    -- If a runtime-named root directory exposes file-based or manifest routes
+    -- (for example next-style/php/get.export.php), keep it in zero-config scan.
+    if runtime_root_exposes_routes(sub_dir, sub_name, 0) then
+      return false
+    end
+    -- Otherwise treat it as runtime-scoped compatibility layout and skip here.
+    return true
+  end
+
 	  local function discover_zero_config_dir(abs_dir, rel_dir, depth)
-	    if depth > 2 then
+	    if depth > 6 then
 	      return
     end
 
@@ -1776,23 +1929,28 @@ function M.discover_functions(force)
     for _, item in ipairs(file_routes) do
       register_route(item.route, item.runtime, item.target, nil, item.methods, 1, item.allow_hosts)
     end
-	
+
 	    local fn_cfg = read_json_file(abs_dir .. "/fn.config.json")
 	    local has_explicit_cfg = is_explicit_fn_config(fn_cfg)
 	    local is_leaf = has_manifest or has_explicit_cfg
-	
-	    if depth == 2 then
-	      return
-    end
+
 	    if is_leaf and rel_dir ~= "." then
 	      return
 	    end
-	
-	    for _, sub_dir in ipairs(list_dirs(abs_dir)) do
-	      local sub_name = basename(sub_dir)
-	      if sub_name and sub_name ~= "" and sub_name:sub(1, 1) ~= "." then
-        local sub_rel = (rel_dir and rel_dir ~= "" and rel_dir ~= ".") and (rel_dir .. "/" .. sub_name) or sub_name
-        discover_zero_config_dir(sub_dir, sub_rel, depth + 1)
+
+		    for _, sub_dir in ipairs(list_dirs(abs_dir)) do
+		      local sub_name = basename(sub_dir)
+		      if sub_name and not should_skip_zero_config_dir(sub_name) then
+	        -- Skip runtime-named directories at root level only when they look like
+	        -- runtime-scoped compatibility roots (not file-routed namespaces).
+	        local skip_runtime_root = false
+	        if depth == 0 and runtime_dirs[sub_name] then
+          skip_runtime_root = should_skip_runtime_named_root_dir(sub_dir, sub_name)
+        end
+        if not skip_runtime_root then
+          local sub_rel = (rel_dir and rel_dir ~= "" and rel_dir ~= ".") and (rel_dir .. "/" .. sub_name) or sub_name
+          discover_zero_config_dir(sub_dir, sub_rel, depth + 1)
+        end
       end
     end
   end
@@ -1804,9 +1962,7 @@ function M.discover_functions(force)
       functions = {},
     }
 
-    for _, fn_dir in ipairs(list_dirs(runtime_dir)) do
-      local fn_name = basename(fn_dir)
-      if fn_name and fn_name:match("^[a-zA-Z0-9_-]+$") then
+    local function register_runtime_function(fn_dir, fn_name)
         local fn_entry = {
           has_default = has_app_file(fn_dir) or has_valid_config_entrypoint(fn_dir),
           versions = {},
@@ -1833,7 +1989,17 @@ function M.discover_functions(force)
             local root_allow_hosts = fn_entry.policy and fn_entry.policy.allow_hosts or nil
             local root_force_url = fn_entry.policy and fn_entry.policy.force_url or nil
             if #policy_routes == 0 then
-              local canonical_name = normalize_route_token(fn_name) or fn_name
+              -- For namespaced names (e.g., "api/v1/users"), normalize each
+              -- segment individually and preserve the "/" structure so the
+              -- route becomes /api/v1/users (Next.js-style), NOT /api-v1-users.
+              local parts = {}
+              for seg in fn_name:gmatch("[^/]+") do
+                local norm = normalize_route_token(seg)
+                if norm then
+                  parts[#parts + 1] = norm
+                end
+              end
+              local canonical_name = #parts > 0 and table.concat(parts, "/") or fn_name
               policy_routes = { "/" .. canonical_name, "/" .. canonical_name .. "/*" }
             end
             for _, route in ipairs(policy_routes) do
@@ -1853,8 +2019,51 @@ function M.discover_functions(force)
             end
           end
         end
+    end
+
+    -- Recursive discovery supports nested namespaces (e.g., user/api/v1/fn).
+    -- Depth controlled by FN_NAMESPACE_DEPTH (default 3, max 5).
+    local max_ns_depth = tonumber(os.getenv("FN_NAMESPACE_DEPTH")) or 3
+    if max_ns_depth < 1 then max_ns_depth = 1 end
+    if max_ns_depth > 5 then max_ns_depth = 5 end
+
+    local function looks_like_version_label(name)
+      local s = tostring(name or "")
+      return s:match("^v%d[%w_.-]*$") ~= nil or s:match("^%d[%w_.-]*$") ~= nil
+    end
+
+    local function has_versioned_runtime_children(dir)
+      local seen_version = false
+      for _, child in ipairs(list_dirs(dir)) do
+        local child_name = basename(child)
+        if child_name and child_name:match("^[A-Za-z0-9_.-]+$") then
+          if has_app_file(child) or has_valid_config_entrypoint(child) then
+            if looks_like_version_label(child_name) then
+              seen_version = true
+            else
+              return false
+            end
+          end
+        end
+      end
+      return seen_version
+    end
+
+    local function discover_runtime_dir(dir, prefix, depth)
+      for _, sub in ipairs(list_dirs(dir)) do
+        local name = basename(sub)
+        if name and name:match("^[a-zA-Z0-9_-]+$") then
+          if has_app_file(sub) or has_valid_config_entrypoint(sub) or has_versioned_runtime_children(sub) then
+            local fn_name = prefix ~= "" and (prefix .. "/" .. name) or name
+            register_runtime_function(sub, fn_name)
+          elseif depth < max_ns_depth then
+            local next_prefix = prefix ~= "" and (prefix .. "/" .. name) or name
+            discover_runtime_dir(sub, next_prefix, depth + 1)
+          end
+        end
       end
     end
+    discover_runtime_dir(runtime_dir, "", 1)
 
     catalog.runtimes[runtime] = runtime_entry
   end

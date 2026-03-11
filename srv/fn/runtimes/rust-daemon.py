@@ -10,6 +10,7 @@ import subprocess
 import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict
 
@@ -57,7 +58,14 @@ fn main() {
     }
 
     let req: Value = serde_json::from_str(&input).unwrap_or_else(|_| json!({}));
-    let event = req.get(\"event\").cloned().unwrap_or_else(|| json!({}));
+    let mut event = req.get(\"event\").cloned().unwrap_or_else(|| json!({}));
+    if let Some(params) = event.get(\"params\").cloned() {
+        if let (Some(event_map), Some(params_map)) = (event.as_object_mut(), params.as_object()) {
+            for (k, v) in params_map {
+                event_map.entry(k.clone()).or_insert(v.clone());
+            }
+        }
+    }
     let out = user_handler::handler(event);
     print!(\"{}\", out.to_string());
 }
@@ -91,6 +99,35 @@ def _read_function_env(handler_path: Path) -> Dict[str, str]:
             continue
         out[key] = str(value)
     return out
+
+
+@contextmanager
+def _patched_process_env(env: Dict[str, Any]) -> Any:
+    if not isinstance(env, dict) or not env:
+        yield
+        return
+
+    tracked: list[str] = []
+    previous: Dict[str, str] = {}
+    for raw_key, raw_value in env.items():
+        if not isinstance(raw_key, str) or not raw_key:
+            continue
+        tracked.append(raw_key)
+        if raw_key in os.environ:
+            previous[raw_key] = os.environ[raw_key]
+        if raw_value is None:
+            os.environ.pop(raw_key, None)
+        else:
+            os.environ[raw_key] = str(raw_value)
+
+    try:
+        yield
+    finally:
+        for key in tracked:
+            if key in previous:
+                os.environ[key] = previous[key]
+            else:
+                os.environ.pop(key, None)
 
 
 def _recvall(conn: socket.socket, size: int) -> bytes:
@@ -310,7 +347,11 @@ def _run_rust_handler(binary: Path, event: Dict[str, Any], timeout_ms: int) -> D
             "body": json.dumps({"error": "invalid rust handler response", "raw": raw[:400]}, separators=(",", ":")),
         }
 
-    return _normalize_response(parsed)
+    result = _normalize_response(parsed)
+    stderr_str = (proc.stderr or "").strip()
+    if stderr_str:
+        result["stderr"] = stderr_str
+    return result
 
 
 def _error_response(message: str, status: int = 500) -> Dict[str, Any]:
@@ -517,7 +558,8 @@ def _handle_request_direct(req: Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(value, (int, float)) and value > 0:
             timeout_ms = int(value) + 500
 
-    return _run_rust_handler(binary, event_with_env, timeout_ms)
+    with _patched_process_env(event_with_env.get("env", {})):
+        return _run_rust_handler(binary, event_with_env, timeout_ms)
 
 
 def _handle_request_with_pool(req: Dict[str, Any]) -> Dict[str, Any]:

@@ -1,5 +1,8 @@
 # Catalogo de funciones de ejemplo
 
+
+> Estado verificado al **10 de marzo de 2026**.
+> Nota de runtime: FastFN auto-instala dependencias locales por función desde `requirements.txt` / `package.json`; en `fastfn dev --native` necesitas runtimes instalados en host, mientras que `fastfn dev` depende de Docker daemon activo.
 Este documento describe las **funciones de ejemplo** incluidas en el repo, con requests y responses concretos.
 
 Diferencia importante:
@@ -698,6 +701,129 @@ Ejemplo (dry run):
 curl -sS 'http://127.0.0.1:8080/notion-create-page?title=Hola&content=Mundo&dry_run=true'
 ```
 
+## Ejemplos de Auto-install Autónomo
+
+### Python (inferencia)
+
+- `auto-infer-no-requirements`
+  Código: `examples/functions/python/auto-infer-no-requirements/app.py`
+- `auto-infer-alias`
+  Código: `examples/functions/python/auto-infer-alias/app.py` (`PIL` -> `Pillow`)
+
+```bash
+curl -sS 'http://127.0.0.1:8080/auto-infer-no-requirements'
+curl -sS 'http://127.0.0.1:8080/auto-infer-alias'
+```
+
+### Node (inferencia)
+
+- `auto-infer-create-package`
+  Código: `examples/functions/node/auto-infer-create-package/app.js`
+- `auto-infer-update-package`
+  Código: `examples/functions/node/auto-infer-update-package/app.js`
+
+```bash
+curl -sS 'http://127.0.0.1:8080/auto-infer-create-package'
+curl -sS 'http://127.0.0.1:8080/auto-infer-update-package'
+```
+
+### PHP (composer por manifiesto)
+
+- `auto-composer-basic`
+  Código: `examples/functions/php/auto-composer-basic/app.php`
+- `auto-composer-existing`
+  Código: `examples/functions/php/auto-composer-existing/app.php`
+
+```bash
+curl -sS 'http://127.0.0.1:8080/auto-composer-basic'
+curl -sS 'http://127.0.0.1:8080/auto-composer-existing'
+```
+
+Inspeccionar estado de resolución:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/_fn/function?runtime=node&name=auto-infer-create-package' \
+| python3 - <<'PY'
+import json,sys
+obj=json.load(sys.stdin)
+print(json.dumps((obj.get("metadata") or {}).get("dependency_resolution"), indent=2))
+PY
+```
+
+## Patrones Avanzados Equivalentes a Otras Plataformas
+
+Paquete fuente: `examples/functions/platform-equivalents/`
+
+Estos ejemplos replican patrones típicos de Cloudflare/Vercel/Netlify/AWS, adaptados al enrutamiento por archivos de FastFN.
+
+### Auth + perfil con RBAC
+
+- `POST /auth/login` (Node): emite token bearer firmado con HMAC
+- `GET /auth/profile` (Python): valida firma y expiración
+
+```bash
+TOKEN="$(curl -sS -X POST 'http://127.0.0.1:8080/auth/login' \
+  -H 'content-type: application/json' \
+  --data '{"username":"demo-admin","role":"admin"}' | \
+  python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')"
+
+curl -sS 'http://127.0.0.1:8080/auth/profile' \
+  -H "authorization: Bearer ${TOKEN}"
+```
+
+### Webhook firmado + idempotencia
+
+- `POST /webhooks/github-signed` (Python): verifica `x-hub-signature-256`, deduplica `x-github-delivery`
+
+```bash
+PAYLOAD='{"action":"opened","repository":"fastfn"}'
+SIG="$(python3 - <<'PY'
+import hashlib,hmac
+body=b'{"action":"opened","repository":"fastfn"}'
+print("sha256=" + hmac.new(b"fastfn-webhook-secret", body, hashlib.sha256).hexdigest())
+PY
+)"
+curl -sS -X POST 'http://127.0.0.1:8080/webhooks/github-signed' \
+  -H "x-hub-signature-256: ${SIG}" \
+  -H 'x-github-delivery: demo-1' \
+  -H 'content-type: application/json' \
+  --data "${PAYLOAD}"
+```
+
+### API versionada de orders (polyglot)
+
+- `POST /api/v1/orders` (Python)
+- `GET /api/v1/orders` (Node)
+- `GET /api/v1/orders/:id` (PHP)
+- `PUT /api/v1/orders/:id` (Node)
+
+```bash
+ORDER_ID="$(curl -sS -X POST 'http://127.0.0.1:8080/api/v1/orders' \
+  -H 'content-type: application/json' \
+  --data '{"customer":"acme","items":[{"sku":"A-1","qty":2}]}' | \
+  python3 -c 'import json,sys; print(json.load(sys.stdin)["order"]["id"])')"
+
+curl -sS "http://127.0.0.1:8080/api/v1/orders/${ORDER_ID}"
+curl -sS -X PUT "http://127.0.0.1:8080/api/v1/orders/${ORDER_ID}" \
+  -H 'content-type: application/json' \
+  --data '{"status":"shipped","tracking_number":"TRK-1001"}'
+```
+
+### Job asíncrono tipo background + polling
+
+- `POST /jobs/render-report` (Node): acepta trabajo y devuelve `202`
+- `GET /jobs/render-report/:id` (PHP): expone `queued/running/succeeded`
+
+```bash
+JOB_JSON="$(curl -sS -X POST 'http://127.0.0.1:8080/jobs/render-report' \
+  -H 'content-type: application/json' \
+  --data '{"report_type":"sales","items":[1,2,3,4]}')"
+POLL_URL="$(printf '%s' "${JOB_JSON}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["poll_url"])')"
+curl -sS "http://127.0.0.1:8080${POLL_URL}"
+sleep 3
+curl -sS "http://127.0.0.1:8080${POLL_URL}"
+```
+
 ## PHP runtime
 
 ### `php-profile`
@@ -745,3 +871,23 @@ Despues de editar archivos de funciones, recarga discovery:
 ```bash
 curl -sS -X POST 'http://127.0.0.1:8080/_fn/reload'
 ```
+
+## Contrato
+
+Define la forma esperada de request/response, campos de configuración y garantías de comportamiento.
+
+## Ejemplo End-to-End
+
+Usa los ejemplos de esta página como plantillas canónicas para implementación y testing.
+
+## Casos Límite
+
+- Fallbacks ante configuración faltante
+- Conflictos de rutas y precedencia
+- Matices por runtime
+
+## Ver también
+
+- [Especificación de Funciones](especificacion-funciones.md)
+- [Referencia API HTTP](api-http.md)
+- [Checklist Ejecutar y Probar](../como-hacer/ejecutar-y-probar.md)

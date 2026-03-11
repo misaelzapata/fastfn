@@ -1,5 +1,8 @@
 # Tutorial: Variantes de QR con estilo (opcional)
 
+
+> Estado verificado al **10 de marzo de 2026**.
+> Nota de runtime: FastFN auto-instala dependencias locales por función desde `requirements.txt` / `package.json`; en `fastfn dev --native` necesitas runtimes instalados en host, mientras que `fastfn dev` depende de Docker daemon activo.
 Esta página agrega una variante PNG del generador de QR (con opciones de estilo).
 
 Nota: este tutorial es opcional y no forma parte del camino de inicio rápido.
@@ -118,3 +121,39 @@ También puedes guardar el PNG:
 curl -sS 'http://127.0.0.1:8080/qr@v3?text=Hola' -o /tmp/qr-v3.png
 file /tmp/qr-v3.png
 ```
+
+## Diagrama de Flujo
+
+```mermaid
+flowchart LR
+  A["Request del cliente"] --> B["Discovery de rutas"]
+  B --> C["Validación de políticas y método"]
+  C --> D["Ejecución del handler runtime"]
+  D --> E["Respuesta HTTP + paridad OpenAPI"]
+```
+
+## Objetivo
+
+Alcance claro, resultado esperado y público al que aplica esta guía.
+
+## Prerrequisitos
+
+- CLI de FastFN disponible
+- Dependencias por modo verificadas (Docker para `fastfn dev`, OpenResty+runtimes para `fastfn dev --native`)
+
+## Checklist de Validación
+
+- Los comandos de ejemplo devuelven estados esperados
+- Las rutas aparecen en OpenAPI cuando aplica
+- Las referencias del final son navegables
+
+## Solución de Problemas
+
+- Si un runtime cae, valida dependencias de host y endpoint de health
+- Si faltan rutas, vuelve a ejecutar discovery y revisa layout de carpetas
+
+## Ver también
+
+- [Especificación de Funciones](../referencia/especificacion-funciones.md)
+- [Referencia API HTTP](../referencia/api-http.md)
+- [Checklist Ejecutar y Probar](../como-hacer/ejecutar-y-probar.md)

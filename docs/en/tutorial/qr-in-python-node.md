@@ -1,5 +1,8 @@
 # Tutorial: QR in Python + Node (portable pattern for PHP + Lua)
 
+
+> Verified status as of **March 10, 2026**.
+> Runtime note: FastFN auto-installs function-local dependencies from `requirements.txt` / `package.json`; host runtimes are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
 This tutorial builds the same function in two runtimes:
 
 - `/qr` (Python, SVG response)
@@ -9,6 +12,14 @@ The goal is to verify runtime-local dependency installation:
 
 - Python installs to `functions/python/qr/.deps`
 - Node installs to `functions/node/qr/v2/node_modules`
+
+## Prerequisites and scope
+
+- Development mode (`fastfn dev`): Docker CLI + daemon running.
+- Native mode (`fastfn dev --native`): OpenResty in `PATH` + host runtimes installed for languages you use.
+- This tutorial validates dependency auto-install only (`requirements.txt` / `package.json` per function).
+- It does not install host `python`/`node` runtimes.
+- The `functions/python/...` and `functions/node/...` layout used here is compatibility-friendly; in zero-config file routing, runtime is inferred from file extension.
 
 ## 1) Create function folders
 
@@ -179,3 +190,34 @@ test -d functions/node/qr/v2/node_modules/qrcode && echo node-ok
 - Python and Node can implement the same endpoint independently, and the same contract pattern extends to PHP and Lua handlers.
 - Each runtime installs dependencies inside its own function directory.
 - Both binary content types are served correctly through the same gateway.
+
+## Flow Diagram
+
+```mermaid
+flowchart LR
+  A["Client request"] --> B["Route discovery"]
+  B --> C["Policy and method validation"]
+  C --> D["Runtime handler execution"]
+  D --> E["HTTP response + OpenAPI parity"]
+```
+
+## Objective
+
+Clear scope, expected outcome, and who should use this page.
+
+## Validation Checklist
+
+- Command examples execute with expected status codes
+- Routes appear in OpenAPI where applicable
+- References at the end are reachable
+
+## Troubleshooting
+
+- If runtime is down, verify host dependencies and health endpoint
+- If routes are missing, re-run discovery and check folder layout
+
+## See also
+
+- [Function Specification](../reference/function-spec.md)
+- [HTTP API Reference](../reference/http-api.md)
+- [Run and Test Checklist](../how-to/run-and-test.md)

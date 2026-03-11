@@ -1,5 +1,8 @@
 # Install and Release (Homebrew)
 
+
+> Verified status as of **March 10, 2026**.
+> Runtime note: FastFN auto-installs function-local dependencies from `requirements.txt` / `package.json`; host runtimes are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
 ## Quick View
 
 - Complexity: Basic
@@ -10,11 +13,10 @@
 
 This page covers:
 
-- Homebrew channel status and usage (planned rollout).
+- Homebrew channel usage and fallback install paths.
 - Publishing a new release and updating the Homebrew tap (maintainers).
 
-> Status: Homebrew tap rollout is planned.  
-> If tap/formula is not available yet in your environment, use source install (below) for now.
+> Verified status as of **March 10, 2026**: if tap/formula is not available in your environment, use source install (below).
 
 ## Install (users, once tap is available)
 
@@ -46,7 +48,7 @@ This follows the same dependency UX standard used by major local-runtime CLIs:
 - clear Docker requirement for local stack mode (Supabase docs)
 - actionable failure message when local container runtime is missing/down (AWS SAM / LocalStack docs)
 
-Planned bootstrap (macOS + Homebrew):
+Recommended bootstrap (macOS + Homebrew):
 
 ```bash
 brew tap misaelzapata/homebrew-fastfn
@@ -108,3 +110,39 @@ After the workflow finishes:
 
 - GitHub Releases contains the new version and binary archives.
 - `misaelzapata/homebrew-fastfn` has an updated `Formula/fastfn.rb`.
+
+## Flow Diagram
+
+```mermaid
+flowchart LR
+  A["Client request"] --> B["Route discovery"]
+  B --> C["Policy and method validation"]
+  C --> D["Runtime handler execution"]
+  D --> E["HTTP response + OpenAPI parity"]
+```
+
+## Objective
+
+Clear scope, expected outcome, and who should use this page.
+
+## Prerequisites
+
+- FastFN CLI available
+- Runtime dependencies by mode verified (Docker for `fastfn dev`, OpenResty+runtimes for `fastfn dev --native`)
+
+## Validation Checklist
+
+- Command examples execute with expected status codes
+- Routes appear in OpenAPI where applicable
+- References at the end are reachable
+
+## Troubleshooting
+
+- If runtime is down, verify host dependencies and health endpoint
+- If routes are missing, re-run discovery and check folder layout
+
+## See also
+
+- [Function Specification](../reference/function-spec.md)
+- [HTTP API Reference](../reference/http-api.md)
+- [Run and Test Checklist](run-and-test.md)

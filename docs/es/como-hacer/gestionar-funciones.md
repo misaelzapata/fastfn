@@ -1,5 +1,8 @@
 # Gestionar funciones (API de consola)
 
+
+> Estado verificado al **10 de marzo de 2026**.
+> Nota de runtime: FastFN auto-instala dependencias locales por función desde `requirements.txt` / `package.json`; en `fastfn dev --native` necesitas runtimes instalados en host, mientras que `fastfn dev` depende de Docker daemon activo.
 ## Ficha rapida
 
 - Complejidad: Intermedia
@@ -55,6 +58,25 @@ curl -sS 'http://127.0.0.1:8080/_fn/function?runtime=python&name=demo-new' \
 ```bash
 curl -sS 'http://127.0.0.1:8080/_fn/function?runtime=python&name=demo-new&include_code=1'
 ```
+
+## 3a) Ver estado de resolucion de dependencias
+
+```bash
+curl -sS 'http://127.0.0.1:8080/_fn/function?runtime=python&name=demo-new' \
+| python3 - <<'PY'
+import json, sys
+obj = json.load(sys.stdin)
+print(json.dumps((obj.get("metadata") or {}).get("dependency_resolution"), indent=2))
+PY
+```
+
+Campos clave:
+
+- `mode`: `manifest` o `inferred`
+- `manifest_generated`: si FastFN creo el manifiesto automaticamente
+- `inferred_imports` / `resolved_packages` / `unresolved_imports`
+- `last_install_status` y `last_error`
+- `lockfile_path` (cuando existe)
 
 ## 4) Actualizar politica (metodos/limites)
 
@@ -154,3 +176,44 @@ curl -sS 'http://127.0.0.1:8080/_fn/function?runtime=python&name=demo-new' -X DE
 - `405`: metodo no permitido por politica
 - `409`: ambiguedad por nombre en varios runtimes (o conflicto de rutas mapeadas)
 - `403`: escritura bloqueada/local-only
+
+## Diagrama de Flujo
+
+```mermaid
+flowchart LR
+  A["Request del cliente"] --> B["Discovery de rutas"]
+  B --> C["Validación de políticas y método"]
+  C --> D["Ejecución del handler runtime"]
+  D --> E["Respuesta HTTP + paridad OpenAPI"]
+```
+
+## Objetivo
+
+Alcance claro, resultado esperado y público al que aplica esta guía.
+
+## Prerrequisitos
+
+- CLI de FastFN disponible
+- Dependencias por modo verificadas (Docker para `fastfn dev`, OpenResty+runtimes para `fastfn dev --native`)
+
+## Checklist de Validación
+
+- Los comandos de ejemplo devuelven estados esperados
+- Las rutas aparecen en OpenAPI cuando aplica
+- Las referencias del final son navegables
+
+## Solución de Problemas
+
+- Si un runtime cae, valida dependencias de host y endpoint de health
+- Si faltan rutas, vuelve a ejecutar discovery y revisa layout de carpetas
+- Si falla la inferencia, revisa `metadata.dependency_resolution` y `<function_dir>/.fastfn-deps-state.json`
+- En errores strict, agrega pins explícitos en `requirements.txt` / `package.json` o ajusta `FN_AUTO_INFER_STRICT`
+
+## Ver también
+
+- [Especificación de Funciones](../referencia/especificacion-funciones.md)
+- [Referencia API HTTP](../referencia/api-http.md)
+- [Checklist Ejecutar y Probar](ejecutar-y-probar.md)
+- [Catálogo de Funciones de Ejemplo](../referencia/funciones-ejemplo.md)
+- [Python Packaging User Guide](https://packaging.python.org/)
+- [Documentación de package.json (npm)](https://docs.npmjs.com/cli/v10/configuring-npm/package-json)

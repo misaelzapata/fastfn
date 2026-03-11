@@ -1,158 +1,126 @@
-# First Steps
+# Quick Start
 
-This guide is the fastest way to understand how FastFN works in practice.
 
-You will:
+> Verified status as of **March 10, 2026**.
+> Runtime note: FastFN auto-installs function-local dependencies from `requirements.txt` / `package.json`; host runtimes are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
+Welcome to FastFN! This guide is the fastest way to experience the magic of file-based routing and automatic OpenAPI generation.
 
-1. build the CLI
-2. start the runtime stack
-3. send real API traffic
-4. verify health, routing, and OpenAPI consistency
+If you are coming from FastAPI or Next.js API routes, you'll feel right at home: drop a file, get an endpoint. Zero boilerplate.
 
-If you are coming from FastAPI or Next.js API routes, this should feel familiar: files define routes, then policy/config layers refine behavior.
+## 1. Initialize your project
 
-## Before you start
-
-From repo root:
+Let's build your first API endpoint. In FastFN, your folder structure is your API. Open your terminal and run:
 
 ```bash
-make build-cli
+fastfn init hello --template node
 ```
 
-This creates `./bin/fastfn`.
+This creates `node/hello/` with a `handler.js` file. That's it! You just created an API endpoint.
 
-Runtime modes:
+## 2. Start the development server
 
-- `docker` (default, recommended for first run): `./bin/fastfn dev .`
-- `native` (requires OpenResty in PATH): `./bin/fastfn dev --native .`
-
-Related references:
-
-- [CLI flags](../reference/cli.md)
-- [Deploy mode expectations](../how-to/deploy-to-production.md)
-- [Architecture](../explanation/architecture.md)
-
-## 1) Create a first function
-
-Create a minimal function:
+Start FastFN in your current directory:
 
 ```bash
-./bin/fastfn init hello --template node
+fastfn dev .
 ```
 
-This creates a function folder with:
+Behind the scenes, FastFN spins up an OpenResty gateway, starts the runtimes needed by discovered handlers, and maps folders to live HTTP routes.
 
-- `fn.config.json` (function policy/config)
-- `handler.js` (runtime handler)
+!!! note "What installs automatically (and what does not)"
+    - FastFN auto-installs function dependencies from `requirements.txt` / `package.json` next to the handler.
+    - FastFN does not install host runtimes (`python`, `node`, etc.).
+    - In `fastfn dev` (portable mode), Docker must be running.
+    - In `fastfn dev --native`, OpenResty + host runtimes are required.
 
-Function config reference:
+!!! info "How a request flows through FastFN"
+    ```mermaid
+    flowchart LR
+      A["Client Request"] --> B["OpenResty public route"]
+      B --> C{"Method allowed?"}
+      C -- "No" --> D["405 + Allow header"]
+      C -- "Yes" --> E["Build event + context"]
+      E --> F["Runtime over Unix socket"]
+      F --> G["HTTP response to client"]
+    ```
 
-- [Function spec](../reference/function-spec.md)
-- [fastfn.json config](../reference/fastfn-config.md)
+## 3. See the Magic: Automatic Interactive Docs
 
-## 2) Start FastFN
+FastFN automatically generates OpenAPI 3.1 documentation for every function you create. 
 
-Docker mode:
+Open your browser and navigate to:
+👉 **[http://127.0.0.1:8080/docs](http://127.0.0.1:8080/docs)**
 
-```bash
-./bin/fastfn dev .
-```
+![Swagger UI showing FastFN routes](../../assets/screenshots/swagger-ui.png)
 
-Native mode:
+You can test your endpoint directly from this UI! Click on the `GET /hello` route, click "Try it out", and hit "Execute".
 
-```bash
-./bin/fastfn dev --native .
-```
+## 4. Call your API
 
-What starts internally:
-
-1. gateway (OpenResty)
-2. runtime daemons (Node/Python/PHP/Lua and optional experimental runtimes)
-3. file discovery and route map generation
-
-Lifecycle details:
-
-- [Invocation flow](../explanation/invocation-flow.md)
-- [Runtime contract](../reference/runtime-contract.md)
-
-## 3) Verify system health
-
-In a new terminal:
-
-```bash
-curl -sS 'http://127.0.0.1:8080/_fn/health' | jq
-```
-
-Expected:
-
-- gateway reachable
-- each enabled runtime reports `"up": true`
-
-If runtime health is down:
-
-- check missing dependencies in native mode (`openresty`, `node`, `python3`, etc.)
-- check Docker daemon in docker mode
-
-Troubleshooting paths:
-
-- [Run and test checklist](../how-to/run-and-test.md)
-- [Operational recipes](../how-to/operational-recipes.md)
-
-## 4) Send your first request
+You can also call your new endpoint using your browser or `curl`:
 
 ```bash
 curl -i 'http://127.0.0.1:8080/hello?name=World'
 ```
 
-What this validates:
-
-1. public route resolution
-2. gateway to runtime socket dispatch
-3. handler output normalization to HTTP response
-
-Routing model:
-
-- [Zero-config routing](../how-to/zero-config-routing.md)
-- [Next.js style routing rationale](../explanation/nextjs-style-routing-benefits.md)
-
-## 5) Validate docs and route map consistency
-
-OpenAPI:
-
-```bash
-curl -sS 'http://127.0.0.1:8080/_fn/openapi.json' | jq '.paths | keys'
+**Expected Output:**
+```json
+{
+  "status": 200,
+  "body": "Hello World"
+}
 ```
 
-Catalog:
+### Simple response shortcut
 
-```bash
-curl -sS 'http://127.0.0.1:8080/_fn/catalog' | jq '{mapped_routes, mapped_route_conflicts}'
+In `node`, `php`, and `lua` you can return a direct value (without full envelope), and FastFN normalizes it.
+
+Example (Node):
+
+```js
+exports.handler = async () => "Hello World";
 ```
 
-Expected:
+Result for `GET /hello`:
 
-- your route exists in both catalog and OpenAPI
-- `mapped_route_conflicts` is empty
+- HTTP `200`
+- `Content-Type: text/plain; charset=utf-8`
+- body: `Hello World`
 
-HTTP/API references:
+For cross-runtime portability (including `go` and `rust`), prefer explicit `{ status, headers, body }`.
 
-- [HTTP API](../reference/http-api.md)
-- [Built-in endpoints](../reference/builtin-functions.md)
+## 5. Stop the server
 
-## 6) Stop cleanly
+When you are done, simply press `Ctrl+C` in the terminal where `fastfn dev` is running to stop the server cleanly.
 
-Docker mode:
+## Next Steps
 
-```bash
-docker compose down --remove-orphans
-```
+Notice how you didn't have to write any routing logic or configure a server? 
+- Learn how to use dynamic parameters in [Routing & Parameters](./routing.md).
+- Dive deep with our [From Zero Course](./from-zero/index.md).
 
-Native mode:
+## Objective
 
-- stop with `Ctrl+C` in the `fastfn dev --native` terminal.
+Clear scope, expected outcome, and who should use this page.
 
-## Next links
+## Prerequisites
 
-- [Write your first function](./your-first-function.md)
-- [Build a complete API](./build-complete-api.md)
-- [Run and test (full validation)](../how-to/run-and-test.md)
+- FastFN CLI available
+- Runtime dependencies by mode verified (Docker for `fastfn dev`, OpenResty+runtimes for `fastfn dev --native`)
+
+## Validation Checklist
+
+- Command examples execute with expected status codes
+- Routes appear in OpenAPI where applicable
+- References at the end are reachable
+
+## Troubleshooting
+
+- If runtime is down, verify host dependencies and health endpoint
+- If routes are missing, re-run discovery and check folder layout
+
+## See also
+
+- [Function Specification](../reference/function-spec.md)
+- [HTTP API Reference](../reference/http-api.md)
+- [Run and Test Checklist](../how-to/run-and-test.md)

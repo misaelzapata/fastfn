@@ -2,6 +2,7 @@
 import importlib.util
 import json
 import base64
+import ast
 import os
 import re
 import socket
@@ -23,7 +24,10 @@ MAX_FRAME_BYTES = int(os.environ.get("FN_MAX_FRAME_BYTES", str(2 * 1024 * 1024))
 HOT_RELOAD = os.environ.get("FN_HOT_RELOAD", "1").lower() not in {"0", "false", "off", "no"}
 STRICT_FS = os.environ.get("FN_STRICT_FS", "1").lower() not in {"0", "false", "off", "no"}
 STRICT_FS_EXTRA_ALLOW = os.environ.get("FN_STRICT_FS_ALLOW", "")
-PREINSTALL_PY_DEPS_ON_START = os.environ.get("FN_PREINSTALL_PY_DEPS_ON_START", "0").lower() not in {"0", "false", "off", "no"}
+PREINSTALL_PY_DEPS_ON_START = os.environ.get("FN_PREINSTALL_PY_DEPS_ON_START", "1").lower() not in {"0", "false", "off", "no"}
+AUTO_INFER_PY_DEPS = os.environ.get("FN_AUTO_INFER_PY_DEPS", "1").lower() not in {"0", "false", "off", "no"}
+AUTO_INFER_WRITE_MANIFEST = os.environ.get("FN_AUTO_INFER_WRITE_MANIFEST", "1").lower() not in {"0", "false", "off", "no"}
+AUTO_INFER_STRICT = os.environ.get("FN_AUTO_INFER_STRICT", "1").lower() not in {"0", "false", "off", "no"}
 ENABLE_RUNTIME_WORKER_POOL = os.environ.get("FN_PY_RUNTIME_WORKER_POOL", "1").lower() not in {"0", "false", "off", "no"}
 RUNTIME_POOL_ACQUIRE_TIMEOUT_MS = int(os.environ.get("FN_PY_POOL_ACQUIRE_TIMEOUT_MS", "5000"))
 RUNTIME_POOL_IDLE_TTL_MS = int(os.environ.get("FN_PY_POOL_IDLE_TTL_MS", "300000"))
@@ -37,9 +41,25 @@ PACKS_DIR = BASE_DIR / "functions" / ".fastfn" / "packs" / "python"
 _NAME_RE = re.compile(r"^[A-Za-z0-9._/\-\[\]]+$")
 _VERSION_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 _HANDLER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_PY_PACKAGE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 _INVOKE_ADAPTER_NATIVE = "native"
 _INVOKE_ADAPTER_AWS_LAMBDA = "aws-lambda"
 _INVOKE_ADAPTER_CLOUDFLARE_WORKER = "cloudflare-worker"
+_DEPS_STATE_BASENAME = ".fastfn-deps-state.json"
+
+_PY_IMPORT_TO_PACKAGE = {
+    "PIL": "Pillow",
+    "cv2": "opencv-python",
+    "yaml": "PyYAML",
+    "bs4": "beautifulsoup4",
+    "sklearn": "scikit-learn",
+    "dateutil": "python-dateutil",
+    "Crypto": "pycryptodome",
+    "dotenv": "python-dotenv",
+    "googleapiclient": "google-api-python-client",
+    "jwt": "PyJWT",
+}
+_PY_STDLIB_MODULES = set(getattr(sys, "stdlib_module_names", set()))
 
 _HANDLER_CACHE: Dict[str, Dict[str, Any]] = {}
 _REQ_CACHE: Dict[str, bool] = {}
@@ -127,13 +147,290 @@ def _extract_requirements(handler_path: Path) -> list[str]:
     return []
 
 
+def _json_log(event: str, **fields: Any) -> None:
+    payload: Dict[str, Any] = {
+        "t": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "component": "python_daemon",
+        "event": event,
+    }
+    payload.update(fields)
+    try:
+        print(json.dumps(payload, separators=(",", ":"), ensure_ascii=True), flush=True)
+    except Exception:
+        return
+
+
+def _deps_state_path(handler_path: Path) -> Path:
+    return handler_path.parent / _DEPS_STATE_BASENAME
+
+
+def _read_deps_state(handler_path: Path) -> Dict[str, Any]:
+    path = _deps_state_path(handler_path)
+    if not path.is_file():
+        return {}
+    try:
+        raw = path.read_text(encoding="utf-8")
+        parsed = json.loads(raw)
+    except Exception:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _write_deps_state(handler_path: Path, payload: Dict[str, Any]) -> None:
+    state = dict(payload or {})
+    state["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    try:
+        _deps_state_path(handler_path).write_text(
+            json.dumps(state, indent=2, ensure_ascii=True) + "\n",
+            encoding="utf-8",
+        )
+    except Exception:
+        return
+
+
+def _normalize_requirement_name(line: str) -> Optional[str]:
+    raw = (line or "").strip()
+    if not raw or raw.startswith("#"):
+        return None
+    if raw.startswith("-"):
+        return None
+    lower = raw.lower()
+    if lower.startswith("git+") or lower.startswith("http://") or lower.startswith("https://") or lower.startswith("file:"):
+        return None
+    m = re.match(r"^([A-Za-z0-9_.-]+)", raw)
+    if not m:
+        return None
+    return m.group(1).lower()
+
+
+def _read_requirements_lines_and_packages(req_file: Path) -> tuple[list[str], set[str]]:
+    if not req_file.is_file():
+        return [], set()
+    try:
+        lines = req_file.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return [], set()
+    names: set[str] = set()
+    for line in lines:
+        name = _normalize_requirement_name(line)
+        if name:
+            names.add(name)
+    return lines, names
+
+
+def _is_local_python_module(fn_dir: Path, module_root: str) -> bool:
+    if not module_root:
+        return False
+    if (fn_dir / f"{module_root}.py").is_file():
+        return True
+    module_dir = fn_dir / module_root
+    if module_dir.is_dir():
+        return True
+    return False
+
+
+def _infer_python_imports(handler_path: Path) -> list[str]:
+    try:
+        source = handler_path.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(handler_path))
+    except Exception:
+        return []
+
+    imports: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                raw = getattr(alias, "name", "")
+                if isinstance(raw, str) and raw:
+                    imports.add(raw.split(".", 1)[0])
+        elif isinstance(node, ast.ImportFrom):
+            level = int(getattr(node, "level", 0) or 0)
+            if level > 0:
+                continue
+            raw = getattr(node, "module", None)
+            if isinstance(raw, str) and raw:
+                imports.add(raw.split(".", 1)[0])
+
+    filtered: list[str] = []
+    fn_dir = handler_path.parent
+    for name in sorted(imports):
+        if not name:
+            continue
+        if name in _PY_STDLIB_MODULES or name in sys.builtin_module_names:
+            continue
+        if name == handler_path.stem:
+            continue
+        if _is_local_python_module(fn_dir, name):
+            continue
+        filtered.append(name)
+    return filtered
+
+
+def _map_python_import_to_package(import_name: str) -> tuple[Optional[str], Optional[str]]:
+    if import_name in _PY_IMPORT_TO_PACKAGE:
+        return _PY_IMPORT_TO_PACKAGE[import_name], None
+    candidate = import_name.strip().lower()
+    if not candidate or not _PY_PACKAGE_RE.match(candidate):
+        return None, import_name
+    if any(ch.isupper() for ch in import_name):
+        return None, import_name
+    return candidate, None
+
+
+def _resolve_inferred_python_packages(imports: list[str]) -> tuple[list[str], list[str]]:
+    resolved: list[str] = []
+    unresolved: list[str] = []
+    seen_resolved: set[str] = set()
+    seen_unresolved: set[str] = set()
+
+    for name in imports:
+        pkg, unresolved_name = _map_python_import_to_package(name)
+        if pkg is not None:
+            key = pkg.lower()
+            if key not in seen_resolved:
+                seen_resolved.add(key)
+                resolved.append(pkg)
+            continue
+        if unresolved_name and unresolved_name not in seen_unresolved:
+            seen_unresolved.add(unresolved_name)
+            unresolved.append(unresolved_name)
+
+    return resolved, unresolved
+
+
+def _write_python_lockfile(handler_path: Path, deps_dir: Path) -> Optional[Path]:
+    lock_file = handler_path.with_name("requirements.lock.txt")
+    cmd = [
+        sys.executable,
+        "-m",
+        "pip",
+        "freeze",
+        "--disable-pip-version-check",
+        "--path",
+        str(deps_dir),
+    ]
+    try:
+        result = _REAL_SUBPROCESS_RUN(
+            cmd,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=120,
+            text=True,
+        )
+    except Exception:
+        return None
+    if result.returncode != 0:
+        return None
+
+    lines = [line.strip() for line in (result.stdout or "").splitlines() if line.strip()]
+    if not lines:
+        try:
+            lock_file.write_text("", encoding="utf-8")
+        except Exception:
+            return None
+        return lock_file
+
+    lines = sorted(set(lines), key=lambda x: x.lower())
+    try:
+        lock_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    except Exception:
+        return None
+    return lock_file
+
+
 def _ensure_requirements(handler_path: Path) -> None:
     inline_reqs = _extract_requirements(handler_path)
     req_file = handler_path.with_name("requirements.txt")
-    if (not inline_reqs and not req_file.is_file()) or not _auto_requirements_enabled():
+    deps_dir = handler_path.parent / ".deps"
+    lock_file_path = handler_path.with_name("requirements.lock.txt")
+    fn_dir = str(handler_path.parent)
+    manifest_existed = req_file.is_file()
+    previous_state = _read_deps_state(handler_path)
+    previous_manifest_generated = previous_state.get("manifest_generated") is True
+
+    state: Dict[str, Any] = {
+        "runtime": "python",
+        "mode": "manifest",
+        "manifest_path": str(req_file),
+        "manifest_generated": previous_manifest_generated,
+        "inferred_imports": [],
+        "resolved_packages": [],
+        "unresolved_imports": [],
+        "last_install_status": "skipped",
+        "last_error": None,
+        "lockfile_path": str(lock_file_path),
+    }
+
+    if not _auto_requirements_enabled():
+        state["last_error"] = "FN_AUTO_REQUIREMENTS is disabled"
+        _write_deps_state(handler_path, state)
         return
 
-    deps_dir = handler_path.parent / ".deps"
+    req_lines, req_packages = _read_requirements_lines_and_packages(req_file)
+    inferred_imports: list[str] = []
+    resolved_packages: list[str] = []
+    unresolved_imports: list[str] = []
+
+    if AUTO_INFER_PY_DEPS:
+        _json_log("deps_inference_start", runtime="python", fn_dir=fn_dir)
+        inferred_imports = _infer_python_imports(handler_path)
+        resolved_packages, unresolved_imports = _resolve_inferred_python_packages(inferred_imports)
+        _json_log(
+            "deps_inference_done",
+            runtime="python",
+            fn_dir=fn_dir,
+            inferred=len(inferred_imports),
+            resolved=len(resolved_packages),
+            unresolved=len(unresolved_imports),
+        )
+        state["inferred_imports"] = inferred_imports
+        state["resolved_packages"] = resolved_packages
+        state["unresolved_imports"] = unresolved_imports
+
+        if unresolved_imports and AUTO_INFER_STRICT:
+            msg = (
+                "python dependency inference failed: unresolved imports "
+                + ", ".join(unresolved_imports)
+                + ". Add explicit requirements.txt entries or disable FN_AUTO_INFER_STRICT."
+            )
+            state["mode"] = "inferred"
+            state["last_install_status"] = "error"
+            state["last_error"] = msg
+            _write_deps_state(handler_path, state)
+            _json_log("deps_install_error", runtime="python", fn_dir=fn_dir, stage="inference", error=msg)
+            raise RuntimeError(msg)
+
+        if resolved_packages and AUTO_INFER_WRITE_MANIFEST:
+            missing = [pkg for pkg in resolved_packages if pkg.lower() not in req_packages]
+            if missing:
+                out_lines = list(req_lines)
+                if not out_lines:
+                    out_lines = [
+                        "# Auto-generated by FastFN dependency inference.",
+                        "# Pin versions manually if you need deterministic resolution.",
+                        "",
+                    ]
+                elif out_lines[-1].strip():
+                    out_lines.append("")
+                out_lines.extend(missing)
+                req_file.write_text("\n".join(out_lines).rstrip() + "\n", encoding="utf-8")
+                req_packages.update(pkg.lower() for pkg in missing)
+                req_lines = out_lines
+
+        if resolved_packages or unresolved_imports:
+            state["mode"] = "inferred"
+    else:
+        state["inferred_imports"] = []
+        state["resolved_packages"] = []
+        state["unresolved_imports"] = []
+
+    state["manifest_generated"] = previous_manifest_generated or (not manifest_existed and req_file.is_file())
+
+    if not inline_reqs and not req_file.is_file():
+        state["last_install_status"] = "skipped"
+        _write_deps_state(handler_path, state)
+        return
 
     req_file_sig = "none"
     if req_file.is_file():
@@ -147,6 +444,8 @@ def _ensure_requirements(handler_path: Path) -> None:
             except Exception:
                 has_any = False
             if has_any:
+                state["last_install_status"] = "ok"
+                _write_deps_state(handler_path, state)
                 return
         _REQ_CACHE.pop(marker, None)
 
@@ -175,6 +474,7 @@ def _ensure_requirements(handler_path: Path) -> None:
     if inline_reqs:
         cmd.extend(inline_reqs)
 
+    _json_log("deps_install_start", runtime="python", fn_dir=fn_dir, mode=state["mode"])
     result = _REAL_SUBPROCESS_RUN(
         cmd,
         check=False,
@@ -187,9 +487,24 @@ def _ensure_requirements(handler_path: Path) -> None:
         _REQ_CACHE.pop(marker, None)
         stderr = (result.stderr or "").strip()
         tail = " | ".join(stderr.splitlines()[-4:]) if stderr else "unknown error"
-        raise RuntimeError(f"pip dependencies install failed for {handler_path.parent}: {tail}")
+        msg = (
+            f"pip dependencies install failed for {handler_path.parent}: {tail}. "
+            "Check inferred imports or add explicit requirements.txt pins."
+        )
+        state["last_install_status"] = "error"
+        state["last_error"] = msg
+        _write_deps_state(handler_path, state)
+        _json_log("deps_install_error", runtime="python", fn_dir=fn_dir, stage="install", error=tail)
+        raise RuntimeError(msg)
 
     _REQ_CACHE[marker] = True
+    lock_path = _write_python_lockfile(handler_path, deps_dir)
+    if lock_path is not None:
+        state["lockfile_path"] = str(lock_path)
+    state["last_install_status"] = "ok"
+    state["last_error"] = None
+    _write_deps_state(handler_path, state)
+    _json_log("deps_install_done", runtime="python", fn_dir=fn_dir, mode=state["mode"])
 
 
 def _read_function_config(handler_path: Path) -> Dict[str, Any]:
@@ -715,6 +1030,12 @@ def _normalize_response(resp: Any) -> Dict[str, Any]:
     if not isinstance(body, str):
         body = str(body)
     out["body"] = body
+    # Preserve stdout/stderr from worker subprocess.
+    if isinstance(resp, dict):
+        if resp.get("stdout"):
+            out["stdout"] = resp["stdout"]
+        if resp.get("stderr"):
+            out["stderr"] = resp["stderr"]
     return out
 
 

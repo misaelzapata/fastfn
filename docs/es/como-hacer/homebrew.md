@@ -1,5 +1,8 @@
 # Instalar y Publicar (Homebrew)
 
+
+> Estado verificado al **10 de marzo de 2026**.
+> Nota de runtime: FastFN auto-instala dependencias locales por función desde `requirements.txt` / `package.json`; en `fastfn dev --native` necesitas runtimes instalados en host, mientras que `fastfn dev` depende de Docker daemon activo.
 ## Ficha rapida
 
 - Complejidad: Basica
@@ -10,11 +13,10 @@
 
 Esta pagina cubre:
 
-- Estado del canal Homebrew y su uso (despliegue planificado).
+- Uso del canal Homebrew y caminos de instalación alternativos.
 - Como publicar un release y actualizar el tap de Homebrew (mantenedores).
 
-> Estado: el rollout del tap Homebrew esta planificado.  
-> Si el tap/formula aun no esta disponible en tu entorno, usa la instalacion desde source (abajo).
+> Estado verificado al **10 de marzo de 2026**: si el tap/formula no está disponible en tu entorno, usa la instalación desde source (abajo).
 
 ## Instalar (usuarios, cuando el tap este disponible)
 
@@ -46,7 +48,7 @@ Esto sigue el estandar de UX de dependencias usado por CLIs similares:
 - requisito claro de Docker para stack local (docs de Supabase)
 - error accionable cuando el runtime de contenedores falta/esta caido (docs de AWS SAM / LocalStack)
 
-Bootstrap planificado (macOS + Homebrew):
+Bootstrap recomendado (macOS + Homebrew):
 
 ```bash
 brew tap misaelzapata/homebrew-fastfn
@@ -108,3 +110,39 @@ Cuando termina el workflow:
 
 - En GitHub Releases aparece la nueva version y los binarios.
 - En `misaelzapata/homebrew-fastfn` se actualiza `Formula/fastfn.rb`.
+
+## Diagrama de Flujo
+
+```mermaid
+flowchart LR
+  A["Request del cliente"] --> B["Discovery de rutas"]
+  B --> C["Validación de políticas y método"]
+  C --> D["Ejecución del handler runtime"]
+  D --> E["Respuesta HTTP + paridad OpenAPI"]
+```
+
+## Objetivo
+
+Alcance claro, resultado esperado y público al que aplica esta guía.
+
+## Prerrequisitos
+
+- CLI de FastFN disponible
+- Dependencias por modo verificadas (Docker para `fastfn dev`, OpenResty+runtimes para `fastfn dev --native`)
+
+## Checklist de Validación
+
+- Los comandos de ejemplo devuelven estados esperados
+- Las rutas aparecen en OpenAPI cuando aplica
+- Las referencias del final son navegables
+
+## Solución de Problemas
+
+- Si un runtime cae, valida dependencias de host y endpoint de health
+- Si faltan rutas, vuelve a ejecutar discovery y revisa layout de carpetas
+
+## Ver también
+
+- [Especificación de Funciones](../referencia/especificacion-funciones.md)
+- [Referencia API HTTP](../referencia/api-http.md)
+- [Checklist Ejecutar y Probar](ejecutar-y-probar.md)

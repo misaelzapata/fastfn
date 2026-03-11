@@ -5,7 +5,7 @@ local invoke_rules = require "fastfn.core.invoke_rules"
 local M = {}
 
 local CACHE = ngx.shared.fn_cache
-local NAME_RE = "^[a-zA-Z0-9_-]+$"
+local NAME_RE = "^[a-zA-Z0-9_/-]+$"
 local FILE_TARGET_RE = "^[a-zA-Z0-9_/%[%]%.%-]+$"
 local VERSION_RE = "^[a-zA-Z0-9_.-]+$"
 local MAX_CODE_BYTES = 2 * 1024 * 1024
@@ -381,8 +381,9 @@ local function read_file(path, max_bytes)
   end
   f:close()
 
+  -- f:read() returns nil for empty files; treat as empty string
   if not data then
-    return nil
+    data = ""
   end
 
   if max_bytes and #data > max_bytes then
@@ -982,6 +983,24 @@ local function ensure_function_exists(runtime, name, version)
 end
 
 local function resolve_function_paths(cfg, runtime, name, version)
+  -- Try the runtime-scoped path first (handles both flat and namespaced names)
+  local fn_dir = build_fn_dir(cfg.functions_root, runtime, name, version)
+  if path_is_under(cfg.functions_root, fn_dir) then
+    local app_path = detect_app_file(fn_dir, runtime)
+    if app_path then
+      if not path_is_under(fn_dir, app_path) or not handler_name_allowed(app_path, runtime) then
+        return nil, "invalid function code path"
+      end
+      return {
+        fn_dir = fn_dir,
+        app_path = app_path,
+        conf_path = fn_dir .. "/fn.config.json",
+        env_path = fn_dir .. "/fn.env.json",
+      }
+    end
+  end
+
+  -- Fall back to file-target path (e.g., "mydir/script.py" under functions_root)
   local is_file_target = is_file_target_name(name)
   if is_file_target then
     if version ~= nil and version ~= "" then
@@ -992,8 +1011,8 @@ local function resolve_function_paths(cfg, runtime, name, version)
     end
 
     local app_path = cfg.functions_root .. "/" .. name
-    local fn_dir = app_path:match("^(.*)/[^/]+$") or cfg.functions_root
-    if not path_is_under(cfg.functions_root, fn_dir) or not path_is_under(cfg.functions_root, app_path) then
+    local fn_dir_ft = app_path:match("^(.*)/[^/]+$") or cfg.functions_root
+    if not path_is_under(cfg.functions_root, fn_dir_ft) or not path_is_under(cfg.functions_root, app_path) then
       return nil, "invalid function path"
     end
     if is_symlink(app_path) then
@@ -1008,31 +1027,14 @@ local function resolve_function_paths(cfg, runtime, name, version)
     end
 
     return {
-      fn_dir = fn_dir,
+      fn_dir = fn_dir_ft,
       app_path = app_path,
-      conf_path = fn_dir .. "/fn.config.json",
-      env_path = fn_dir .. "/fn.env.json",
+      conf_path = fn_dir_ft .. "/fn.config.json",
+      env_path = fn_dir_ft .. "/fn.env.json",
     }
   end
 
-  local fn_dir = build_fn_dir(cfg.functions_root, runtime, name, version)
-  if not path_is_under(cfg.functions_root, fn_dir) then
-    return nil, "invalid function path"
-  end
-  local app_path = detect_app_file(fn_dir, runtime)
-  if not app_path then
-    return nil, "function code not found"
-  end
-  if not path_is_under(fn_dir, app_path) or not handler_name_allowed(app_path, runtime) then
-    return nil, "invalid function code path"
-  end
-
-  return {
-    fn_dir = fn_dir,
-    app_path = app_path,
-    conf_path = fn_dir .. "/fn.config.json",
-    env_path = fn_dir .. "/fn.env.json",
-  }
+  return nil, "function code not found"
 end
 
 local function normalize_config_payload(payload)
@@ -1104,18 +1106,31 @@ local function normalize_config_payload(payload)
     }
   end
 
-  if type(payload.invoke) == "table" then
-    local ok_routes, routes_err = validate_invoke_routes_payload(payload.invoke)
+  -- Accept top-level routes (same pattern as methods above).
+  -- invoke.routes takes precedence if both are provided.
+  local routes_source = nil
+  if payload.routes ~= nil then
+    routes_source = { routes = payload.routes }
+  end
+  if type(payload.invoke) == "table" and
+     (payload.invoke.routes ~= nil or payload.invoke.route ~= nil) then
+    routes_source = payload.invoke
+  end
+  if routes_source ~= nil then
+    local ok_routes, routes_err = validate_invoke_routes_payload(routes_source)
     if not ok_routes then
       return nil, routes_err
     end
-    local invoke_routes = normalize_routes_from_invoke(payload.invoke)
+    local invoke_routes = normalize_routes_from_invoke(routes_source)
     if invoke_routes ~= nil then
       if out.invoke == nil then
         out.invoke = {}
       end
       out.invoke.routes = invoke_routes
     end
+  end
+
+  if type(payload.invoke) == "table" then
 
     if payload.invoke.handler ~= nil then
       if out.invoke == nil then
@@ -1734,6 +1749,11 @@ function M.function_detail(runtime, name, version, include_code)
   local composer_lock_path = dir .. "/composer.lock"
   local composer_require, composer_exists = parse_dependency_keys_from_json(composer_json_path, "require")
   local composer_require_dev, _ = parse_dependency_keys_from_json(composer_json_path, "require-dev")
+  local deps_state_path = dir .. "/.fastfn-deps-state.json"
+  local deps_state = read_json_file(deps_state_path)
+  if type(deps_state) ~= "table" then
+    deps_state = nil
+  end
 
   local cargo_toml_path = dir .. "/Cargo.toml"
   local cargo_lock_path = dir .. "/Cargo.lock"
@@ -1805,6 +1825,7 @@ function M.function_detail(runtime, name, version, include_code)
         configured = shared_deps,
       },
       group = (type(group_cfg) == "string" and group_cfg) or nil,
+      dependency_resolution = deps_state,
       endpoints = {
         public_route = route,
         mapped_routes = effective_mapped_routes,
@@ -2095,7 +2116,7 @@ function M.create_function(runtime, name, version, payload)
     return nil, "invalid runtime"
   end
   if type(name) ~= "string" or not name:match(NAME_RE) then
-    return nil, "invalid function"
+    return nil, "invalid function name"
   end
   if version ~= nil and version ~= "" and (type(version) ~= "string" or not version:match(VERSION_RE)) then
     return nil, "invalid version"
@@ -2215,7 +2236,7 @@ function M.delete_function(runtime, name, version)
   if type(runtime) ~= "string" or not runtime:match(NAME_RE) then
     return nil, "invalid runtime"
   end
-  if type(name) ~= "string" or not name:match(NAME_RE) then
+  if not function_name_allowed(name) then
     return nil, "invalid function"
   end
   if version ~= nil and version ~= "" and (type(version) ~= "string" or not version:match(VERSION_RE)) then
@@ -2334,6 +2355,266 @@ function M.get_dashboard_metrics()
             data = {120, 132, 101, 134, 90, 230}
         }
     }
+end
+
+-- ────────────────────────────────────────────────────
+-- Function files listing
+-- ────────────────────────────────────────────────────
+
+local DEPS_BASENAMES = {
+  ["requirements.txt"] = true,
+  ["package.json"] = true,
+  ["composer.json"] = true,
+  ["Cargo.toml"] = true,
+}
+local LOCK_BASENAMES = {
+  ["package-lock.json"] = true,
+  ["npm-shrinkwrap.json"] = true,
+  ["composer.lock"] = true,
+  ["Cargo.lock"] = true,
+}
+
+local function classify_file(basename, runtime)
+  if basename == "fn.config.json" then
+    return "config"
+  end
+  if basename == "fn.env.json" then
+    return "env"
+  end
+  if DEPS_BASENAMES[basename] then
+    return "deps"
+  end
+  if LOCK_BASENAMES[basename] then
+    return "lock"
+  end
+  local handlers = allowed_handler_filenames(runtime)
+  for _, h in ipairs(handlers) do
+    if basename == h then
+      return "handler"
+    end
+  end
+  return "file"
+end
+
+local function file_size(path)
+  -- Try Linux stat first (more common in Docker), then macOS
+  local p = io.popen(string.format("stat -c '%%s' %q 2>/dev/null || stat -f '%%z' %q 2>/dev/null", path, path))
+  if not p then
+    return 0
+  end
+  local out = p:read("*l")
+  p:close()
+  return tonumber(out) or 0
+end
+
+local function list_files_recursive(dir, max_depth)
+  local cmd = string.format(
+    "find %q -maxdepth %d -type f -not -name '.*' -print 2>/dev/null",
+    tostring(dir), max_depth or 3
+  )
+  local p = io.popen(cmd)
+  if not p then
+    return {}
+  end
+  local out = {}
+  for line in p:lines() do
+    out[#out + 1] = line
+  end
+  p:close()
+  table.sort(out)
+  return out
+end
+
+function M.function_files(runtime, name, version)
+  if type(runtime) ~= "string" or not runtime:match(NAME_RE) then
+    return nil, "invalid runtime"
+  end
+  if not function_name_allowed(name) then
+    return nil, "invalid function"
+  end
+  if version ~= nil and version ~= "" and (type(version) ~= "string" or not version:match(VERSION_RE)) then
+    return nil, "invalid version"
+  end
+
+  local cfg = routes.get_config()
+  local target, target_err = resolve_function_paths(cfg, runtime, name, version)
+  if not target then
+    return nil, target_err
+  end
+  local dir = target.fn_dir
+  if not path_is_under(cfg.functions_root, dir) then
+    return nil, "invalid function path"
+  end
+
+  local files = {}
+  local raw = list_files_recursive(dir, 3)
+  local dir_prefix = dir:gsub("/+$", "") .. "/"
+
+  for _, abs_path in ipairs(raw) do
+    if path_is_under(dir, abs_path) and not is_symlink(abs_path) then
+      local rel = abs_path:sub(#dir_prefix + 1)
+      if rel ~= "" then
+        local base = rel:match("([^/]+)$") or rel
+        local ftype = classify_file(base, runtime)
+        files[#files + 1] = {
+          name = base,
+          path = rel,
+          size = file_size(abs_path),
+          type = ftype,
+        }
+      end
+    end
+  end
+
+  -- List versions (subdirectories that look like version dirs)
+  local versions = {}
+  for _, sub in ipairs(list_dirs(dir)) do
+    local vname = sub:match("([^/]+)$")
+    if vname and vname:match("^[A-Za-z0-9._%-]+$") and not vname:match("^%.") then
+      -- Check if it has a handler file (i.e., is a version dir)
+      local app = detect_app_file(sub, runtime)
+      if app then
+        versions[#versions + 1] = vname
+      end
+    end
+  end
+  table.sort(versions)
+
+  return {
+    runtime = runtime,
+    name = name,
+    function_dir = dir,
+    files = files,
+    versions = versions,
+  }
+end
+
+-- ---------------------------------------------------------------------------
+-- File CRUD: read / write / delete individual files within a function dir
+-- ---------------------------------------------------------------------------
+
+local FILE_PATH_RE = "^[A-Za-z0-9_./ %-%[%]]+$"
+
+local function validate_file_path(rel)
+  if type(rel) ~= "string" or rel == "" then
+    return nil, "path required"
+  end
+  if rel:find("%.%.") or rel:sub(1, 1) == "/" or rel:find("%z") then
+    return nil, "invalid path"
+  end
+  if not rel:match(FILE_PATH_RE) then
+    return nil, "invalid characters in path"
+  end
+  return true
+end
+
+function M.read_function_file(runtime, name, rel_path, version)
+  local ok, err = validate_file_path(rel_path)
+  if not ok then return nil, err end
+
+  if not function_name_allowed(name) then
+    return nil, "invalid function"
+  end
+
+  local cfg = routes.get_config()
+  local target, terr = resolve_function_paths(cfg, runtime, name, version)
+  if not target then return nil, terr end
+
+  local abs = target.fn_dir .. "/" .. rel_path
+  if not path_is_under(target.fn_dir, abs) then
+    return nil, "path outside function directory"
+  end
+  if is_symlink(abs) then
+    return nil, "symlink not allowed"
+  end
+
+  local content, truncated = read_file(abs, 1048576)  -- 1 MB limit
+  if not content then
+    return nil, "file not found"
+  end
+  return { content = content, path = rel_path, truncated = truncated or false }
+end
+
+function M.write_function_file(runtime, name, rel_path, content, version)
+  local ok, err = validate_file_path(rel_path)
+  if not ok then return nil, err end
+
+  if type(content) ~= "string" then
+    return nil, "content required"
+  end
+  if #content > 1048576 then
+    return nil, "file too large (max 1 MB)"
+  end
+
+  -- Deny writes to managed config files
+  local base = rel_path:match("([^/]+)$") or rel_path
+  if base == "fn.config.json" or base == "fn.env.json" then
+    return nil, "use config/env API to modify " .. base
+  end
+
+  if not function_name_allowed(name) then
+    return nil, "invalid function"
+  end
+
+  local cfg = routes.get_config()
+  local target, terr = resolve_function_paths(cfg, runtime, name, version)
+  if not target then return nil, terr end
+
+  local abs = target.fn_dir .. "/" .. rel_path
+  if not path_is_under(target.fn_dir, abs) then
+    return nil, "path outside function directory"
+  end
+  if is_symlink(abs) then
+    return nil, "symlink not allowed"
+  end
+
+  -- Ensure parent directory exists
+  local parent = abs:match("^(.*)/[^/]+$")
+  if parent and not dir_exists(parent) then
+    os.execute(string.format("mkdir -p %q", parent))
+  end
+
+  local wok, werr = write_file(abs, content)
+  if not wok then return nil, werr end
+  return { ok = true, path = rel_path }
+end
+
+function M.delete_function_file(runtime, name, rel_path, version)
+  local ok, err = validate_file_path(rel_path)
+  if not ok then return nil, err end
+
+  -- Deny deletion of managed config files
+  local base = rel_path:match("([^/]+)$") or rel_path
+  if base == "fn.config.json" or base == "fn.env.json" then
+    return nil, "cannot delete " .. base
+  end
+
+  if not function_name_allowed(name) then
+    return nil, "invalid function"
+  end
+
+  local cfg = routes.get_config()
+  local target, terr = resolve_function_paths(cfg, runtime, name, version)
+  if not target then return nil, terr end
+
+  local abs = target.fn_dir .. "/" .. rel_path
+  if not path_is_under(target.fn_dir, abs) then
+    return nil, "path outside function directory"
+  end
+  if is_symlink(abs) then
+    return nil, "symlink not allowed"
+  end
+  if not file_exists(abs) then
+    return nil, "file not found"
+  end
+
+  -- Don't allow deleting the main handler
+  if abs == target.app_path then
+    return nil, "cannot delete the main handler file"
+  end
+
+  os.remove(abs)
+  return { ok = true, path = rel_path }
 end
 
 return M

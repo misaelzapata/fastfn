@@ -1,5 +1,8 @@
 # `fastfn.json` Reference
 
+
+> Verified status as of **March 10, 2026**.
+> Runtime note: FastFN auto-installs function-local dependencies from `requirements.txt` / `package.json`; host runtimes are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
 `fastfn.json` is the default CLI config file.
 
 FastFN looks for this file in the current directory when you run commands like `fastfn dev` or `fastfn run`.
@@ -155,3 +158,32 @@ For URL resolution in OpenAPI:
 FastFN blocks direct HTTP access to local config files:
 - `/fastfn.json` returns `404`.
 - `/fastfn.toml` returns `404`.
+
+## Config Precedence Diagram
+
+```mermaid
+flowchart TD
+  A["Environment variables"] --> D["Effective runtime config"]
+  B["fastfn.json"] --> D
+  C["fn.config.json"] --> D
+```
+
+## Contract
+
+Defines expected request/response shape, configuration fields, and behavioral guarantees.
+
+## End-to-End Example
+
+Use the examples in this page as canonical templates for implementation and testing.
+
+## Edge Cases
+
+- Missing configuration fallbacks
+- Route conflicts and precedence
+- Runtime-specific nuances
+
+## See also
+
+- [Function Specification](function-spec.md)
+- [HTTP API Reference](http-api.md)
+- [Run and Test Checklist](../how-to/run-and-test.md)

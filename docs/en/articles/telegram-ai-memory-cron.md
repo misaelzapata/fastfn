@@ -1,5 +1,8 @@
 # Build a Telegram AI Bot with Memory That Survives Cron Runs
 
+
+> Verified status as of **March 10, 2026**.
+> Runtime note: FastFN auto-installs function-local dependencies from `requirements.txt` / `package.json`; host runtimes are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
 ## Why this article exists
 Many Telegram bot demos work once and then fail in real use.
 
@@ -177,3 +180,33 @@ This combination is what makes cron mode stable after restarts.
 - [HTTP API](../reference/http-api.md)
 - [Function Spec](../reference/function-spec.md)
 - [Architecture](../explanation/architecture.md)
+
+## Flow Diagram
+
+```mermaid
+flowchart LR
+  A["Client request"] --> B["Route discovery"]
+  B --> C["Policy and method validation"]
+  C --> D["Runtime handler execution"]
+  D --> E["HTTP response + OpenAPI parity"]
+```
+
+## Problem
+
+What operational or developer pain this topic solves.
+
+## Mental Model
+
+How to reason about this feature in production-like environments.
+
+## Design Decisions
+
+- Why this behavior exists
+- Tradeoffs accepted
+- When to choose alternatives
+
+## See also
+
+- [Function Specification](../reference/function-spec.md)
+- [HTTP API Reference](../reference/http-api.md)
+- [Run and Test Checklist](../how-to/run-and-test.md)

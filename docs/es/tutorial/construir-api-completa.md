@@ -1,5 +1,8 @@
 # Construir una API completa
 
+
+> Estado verificado al **10 de marzo de 2026**.
+> Nota de runtime: FastFN auto-instala dependencias locales por función desde `requirements.txt` / `package.json`; en `fastfn dev --native` necesitas runtimes instalados en host, mientras que `fastfn dev` depende de Docker daemon activo.
 En este tutorial crearás un endpoint realista con:
 
 - `GET` y `POST`
@@ -128,3 +131,39 @@ curl -sS 'http://127.0.0.1:8080/_fn/function?runtime=python&name=perfil-cliente'
 ```
 
 [Siguiente: Versionado y Rollout :arrow_right:](./versionado-y-rollout.md){ .md-button }
+
+## Diagrama de Flujo
+
+```mermaid
+flowchart LR
+  A["Request del cliente"] --> B["Discovery de rutas"]
+  B --> C["Validación de políticas y método"]
+  C --> D["Ejecución del handler runtime"]
+  D --> E["Respuesta HTTP + paridad OpenAPI"]
+```
+
+## Objetivo
+
+Alcance claro, resultado esperado y público al que aplica esta guía.
+
+## Prerrequisitos
+
+- CLI de FastFN disponible
+- Dependencias por modo verificadas (Docker para `fastfn dev`, OpenResty+runtimes para `fastfn dev --native`)
+
+## Checklist de Validación
+
+- Los comandos de ejemplo devuelven estados esperados
+- Las rutas aparecen en OpenAPI cuando aplica
+- Las referencias del final son navegables
+
+## Solución de Problemas
+
+- Si un runtime cae, valida dependencias de host y endpoint de health
+- Si faltan rutas, vuelve a ejecutar discovery y revisa layout de carpetas
+
+## Ver también
+
+- [Especificación de Funciones](../referencia/especificacion-funciones.md)
+- [Referencia API HTTP](../referencia/api-http.md)
+- [Checklist Ejecutar y Probar](../como-hacer/ejecutar-y-probar.md)

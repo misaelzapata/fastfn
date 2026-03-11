@@ -1,5 +1,8 @@
 # Contrato runtime (event/context)
 
+
+> Estado verificado al **10 de marzo de 2026**.
+> Nota de runtime: FastFN auto-instala dependencias locales por función desde `requirements.txt` / `package.json`; en `fastfn dev --native` necesitas runtimes instalados en host, mientras que `fastfn dev` depende de Docker daemon activo.
 Este documento define exactamente que envia OpenResty al handler y que debe devolver el runtime.
 
 ## 1) Transporte interno
@@ -140,6 +143,25 @@ El handler lo recibe en:
 }
 ```
 
+### Respuesta sencilla (depende del runtime)
+
+El contrato canonico sigue siendo `{ status, headers, body }` (o `{ is_base64, body_base64 }` para binario).
+Algunos runtimes tambien aceptan atajos y los normalizan automaticamente:
+
+| Runtime | Soporte de atajos | Que normaliza |
+|---|---|---|
+| Node | si | valores primitivos/objetos sin envelope (por ejemplo objeto -> JSON `200`, string -> `text/plain` o `text/html`) |
+| Python | parcial | `dict` sin envelope -> JSON `200`; tambien soporta tupla `(body, status, headers)` |
+| PHP | si | primitivos/arrays/objetos a envelope HTTP valido |
+| Lua | si | valores sin envelope a JSON `200` |
+| Go | no | requiere envelope explicito |
+| Rust | no | requiere envelope explicito |
+
+Recomendacion de portabilidad:
+
+- Usa envelope explicito en ejemplos compartidos y codigo multi-runtime.
+- Usa atajos solo cuando apuntas intencionalmente a un runtime especifico.
+
 ### Passthrough estilo edge (proxy)
 
 Una funcion puede devolver un campo `proxy`. Esto se parece a Cloudflare Workers `return fetch(request)`:
@@ -263,3 +285,32 @@ Nota de implementacion:
 Importante:
 
 - es un sandbox a nivel runtime (lenguaje), no un aislamiento kernel (cgroups/seccomp/chroot).
+
+## Diagrama del Contrato Runtime
+
+```mermaid
+flowchart TD
+  A["Evento del gateway"] --> B["Adaptador runtime"]
+  B --> C["Handler de usuario"]
+  C --> D["Respuesta FastFN normalizada"]
+```
+
+## Contrato
+
+Define la forma esperada de request/response, campos de configuración y garantías de comportamiento.
+
+## Ejemplo End-to-End
+
+Usa los ejemplos de esta página como plantillas canónicas para implementación y testing.
+
+## Casos Límite
+
+- Fallbacks ante configuración faltante
+- Conflictos de rutas y precedencia
+- Matices por runtime
+
+## Ver también
+
+- [Especificación de Funciones](especificacion-funciones.md)
+- [Referencia API HTTP](api-http.md)
+- [Checklist Ejecutar y Probar](../como-hacer/ejecutar-y-probar.md)

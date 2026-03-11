@@ -1,5 +1,8 @@
 # Arquitectura
 
+
+> Estado verificado al **10 de marzo de 2026**.
+> Nota de runtime: FastFN auto-instala dependencias locales por función desde `requirements.txt` / `package.json`; en `fastfn dev --native` necesitas runtimes instalados en host, mientras que `fastfn dev` depende de Docker daemon activo.
 ## Objetivos de diseño
 
 La plataforma optimiza tres cosas al mismo tiempo:
@@ -79,3 +82,52 @@ Controles incluidos:
 - auth pública es por función (no centralizada por defecto)
 
 Tradeoff intencional: velocidad local fuerte + control práctico.
+
+## Modelo de rendimiento y escalado real
+
+El throughput de FastFN depende de ambas capas:
+
+- OpenResty/Nginx (edge de red, manejo de conexiones, parsing HTTP)
+- capacidad del runtime (workers de Node/Python/PHP/Lua/Rust/Go y costo del handler)
+
+Agregar más workers puede subir el throughput, pero solo hasta el siguiente cuello:
+
+- saturación de CPU
+- overhead de dependencias del runtime (comportamiento cold/warm, carga de paquetes)
+- límites por función (`max_concurrency`, `worker_pool.max_workers`, `worker_pool.max_queue`)
+- latencia de I/O externa (DB, APIs de terceros)
+
+En resumen: más workers ayuda cuando el cuello está en el runtime, pero no salta límites del gateway, de red o de dependencias externas.
+
+## Trabajo futuro y deuda técnica
+
+La arquitectura actual es apta para producción, pero estas son líneas activas de optimización:
+
+- autosizing adaptativo del worker pool por función según latencia/errores observados
+- mejores defaults de backpressure (timeout de cola y estrategia de overflow por perfil de tráfico)
+- menor overhead de IPC en hot paths (mejoras de framing/serialización)
+- mayor paridad entre runtimes en features avanzadas del pool
+- observabilidad más clara de tiempo en cola vs tiempo de ejecución
+- estandarización de matriz de benchmarks (misma forma de carga entre runtimes, perfiles reproducibles)
+
+No son bloqueantes para uso normal; son la siguiente capa para mejorar percentiles altos bajo tráfico en ráfaga.
+
+## Problema
+
+Qué dolor operativo o de DX resuelve este tema.
+
+## Modelo Mental
+
+Cómo razonar esta feature en entornos similares a producción.
+
+## Decisiones de Diseño
+
+- Por qué existe este comportamiento
+- Qué tradeoffs se aceptan
+- Cuándo conviene una alternativa
+
+## Ver también
+
+- [Especificación de Funciones](../referencia/especificacion-funciones.md)
+- [Referencia API HTTP](../referencia/api-http.md)
+- [Checklist Ejecutar y Probar](../como-hacer/ejecutar-y-probar.md)

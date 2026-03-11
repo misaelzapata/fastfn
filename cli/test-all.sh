@@ -22,12 +22,14 @@ ensure_cli_built
 
 echo "== unit: python =="
 python3 "$ROOT_DIR/tests/unit/test-python-handlers.py"
+python3 "$ROOT_DIR/tests/unit/test-python-daemon-adapters.py"
 
 echo "== unit: go runtime =="
 python3 "$ROOT_DIR/tests/unit/test-go-handler.py"
 
 echo "== unit: node =="
 env -u NO_COLOR node "$ROOT_DIR/tests/unit/test-node-handler.js"
+env -u NO_COLOR node "$ROOT_DIR/tests/unit/test-node-daemon-adapters.js"
 
 if command -v cargo >/dev/null 2>&1 && command -v rustc >/dev/null 2>&1; then
   echo "== unit: rust =="
@@ -79,6 +81,12 @@ echo "== unit: lua (openresty runtime) =="
 
 echo "== integration: docker compose =="
 "$ROOT_DIR/tests/integration/test-api.sh"
+
+echo "== integration: auto-install inference =="
+bash "$ROOT_DIR/tests/integration/test-auto-install-inference.sh"
+
+echo "== integration: platform-equivalent examples =="
+bash "$ROOT_DIR/tests/integration/test-platform-equivalents.sh"
 
 echo "== integration: openapi internal contract =="
 bash "$ROOT_DIR/tests/integration/test-openapi-system.sh"

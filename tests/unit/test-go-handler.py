@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import importlib.util
 import json
+import os
 import socket
 import struct
 from pathlib import Path
@@ -149,6 +150,82 @@ def test_prepare_socket_path_tolerates_stat_race() -> None:
         go_daemon.os.stat = old_stat
 
 
+def test_handle_request_sets_process_env_from_function_env() -> None:
+    old_resolve = go_daemon._resolve_handler_path
+    old_binary = go_daemon._ensure_go_binary
+    old_env = go_daemon._read_function_env
+    old_run = go_daemon._run_go_handler
+    previous_unit_env = os.environ.get("UNIT_PROCESS_ENV")
+    seen = {}
+    try:
+        go_daemon._resolve_handler_path = lambda *_a, **_k: Path("/tmp/handler.go")  # type: ignore[assignment]
+        go_daemon._ensure_go_binary = lambda _p: Path("/tmp/fn_handler")  # type: ignore[assignment]
+        go_daemon._read_function_env = lambda _p: {"FN_ENV": "1", "UNIT_PROCESS_ENV": "yes"}  # type: ignore[assignment]
+
+        def fake_run(_binary, event, timeout_ms):
+            seen["event"] = event
+            seen["timeout_ms"] = timeout_ms
+            seen["process_env"] = os.environ.get("UNIT_PROCESS_ENV")
+            return {"status": 200, "headers": {}, "body": "ok"}
+
+        go_daemon._run_go_handler = fake_run  # type: ignore[assignment]
+        resp = go_daemon._handle_request(
+            {"fn": "demo", "event": {"env": {"A": "2"}, "context": {"timeout_ms": 100}}}
+        )
+        assert resp["status"] == 200
+        assert seen["event"]["env"]["A"] == "2"
+        assert seen["event"]["env"]["FN_ENV"] == "1"
+        assert seen["process_env"] == "yes"
+        assert seen["timeout_ms"] == 100
+        assert os.environ.get("UNIT_PROCESS_ENV") == previous_unit_env
+    finally:
+        go_daemon._resolve_handler_path = old_resolve
+        go_daemon._ensure_go_binary = old_binary
+        go_daemon._read_function_env = old_env
+        go_daemon._run_go_handler = old_run
+
+
+def test_go_wrapper_merges_params_into_event() -> None:
+    """Go wrapper template merges event.params into top-level event map."""
+    template = go_daemon._WRAPPER_TEMPLATE
+    assert 'event["params"].(map[string]interface{})' in template, \
+        "wrapper must extract params from event"
+    assert "event[k] = v" in template, \
+        "wrapper must merge params into event"
+    assert "!exists" in template, \
+        "wrapper must not overwrite existing event keys"
+
+
+def test_go_wrapper_params_merge_runs_in_handler_request() -> None:
+    """Params in event should be passed through to the Go handler."""
+    old_resolve = go_daemon._resolve_handler_path
+    old_binary = go_daemon._ensure_go_binary
+    old_env = go_daemon._read_function_env
+    old_run = go_daemon._run_go_handler
+    seen = {}
+    try:
+        go_daemon._resolve_handler_path = lambda *_a, **_k: Path("/tmp/handler.go")
+        go_daemon._ensure_go_binary = lambda _p: Path("/tmp/fn_handler")
+        go_daemon._read_function_env = lambda _p: {}
+
+        def fake_run(_binary, event, timeout_ms):
+            seen["event"] = event
+            return {"status": 200, "headers": {}, "body": "ok"}
+
+        go_daemon._run_go_handler = fake_run
+        resp = go_daemon._handle_request(
+            {"fn": "demo", "event": {"params": {"id": "42", "slug": "hello"}}}
+        )
+        assert resp["status"] == 200
+        assert seen["event"]["params"]["id"] == "42"
+        assert seen["event"]["params"]["slug"] == "hello"
+    finally:
+        go_daemon._resolve_handler_path = old_resolve
+        go_daemon._ensure_go_binary = old_binary
+        go_daemon._read_function_env = old_env
+        go_daemon._run_go_handler = old_run
+
+
 def main() -> None:
     test_write_frame_roundtrip()
     test_write_frame_fallback_for_unserializable_payload()
@@ -159,6 +236,9 @@ def main() -> None:
     test_read_frame_oversized_length()
     test_serve_conn_ignores_client_disconnect_on_write()
     test_prepare_socket_path_tolerates_stat_race()
+    test_handle_request_sets_process_env_from_function_env()
+    test_go_wrapper_merges_params_into_event()
+    test_go_wrapper_params_merge_runs_in_handler_request()
     print("go runtime unit tests passed")
 
 

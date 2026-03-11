@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import importlib.util
 import json
+import os
 import socket
 import struct
 import tempfile
@@ -225,12 +226,14 @@ def test_run_handler_direct_pool_and_serve_conn() -> None:
     try:
         rust_daemon._resolve_handler_path = lambda *_a, **_k: Path("/tmp/handler.rs")
         rust_daemon._ensure_rust_binary = lambda _p: Path("/tmp/fn_handler")
-        rust_daemon._read_function_env = lambda _p: {"FN_ENV": "1"}
+        rust_daemon._read_function_env = lambda _p: {"FN_ENV": "1", "UNIT_PROCESS_ENV": "yes"}
         seen = {}
+        previous_unit_env = os.environ.get("UNIT_PROCESS_ENV")
 
         def fake_run_handler(_binary, event, timeout_ms):
             seen["event"] = event
             seen["timeout_ms"] = timeout_ms
+            seen["process_env"] = os.environ.get("UNIT_PROCESS_ENV")
             return {"status": 200, "headers": {}, "body": "ok"}
 
         rust_daemon._run_rust_handler = fake_run_handler
@@ -240,7 +243,9 @@ def test_run_handler_direct_pool_and_serve_conn() -> None:
         assert direct_resp["status"] == 200
         assert seen["event"]["env"]["A"] == "2"
         assert seen["event"]["env"]["FN_ENV"] == "1"
+        assert seen["process_env"] == "yes"
         assert seen["timeout_ms"] == 510
+        assert os.environ.get("UNIT_PROCESS_ENV") == previous_unit_env
 
         rust_daemon.ENABLE_RUNTIME_WORKER_POOL = False
         rust_daemon._handle_request_direct = lambda _req: {"status": 200, "headers": {}, "body": "direct"}
@@ -677,6 +682,47 @@ def test_additional_edge_branches() -> None:
         rust_daemon._write_frame = old_write
 
 
+def test_rust_main_rs_merges_params_into_event() -> None:
+    """Rust main.rs template merges event.params into top-level event."""
+    main_rs = rust_daemon._MAIN_RS
+    assert 'event.get("params").cloned()' in main_rs or "event.get(\\\"params\\\").cloned()" in main_rs, \
+        "main.rs must extract params from event"
+    assert "as_object_mut" in main_rs, \
+        "main.rs must use as_object_mut to merge params"
+    assert "or_insert" in main_rs, \
+        "main.rs must use entry().or_insert() to not overwrite existing keys"
+
+
+def test_rust_handle_request_passes_params_through() -> None:
+    """Params in event should be passed through to the Rust handler."""
+    old_resolve = rust_daemon._resolve_handler_path
+    old_binary = rust_daemon._ensure_rust_binary
+    old_env = rust_daemon._read_function_env
+    old_run = rust_daemon._run_rust_handler
+    seen = {}
+    try:
+        rust_daemon._resolve_handler_path = lambda *_a, **_k: Path("/tmp/handler.rs")
+        rust_daemon._ensure_rust_binary = lambda _p: Path("/tmp/fn_handler")
+        rust_daemon._read_function_env = lambda _p: {}
+
+        def fake_run(_binary, event, timeout_ms):
+            seen["event"] = event
+            return {"status": 200, "headers": {}, "body": "ok"}
+
+        rust_daemon._run_rust_handler = fake_run
+        resp = rust_daemon._handle_request_direct(
+            {"fn": "demo", "event": {"params": {"id": "42", "slug": "test"}}}
+        )
+        assert resp["status"] == 200
+        assert seen["event"]["params"]["id"] == "42"
+        assert seen["event"]["params"]["slug"] == "test"
+    finally:
+        rust_daemon._resolve_handler_path = old_resolve
+        rust_daemon._ensure_rust_binary = old_binary
+        rust_daemon._read_function_env = old_env
+        rust_daemon._run_rust_handler = old_run
+
+
 def main() -> None:
     test_read_function_env_and_resolve_path()
     test_read_write_frame_and_normalize_response()
@@ -684,6 +730,8 @@ def main() -> None:
     test_run_handler_direct_pool_and_serve_conn()
     test_reaper_and_main_paths()
     test_additional_edge_branches()
+    test_rust_main_rs_merges_params_into_event()
+    test_rust_handle_request_passes_params_through()
     print("rust daemon unit tests passed")
 
 

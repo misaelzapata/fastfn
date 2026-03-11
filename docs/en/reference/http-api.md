@@ -1,5 +1,8 @@
 # HTTP API Reference
 
+
+> Verified status as of **March 10, 2026**.
+> Runtime note: FastFN auto-installs function-local dependencies from `requirements.txt` / `package.json`; host runtimes are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
 Formal reference for public and internal endpoints.
 
 ## Conventions
@@ -106,11 +109,44 @@ After reload/discovery, calling `/api/node-echo` invokes that function.
 - `GET` requires Console API access.
 - `POST|PUT|PATCH|DELETE` require Console API access **and** write permission (`FN_CONSOLE_WRITE_ENABLED=1` or admin token).
 
+`/_fn/function-config` PUT accepts top-level or nested route/method fields:
+
+```json
+{
+  "timeout_ms": 5000,
+  "methods": ["GET", "POST"],
+  "routes": ["/alice/demo", "/alice/demo/{id}"]
+}
+```
+
+This is equivalent to the nested form:
+
+```json
+{
+  "timeout_ms": 5000,
+  "invoke": {
+    "methods": ["GET", "POST"],
+    "routes": ["/alice/demo", "/alice/demo/{id}"]
+  }
+}
+```
+
+When both top-level and `invoke.*` are provided, `invoke.*` takes precedence.
+
 `/_fn/function-env` payload accepts:
 
 - scalar values: `"KEY":"value"`
 - secret objects: `"KEY":{"value":"secret","is_secret":true}`
 - `null` to delete a key
+
+`GET /_fn/function` also returns runtime dependency resolution metadata:
+
+- `metadata.dependency_resolution.mode` (`manifest` or `inferred`)
+- `metadata.dependency_resolution.manifest_generated`
+- `metadata.dependency_resolution.inferred_imports`
+- `metadata.dependency_resolution.resolved_packages`
+- `metadata.dependency_resolution.unresolved_imports`
+- `metadata.dependency_resolution.last_install_status` / `last_error`
 
 ## `/_fn/invoke` (full payload)
 
@@ -160,3 +196,33 @@ OpenAPI is generated dynamically and reflects currently allowed methods per func
 | `503` | runtime down | socket unavailable |
 | `504` | timeout | function exceeded `timeout_ms` |
 | `500` | internal error | gateway exception |
+
+## HTTP Lifecycle Diagram
+
+```mermaid
+flowchart LR
+  A["HTTP request"] --> B["Gateway"]
+  B --> C["Internal admin/public router"]
+  C --> D["Runtime invocation"]
+  D --> E["HTTP response"]
+```
+
+## Contract
+
+Defines expected request/response shape, configuration fields, and behavioral guarantees.
+
+## End-to-End Example
+
+Use the examples in this page as canonical templates for implementation and testing.
+
+## Edge Cases
+
+- Missing configuration fallbacks
+- Route conflicts and precedence
+- Runtime-specific nuances
+
+## See also
+
+- [Function Specification](function-spec.md)
+- [Run and Test Checklist](../how-to/run-and-test.md)
+- [Architecture Overview](../explanation/architecture.md)

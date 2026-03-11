@@ -1,5 +1,8 @@
 # Manage Functions (Console API)
 
+
+> Verified status as of **March 10, 2026**.
+> Runtime note: FastFN auto-installs function-local dependencies from `requirements.txt` / `package.json`; host runtimes are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
 ## Quick View
 
 - Complexity: Intermediate
@@ -55,6 +58,25 @@ curl -sS 'http://127.0.0.1:8080/_fn/function?runtime=python&name=demo-new' \
 ```bash
 curl -sS 'http://127.0.0.1:8080/_fn/function?runtime=python&name=demo-new&include_code=1'
 ```
+
+## 3a) Inspect dependency resolution state
+
+```bash
+curl -sS 'http://127.0.0.1:8080/_fn/function?runtime=python&name=demo-new' \
+| python3 - <<'PY'
+import json, sys
+obj = json.load(sys.stdin)
+print(json.dumps((obj.get("metadata") or {}).get("dependency_resolution"), indent=2))
+PY
+```
+
+Fields to check:
+
+- `mode`: `manifest` or `inferred`
+- `manifest_generated`: whether FastFN created the manifest automatically
+- `inferred_imports` / `resolved_packages` / `unresolved_imports`
+- `last_install_status` and `last_error`
+- `lockfile_path` (when available)
 
 ## 4) Update policy (methods/limits)
 
@@ -154,3 +176,39 @@ curl -sS 'http://127.0.0.1:8080/_fn/function?runtime=python&name=demo-new' -X DE
 - `405`: method not allowed by policy
 - `409`: ambiguous function name across runtimes (or route mapping conflict)
 - `403`: write disabled/local-only restriction
+
+## Flow Diagram
+
+```mermaid
+flowchart LR
+  A["Client request"] --> B["Route discovery"]
+  B --> C["Policy and method validation"]
+  C --> D["Runtime handler execution"]
+  D --> E["HTTP response + OpenAPI parity"]
+```
+
+## Objective
+
+Clear scope, expected outcome, and who should use this page.
+
+## Validation Checklist
+
+- Command examples execute with expected status codes
+- Routes appear in OpenAPI where applicable
+- References at the end are reachable
+
+## Troubleshooting
+
+- If runtime is down, verify host dependencies and health endpoint
+- If routes are missing, re-run discovery and check folder layout
+- If dependency inference fails, inspect `metadata.dependency_resolution` and `<function_dir>/.fastfn-deps-state.json`
+- For strict inference failures, add explicit pins in `requirements.txt` / `package.json` or adjust `FN_AUTO_INFER_STRICT`
+
+## See also
+
+- [Function Specification](../reference/function-spec.md)
+- [HTTP API Reference](../reference/http-api.md)
+- [Run and Test Checklist](run-and-test.md)
+- [Built-in Functions Catalog](../reference/builtin-functions.md)
+- [Python Packaging User Guide](https://packaging.python.org/)
+- [npm package.json docs](https://docs.npmjs.com/cli/v10/configuring-npm/package-json)

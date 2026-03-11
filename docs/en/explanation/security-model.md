@@ -1,5 +1,8 @@
 # Security Model
 
+
+> Verified status as of **March 10, 2026**.
+> Runtime note: FastFN auto-installs function-local dependencies from `requirements.txt` / `package.json`; host runtimes are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
 Security in fastfn is layered. The gateway protects routing and policy boundaries, while runtimes enforce execution constraints.
 
 ## Scope and assumptions
@@ -76,3 +79,23 @@ Gateway-to-runtime communication uses Unix sockets, not public TCP listeners.
 
 - Runtime sandboxing is language/runtime-level patching, not kernel sandboxing.
 - For multi-tenant hard isolation, add host-level controls (containers, seccomp, cgroups, sandboxed workers).
+
+## Problem
+
+What operational or developer pain this topic solves.
+
+## Mental Model
+
+How to reason about this feature in production-like environments.
+
+## Design Decisions
+
+- Why this behavior exists
+- Tradeoffs accepted
+- When to choose alternatives
+
+## See also
+
+- [Function Specification](../reference/function-spec.md)
+- [HTTP API Reference](../reference/http-api.md)
+- [Run and Test Checklist](../how-to/run-and-test.md)

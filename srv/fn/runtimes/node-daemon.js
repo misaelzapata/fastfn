@@ -10,7 +10,10 @@ const SOCKET_PATH = process.env.FN_NODE_SOCKET || "/tmp/fastfn/fn-node.sock";
 const MAX_FRAME_BYTES = Number(process.env.FN_MAX_FRAME_BYTES || 2 * 1024 * 1024);
 const HOT_RELOAD = !["0", "false", "off", "no"].includes(String(process.env.FN_HOT_RELOAD || "1").toLowerCase());
 const AUTO_NODE_DEPS = !["0", "false", "off", "no"].includes(String(process.env.FN_AUTO_NODE_DEPS || "1").toLowerCase());
-const PREINSTALL_NODE_DEPS_ON_START = !["0", "false", "off", "no"].includes(String(process.env.FN_PREINSTALL_NODE_DEPS_ON_START || "0").toLowerCase());
+const AUTO_INFER_NODE_DEPS = !["0", "false", "off", "no"].includes(String(process.env.FN_AUTO_INFER_NODE_DEPS || "1").toLowerCase());
+const AUTO_INFER_WRITE_MANIFEST = !["0", "false", "off", "no"].includes(String(process.env.FN_AUTO_INFER_WRITE_MANIFEST || "1").toLowerCase());
+const AUTO_INFER_STRICT = !["0", "false", "off", "no"].includes(String(process.env.FN_AUTO_INFER_STRICT || "1").toLowerCase());
+const PREINSTALL_NODE_DEPS_ON_START = !["0", "false", "off", "no"].includes(String(process.env.FN_PREINSTALL_NODE_DEPS_ON_START || "1").toLowerCase());
 const PREINSTALL_NODE_DEPS_CONCURRENCY = Math.max(1, Number(process.env.FN_PREINSTALL_NODE_DEPS_CONCURRENCY || 4));
 const STRICT_FS = !["0", "false", "off", "no"].includes(String(process.env.FN_STRICT_FS || "1").toLowerCase());
 const STRICT_FS_EXTRA_ALLOW = String(process.env.FN_STRICT_FS_ALLOW || "");
@@ -24,12 +27,16 @@ const PACKS_DIR = path.join(BASE_DIR, "functions", ".fastfn", "packs", "node");
 const NAME_RE = /^[A-Za-z0-9._/\-\[\]]+$/;
 const VERSION_RE = /^[A-Za-z0-9_.-]+$/;
 const HANDLER_RE = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+const NODE_PACKAGE_RE = /^(?:@[A-Za-z0-9_.-]+\/)?[A-Za-z0-9_.-]+$/;
 const PROTECTED_FN_FILES = new Set(["fn.config.json", "fn.env.json"]);
 const STRICT_SYSTEM_ROOTS = ["/tmp", "/etc/ssl", "/etc/pki", "/usr/share/zoneinfo"];
+const DEPS_STATE_BASENAME = ".fastfn-deps-state.json";
+const BUILTIN_MODULES = new Set(Module.builtinModules.map((name) => String(name).replace(/^node:/, "")));
 
 const handlerCache = new Map();
 const depsCache = new Map();
 const packDepsCache = new Map();
+const depsResolutionState = new Map();
 const tsBuildCache = new Map();
 const strictFsContext = new AsyncLocalStorage();
 let strictFsHooksInstalled = false;
@@ -392,7 +399,12 @@ function buildInvoker(target, invokeAdapter) {
       return target.fn.call(target.thisArg, request, env, ctx);
     };
   }
-  return async (event) => target.fn.call(target.thisArg, event);
+  return async (event, routeParams) => {
+    if (routeParams && target.fn.length > 1) {
+      return target.fn.call(target.thisArg, event, routeParams);
+    }
+    return target.fn.call(target.thisArg, event);
+  };
 }
 
 function extractSharedDeps(fnConfig) {
@@ -414,6 +426,14 @@ function extractSharedDeps(fnConfig) {
     out.push(name);
   }
   return out;
+}
+
+function buildInferenceIgnorePackages(fnConfig) {
+  const ignored = new Set();
+  for (const packName of extractSharedDeps(fnConfig)) {
+    ignored.add(packName);
+  }
+  return ignored;
 }
 
 function isFunctionStrictFsEnabled(fnConfig) {
@@ -464,6 +484,324 @@ function readFunctionEnv(modulePath) {
   }
 }
 
+async function withPatchedProcessEnv(eventEnv, run) {
+  const env = eventEnv && typeof eventEnv === "object" && !Array.isArray(eventEnv) ? eventEnv : null;
+  if (!env) {
+    return await run();
+  }
+
+  const tracked = [];
+  const previous = new Map();
+  for (const [rawKey, rawValue] of Object.entries(env)) {
+    const key = String(rawKey || "");
+    if (!key) {
+      continue;
+    }
+    tracked.push(key);
+    if (Object.prototype.hasOwnProperty.call(process.env, key)) {
+      previous.set(key, process.env[key]);
+    }
+    if (rawValue === null || rawValue === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = String(rawValue);
+    }
+  }
+
+  try {
+    return await run();
+  } finally {
+    for (const key of tracked) {
+      if (previous.has(key)) {
+        process.env[key] = previous.get(key);
+      } else {
+        delete process.env[key];
+      }
+    }
+  }
+}
+
+function logDepsEvent(event, fields = {}) {
+  try {
+    console.log(JSON.stringify({
+      t: new Date().toISOString(),
+      component: "node_daemon",
+      event,
+      ...fields,
+    }));
+  } catch (_) {
+    return;
+  }
+}
+
+function depsStatePath(fnDir) {
+  return path.join(fnDir, DEPS_STATE_BASENAME);
+}
+
+function defaultDepsState(fnDir) {
+  return {
+    runtime: "node",
+    mode: "manifest",
+    manifest_path: path.join(fnDir, "package.json"),
+    manifest_generated: false,
+    inferred_imports: [],
+    resolved_packages: [],
+    unresolved_imports: [],
+    last_install_status: "skipped",
+    last_error: null,
+    lockfile_path: null,
+  };
+}
+
+function persistDepsState(fnDir, updates = {}) {
+  const current = depsResolutionState.get(fnDir) || defaultDepsState(fnDir);
+  const merged = {
+    ...current,
+    ...updates,
+    updated_at: new Date().toISOString(),
+  };
+  depsResolutionState.set(fnDir, merged);
+  try {
+    fs.writeFileSync(depsStatePath(fnDir), `${JSON.stringify(merged, null, 2)}\n`, "utf8");
+  } catch (_) {
+    // Best effort transparency: never fail function execution only because state file couldn't be written.
+  }
+  return merged;
+}
+
+function stripJsComments(source) {
+  return String(source || "")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/(^|[^:\\])\/\/.*$/gm, "$1");
+}
+
+function extractImportSpecifiersFromSource(source) {
+  const text = stripJsComments(source);
+  const out = [];
+  const seen = new Set();
+  const patterns = [
+    /\bimport\s+(?:[^"'`]*?\s+from\s+)?["']([^"'`]+)["']/g,
+    /\brequire\s*\(\s*["']([^"'`]+)["']\s*\)/g,
+    /\bimport\s*\(\s*["']([^"'`]+)["']\s*\)/g,
+  ];
+  for (const pattern of patterns) {
+    let match;
+    while ((match = pattern.exec(text)) !== null) {
+      const specifier = String(match[1] || "").trim();
+      if (!specifier || seen.has(specifier)) {
+        continue;
+      }
+      seen.add(specifier);
+      out.push(specifier);
+    }
+  }
+  return out;
+}
+
+function normalizePackageFromSpecifier(specifier) {
+  const raw = String(specifier || "").trim();
+  if (!raw) {
+    return { kind: "ignore" };
+  }
+  if (
+    raw.startsWith(".")
+    || raw.startsWith("/")
+    || raw.startsWith("http:")
+    || raw.startsWith("https:")
+    || raw.startsWith("file:")
+    || raw.startsWith("data:")
+    || raw.startsWith("@/")
+    || raw.startsWith("~/")
+    || raw.startsWith("#")
+  ) {
+    return { kind: "ignore" };
+  }
+
+  let pkg = raw.replace(/^node:/, "");
+  if (pkg.startsWith("@")) {
+    const parts = pkg.split("/");
+    if (parts.length < 2 || !parts[0] || !parts[1]) {
+      return { kind: "unresolved", value: raw };
+    }
+    pkg = `${parts[0]}/${parts[1]}`;
+  } else {
+    pkg = pkg.split("/")[0];
+  }
+
+  if (!pkg) {
+    return { kind: "unresolved", value: raw };
+  }
+  if (BUILTIN_MODULES.has(pkg)) {
+    return { kind: "ignore" };
+  }
+  if (!NODE_PACKAGE_RE.test(pkg)) {
+    return { kind: "unresolved", value: raw };
+  }
+  return { kind: "resolved", value: pkg };
+}
+
+function inferNodeImports(modulePath) {
+  let source = "";
+  try {
+    source = fs.readFileSync(modulePath, "utf8");
+  } catch (_) {
+    return [];
+  }
+  return extractImportSpecifiersFromSource(source);
+}
+
+function resolveNodePackages(importSpecifiers, options = {}) {
+  const ignored = options && options.ignorePackages instanceof Set ? options.ignorePackages : new Set();
+  const resolved = [];
+  const unresolved = [];
+  const seenResolved = new Set();
+  const seenUnresolved = new Set();
+
+  for (const specifier of importSpecifiers) {
+    const normalized = normalizePackageFromSpecifier(specifier);
+    if (normalized.kind === "resolved") {
+      const key = String(normalized.value);
+      if (ignored.has(key)) {
+        continue;
+      }
+      if (!seenResolved.has(key)) {
+        seenResolved.add(key);
+        resolved.push(key);
+      }
+      continue;
+    }
+    if (normalized.kind === "unresolved") {
+      const key = String(normalized.value);
+      if (!seenUnresolved.has(key)) {
+        seenUnresolved.add(key);
+        unresolved.push(key);
+      }
+    }
+  }
+
+  return { resolved, unresolved };
+}
+
+function sanitizePackageNameFromDir(fnDir) {
+  const raw = path.basename(String(fnDir || "")).toLowerCase();
+  const slug = raw.replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
+  return `fastfn-${slug || "function"}`;
+}
+
+function ensureNodeManifestFromSource(modulePath, fnConfig) {
+  const fnDir = path.dirname(modulePath);
+  const packageJsonPath = path.join(fnDir, "package.json");
+  const packageExisted = fs.existsSync(packageJsonPath);
+  const previousState = depsResolutionState.get(fnDir) || null;
+  const state = defaultDepsState(fnDir);
+  const effectiveConfig = fnConfig && typeof fnConfig === "object" ? fnConfig : readFunctionConfig(modulePath);
+  const inferenceIgnoredPackages = buildInferenceIgnorePackages(effectiveConfig);
+  let packageObj = {};
+
+  if (packageExisted) {
+    try {
+      packageObj = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
+    } catch (err) {
+      const detail = String(err && err.message ? err.message : err);
+      const msg = `invalid package.json at ${fnDir}: ${detail}`;
+      persistDepsState(fnDir, {
+        ...state,
+        last_install_status: "error",
+        last_error: msg,
+      });
+      throw new Error(msg);
+    }
+    if (!packageObj || typeof packageObj !== "object" || Array.isArray(packageObj)) {
+      const msg = `invalid package.json at ${fnDir}: expected JSON object`;
+      persistDepsState(fnDir, {
+        ...state,
+        last_install_status: "error",
+        last_error: msg,
+      });
+      throw new Error(msg);
+    }
+  }
+
+  let inferredImports = [];
+  let resolvedPackages = [];
+  let unresolvedImports = [];
+  let mode = packageExisted ? "manifest" : "manifest";
+  let manifestGenerated = Boolean(previousState && previousState.manifest_generated === true);
+  let createdManifestThisRun = false;
+
+  if (AUTO_INFER_NODE_DEPS) {
+    logDepsEvent("deps_inference_start", { runtime: "node", fn_dir: fnDir });
+    inferredImports = inferNodeImports(modulePath);
+    const resolved = resolveNodePackages(inferredImports, { ignorePackages: inferenceIgnoredPackages });
+    resolvedPackages = resolved.resolved;
+    unresolvedImports = resolved.unresolved;
+    logDepsEvent("deps_inference_done", {
+      runtime: "node",
+      fn_dir: fnDir,
+      inferred: inferredImports.length,
+      resolved: resolvedPackages.length,
+      unresolved: unresolvedImports.length,
+    });
+
+    if (unresolvedImports.length > 0 && AUTO_INFER_STRICT) {
+      const msg = `node dependency inference failed: unresolved imports ${unresolvedImports.join(", ")}. `
+        + "Add explicit dependencies in package.json or disable FN_AUTO_INFER_STRICT.";
+      persistDepsState(fnDir, {
+        ...state,
+        mode: "inferred",
+        inferred_imports: inferredImports,
+        resolved_packages: resolvedPackages,
+        unresolved_imports: unresolvedImports,
+        manifest_generated: false,
+        last_install_status: "error",
+        last_error: msg,
+      });
+      logDepsEvent("deps_install_error", { runtime: "node", fn_dir: fnDir, stage: "inference", error: msg });
+      throw new Error(msg);
+    }
+
+    if (AUTO_INFER_WRITE_MANIFEST && resolvedPackages.length > 0) {
+      if (!packageExisted) {
+        packageObj = {
+          name: sanitizePackageNameFromDir(fnDir),
+          private: true,
+          version: "1.0.0",
+          dependencies: {},
+        };
+        createdManifestThisRun = true;
+        manifestGenerated = true;
+      }
+      if (!packageObj.dependencies || typeof packageObj.dependencies !== "object" || Array.isArray(packageObj.dependencies)) {
+        packageObj.dependencies = {};
+      }
+      let changed = createdManifestThisRun;
+      for (const pkg of resolvedPackages) {
+        if (!Object.prototype.hasOwnProperty.call(packageObj.dependencies, pkg)) {
+          packageObj.dependencies[pkg] = "*";
+          changed = true;
+        }
+      }
+      if (changed) {
+        fs.writeFileSync(packageJsonPath, `${JSON.stringify(packageObj, null, 2)}\n`, "utf8");
+      }
+    }
+    if (resolvedPackages.length > 0 || unresolvedImports.length > 0) {
+      mode = "inferred";
+    }
+  }
+
+  persistDepsState(fnDir, {
+    ...state,
+    mode,
+    manifest_generated: manifestGenerated,
+    inferred_imports: inferredImports,
+    resolved_packages: resolvedPackages,
+    unresolved_imports: unresolvedImports,
+    last_install_status: "skipped",
+    last_error: null,
+  });
+}
+
 function hasInstallableDependencies(fnDir) {
   const packageJson = path.join(fnDir, "package.json");
   if (!fs.existsSync(packageJson)) {
@@ -480,26 +818,47 @@ function hasInstallableDependencies(fnDir) {
   return depsCount > 0 || optDepsCount > 0;
 }
 
-function ensureNodeDependencies(modulePath) {
+function ensureNodeDependencies(modulePath, fnConfig) {
+  const fnDir = path.dirname(modulePath);
+  if (AUTO_INFER_NODE_DEPS) {
+    ensureNodeManifestFromSource(modulePath, fnConfig);
+  }
   if (!AUTO_NODE_DEPS) {
+    persistDepsState(fnDir, {
+      last_install_status: "skipped",
+      last_error: "FN_AUTO_NODE_DEPS is disabled",
+    });
     return;
   }
-
-  const fnDir = path.dirname(modulePath);
   ensureNodeDependenciesInDir(fnDir);
 }
 
 function ensureNodeDependenciesInDir(fnDir) {
   if (!AUTO_NODE_DEPS) {
+    persistDepsState(fnDir, {
+      last_install_status: "skipped",
+      last_error: "FN_AUTO_NODE_DEPS is disabled",
+    });
     return;
   }
 
   const packageJson = path.join(fnDir, "package.json");
   if (!fs.existsSync(packageJson)) {
+    persistDepsState(fnDir, {
+      last_install_status: "skipped",
+      last_error: "no package.json found",
+    });
     return;
   }
   if (!hasInstallableDependencies(fnDir)) {
     depsCache.set(fnDir, "no-deps");
+    persistDepsState(fnDir, {
+      last_install_status: "skipped",
+      last_error: null,
+      lockfile_path: fs.existsSync(path.join(fnDir, "package-lock.json"))
+        ? path.join(fnDir, "package-lock.json")
+        : (fs.existsSync(path.join(fnDir, "npm-shrinkwrap.json")) ? path.join(fnDir, "npm-shrinkwrap.json") : null),
+    });
     return;
   }
 
@@ -511,6 +870,11 @@ function ensureNodeDependenciesInDir(fnDir) {
   const sig = `${fs.statSync(packageJson).mtimeMs}:${lockFile ? fs.statSync(lockFile).mtimeMs : "no-lock"}`;
   if (depsCache.get(fnDir) === sig) {
     if (fs.existsSync(nodeModulesDir)) {
+      persistDepsState(fnDir, {
+        last_install_status: "ok",
+        last_error: null,
+        lockfile_path: lockFile,
+      });
       return;
     }
     depsCache.delete(fnDir);
@@ -519,6 +883,9 @@ function ensureNodeDependenciesInDir(fnDir) {
   const args = lockFile
     ? ["ci", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"]
     : ["install", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"];
+  const startMs = Date.now();
+  const mode = String((depsResolutionState.get(fnDir) || {}).mode || "manifest");
+  logDepsEvent("deps_install_start", { runtime: "node", fn_dir: fnDir, mode });
 
   const runNpm = (npmArgs) => childProcess.spawnSync("npm", npmArgs, {
     cwd: fnDir,
@@ -532,7 +899,15 @@ function ensureNodeDependenciesInDir(fnDir) {
     installResult = runNpm(args);
   } catch (err) {
     depsCache.delete(fnDir);
-    throw new Error(`npm install failed for ${fnDir}: ${String(err && err.message ? err.message : err)}`);
+    const detail = String(err && err.message ? err.message : err);
+    const msg = `npm install failed for ${fnDir}: ${detail}`;
+    persistDepsState(fnDir, {
+      last_install_status: "error",
+      last_error: msg,
+      lockfile_path: lockFile,
+    });
+    logDepsEvent("deps_install_error", { runtime: "node", fn_dir: fnDir, stage: "install", error: detail });
+    throw new Error(msg);
   }
 
   // If npm ci fails (lock drift/corruption), fallback once to npm install.
@@ -542,7 +917,15 @@ function ensureNodeDependenciesInDir(fnDir) {
         installResult = runNpm(["install", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"]);
       } catch (err) {
         depsCache.delete(fnDir);
-        throw new Error(`npm install failed for ${fnDir}: ${String(err && err.message ? err.message : err)}`);
+        const detail = String(err && err.message ? err.message : err);
+        const msg = `npm install failed for ${fnDir}: ${detail}`;
+        persistDepsState(fnDir, {
+          last_install_status: "error",
+          last_error: msg,
+          lockfile_path: lockFile,
+        });
+        logDepsEvent("deps_install_error", { runtime: "node", fn_dir: fnDir, stage: "install", error: detail });
+        throw new Error(msg);
       }
     }
   }
@@ -551,10 +934,32 @@ function ensureNodeDependenciesInDir(fnDir) {
     depsCache.delete(fnDir);
     const stderr = String(installResult.stderr || "").trim();
     const tail = stderr ? stderr.split("\n").slice(-4).join(" | ") : "unknown error";
-    throw new Error(`npm dependencies install failed for ${fnDir}: ${tail}`);
+    const msg = `npm dependencies install failed for ${fnDir}: ${tail}. `
+      + "Check inferred imports or add explicit dependencies in package.json.";
+    persistDepsState(fnDir, {
+      last_install_status: "error",
+      last_error: msg,
+      lockfile_path: lockFile,
+    });
+    logDepsEvent("deps_install_error", { runtime: "node", fn_dir: fnDir, stage: "install", error: tail });
+    throw new Error(msg);
   }
 
   depsCache.set(fnDir, sig);
+  const finalLockFile = fs.existsSync(path.join(fnDir, "package-lock.json"))
+    ? path.join(fnDir, "package-lock.json")
+    : (fs.existsSync(path.join(fnDir, "npm-shrinkwrap.json")) ? path.join(fnDir, "npm-shrinkwrap.json") : null);
+  persistDepsState(fnDir, {
+    last_install_status: "ok",
+    last_error: null,
+    lockfile_path: finalLockFile || lockFile,
+  });
+  logDepsEvent("deps_install_done", {
+    runtime: "node",
+    fn_dir: fnDir,
+    mode,
+    duration_ms: Date.now() - startMs,
+  });
 }
 
 function runNpmAsync(fnDir, npmArgs, timeoutMs = 180000) {
@@ -617,15 +1022,30 @@ function runNpmAsync(fnDir, npmArgs, timeoutMs = 180000) {
 
 async function ensureNodeDependenciesInDirAsync(fnDir) {
   if (!AUTO_NODE_DEPS) {
+    persistDepsState(fnDir, {
+      last_install_status: "skipped",
+      last_error: "FN_AUTO_NODE_DEPS is disabled",
+    });
     return;
   }
 
   const packageJson = path.join(fnDir, "package.json");
   if (!fs.existsSync(packageJson)) {
+    persistDepsState(fnDir, {
+      last_install_status: "skipped",
+      last_error: "no package.json found",
+    });
     return;
   }
   if (!hasInstallableDependencies(fnDir)) {
     depsCache.set(fnDir, "no-deps");
+    persistDepsState(fnDir, {
+      last_install_status: "skipped",
+      last_error: null,
+      lockfile_path: fs.existsSync(path.join(fnDir, "package-lock.json"))
+        ? path.join(fnDir, "package-lock.json")
+        : (fs.existsSync(path.join(fnDir, "npm-shrinkwrap.json")) ? path.join(fnDir, "npm-shrinkwrap.json") : null),
+    });
     return;
   }
 
@@ -637,6 +1057,11 @@ async function ensureNodeDependenciesInDirAsync(fnDir) {
   const sig = `${fs.statSync(packageJson).mtimeMs}:${lockFile ? fs.statSync(lockFile).mtimeMs : "no-lock"}`;
   if (depsCache.get(fnDir) === sig) {
     if (fs.existsSync(nodeModulesDir)) {
+      persistDepsState(fnDir, {
+        last_install_status: "ok",
+        last_error: null,
+        lockfile_path: lockFile,
+      });
       return;
     }
     depsCache.delete(fnDir);
@@ -645,6 +1070,9 @@ async function ensureNodeDependenciesInDirAsync(fnDir) {
   const args = lockFile
     ? ["ci", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"]
     : ["install", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"];
+  const startMs = Date.now();
+  const mode = String((depsResolutionState.get(fnDir) || {}).mode || "manifest");
+  logDepsEvent("deps_install_start", { runtime: "node", fn_dir: fnDir, mode });
 
   let installResult = await runNpmAsync(fnDir, args, 180000);
 
@@ -657,10 +1085,32 @@ async function ensureNodeDependenciesInDirAsync(fnDir) {
     depsCache.delete(fnDir);
     const stderr = String(installResult.stderr || "").trim();
     const tail = stderr ? stderr.split("\n").slice(-4).join(" | ") : "unknown error";
-    throw new Error(`npm dependencies install failed for ${fnDir}: ${tail}`);
+    const msg = `npm dependencies install failed for ${fnDir}: ${tail}. `
+      + "Check inferred imports or add explicit dependencies in package.json.";
+    persistDepsState(fnDir, {
+      last_install_status: "error",
+      last_error: msg,
+      lockfile_path: lockFile,
+    });
+    logDepsEvent("deps_install_error", { runtime: "node", fn_dir: fnDir, stage: "install", error: tail });
+    throw new Error(msg);
   }
 
   depsCache.set(fnDir, sig);
+  const finalLockFile = fs.existsSync(path.join(fnDir, "package-lock.json"))
+    ? path.join(fnDir, "package-lock.json")
+    : (fs.existsSync(path.join(fnDir, "npm-shrinkwrap.json")) ? path.join(fnDir, "npm-shrinkwrap.json") : null);
+  persistDepsState(fnDir, {
+    last_install_status: "ok",
+    last_error: null,
+    lockfile_path: finalLockFile || lockFile,
+  });
+  logDepsEvent("deps_install_done", {
+    runtime: "node",
+    fn_dir: fnDir,
+    mode,
+    duration_ms: Date.now() - startMs,
+  });
 }
 
 function ensurePackDependencies(packDir) {
@@ -1202,6 +1652,21 @@ function collectDependencyDirs() {
   const seen = new Set();
   for (const modulePath of collectHandlerPaths()) {
     const fnDir = path.dirname(modulePath);
+    if (AUTO_INFER_NODE_DEPS) {
+      const fnConfig = readFunctionConfig(modulePath);
+      try {
+        ensureNodeManifestFromSource(modulePath, fnConfig);
+      } catch (err) {
+        preinstallState.hadError = true;
+        logDepsEvent("deps_install_error", {
+          runtime: "node",
+          fn_dir: fnDir,
+          stage: "preinstall_inference",
+          error: String(err && err.message ? err.message : err),
+        });
+        continue;
+      }
+    }
     if (seen.has(fnDir)) {
       continue;
     }
@@ -1635,17 +2100,50 @@ async function handleRequest(req) {
     }
   }
   const fnEnv = readFunctionEnv(sourcePath);
-  ensureNodeDependencies(sourcePath);
+  ensureNodeDependencies(sourcePath, fnConfig);
   const execPath = ensureTsBuild(sourcePath, extraNodeModules);
   const handler = loadHandler(execPath, extraNodeModules, handlerName, invokeAdapter);
   const eventWithEnv = { ...event };
   if (fnEnv && Object.keys(fnEnv).length > 0) {
     eventWithEnv.env = { ...(eventWithEnv.env || {}), ...fnEnv };
   }
-  const response = strictFsEnabled
-    ? await withStrictFs(sourcePath, extraRoots, () => handler(eventWithEnv))
-    : await handler(eventWithEnv);
-  return await normalizeResponse(response);
+  // Capture stdout/stderr (console.log/error/warn) during handler execution.
+  const capturedStdout = [];
+  const capturedStderr = [];
+  const origLog = console.log;
+  const origError = console.error;
+  const origWarn = console.warn;
+  const origInfo = console.info;
+  const origDebug = console.debug;
+  console.log = (...args) => { capturedStdout.push(args.map(String).join(" ")); };
+  console.info = (...args) => { capturedStdout.push(args.map(String).join(" ")); };
+  console.debug = (...args) => { capturedStdout.push(args.map(String).join(" ")); };
+  console.warn = (...args) => { capturedStderr.push(args.map(String).join(" ")); };
+  console.error = (...args) => { capturedStderr.push(args.map(String).join(" ")); };
+
+  let response;
+  try {
+    const routeParams = eventWithEnv.params && typeof eventWithEnv.params === "object" ? eventWithEnv.params : {};
+    const callHandler = () => handler.length > 1 ? handler(eventWithEnv, routeParams) : handler(eventWithEnv);
+    response = await withPatchedProcessEnv(eventWithEnv.env, async () => (
+      strictFsEnabled
+        ? withStrictFs(sourcePath, extraRoots, callHandler)
+        : callHandler()
+    ));
+  } finally {
+    console.log = origLog;
+    console.error = origError;
+    console.warn = origWarn;
+    console.info = origInfo;
+    console.debug = origDebug;
+  }
+
+  const result = await normalizeResponse(response);
+  const stdoutStr = capturedStdout.join("\n");
+  const stderrStr = capturedStderr.join("\n");
+  if (stdoutStr) result.stdout = stdoutStr;
+  if (stderrStr) result.stderr = stderrStr;
+  return result;
 }
 
 function runtimePoolKey(fnName, version) {

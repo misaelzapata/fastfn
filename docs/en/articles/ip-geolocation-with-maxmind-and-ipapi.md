@@ -1,5 +1,8 @@
 # IP Geolocation with MaxMind and ipapi-style Services
 
+
+> Verified status as of **March 10, 2026**.
+> Runtime note: FastFN auto-installs function-local dependencies from `requirements.txt` / `package.json`; host runtimes are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
 This article shows a practical `ip -> country` setup with two FastFN examples:
 
 - `/ip-intel/maxmind`: local lookup with MaxMind-style MMDB (`GeoLite2-Country.mmdb`).
@@ -73,3 +76,33 @@ Integration checks (includes both geolocation routes):
 ```bash
 bash tests/integration/test-api.sh
 ```
+
+## Flow Diagram
+
+```mermaid
+flowchart LR
+  A["Client request"] --> B["Route discovery"]
+  B --> C["Policy and method validation"]
+  C --> D["Runtime handler execution"]
+  D --> E["HTTP response + OpenAPI parity"]
+```
+
+## Problem
+
+What operational or developer pain this topic solves.
+
+## Mental Model
+
+How to reason about this feature in production-like environments.
+
+## Design Decisions
+
+- Why this behavior exists
+- Tradeoffs accepted
+- When to choose alternatives
+
+## See also
+
+- [Function Specification](../reference/function-spec.md)
+- [HTTP API Reference](../reference/http-api.md)
+- [Run and Test Checklist](../how-to/run-and-test.md)

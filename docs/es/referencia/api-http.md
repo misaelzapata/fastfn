@@ -1,5 +1,8 @@
 # Referencia HTTP
 
+
+> Estado verificado al **10 de marzo de 2026**.
+> Nota de runtime: FastFN auto-instala dependencias locales por función desde `requirements.txt` / `package.json`; en `fastfn dev --native` necesitas runtimes instalados en host, mientras que `fastfn dev` depende de Docker daemon activo.
 Referencia formal de endpoints publicos e internos.
 
 ## Convenciones
@@ -106,11 +109,44 @@ Reglas de `/_fn/ui-state`:
 - `GET` requiere acceso a Console API.
 - `POST|PUT|PATCH|DELETE` requieren acceso a Console API **y** permiso de escritura (`FN_CONSOLE_WRITE_ENABLED=1` o token admin).
 
+`/_fn/function-config` PUT acepta campos de rutas y metodos tanto a nivel raiz como anidados:
+
+```json
+{
+  "timeout_ms": 5000,
+  "methods": ["GET", "POST"],
+  "routes": ["/alice/demo", "/alice/demo/{id}"]
+}
+```
+
+Equivalente a la forma anidada:
+
+```json
+{
+  "timeout_ms": 5000,
+  "invoke": {
+    "methods": ["GET", "POST"],
+    "routes": ["/alice/demo", "/alice/demo/{id}"]
+  }
+}
+```
+
+Cuando ambos estan presentes, `invoke.*` tiene precedencia.
+
 El payload de `/_fn/function-env` acepta:
 
 - valores escalares: `"KEY":"value"`
 - objetos secretos: `"KEY":{"value":"secret","is_secret":true}`
 - `null` para eliminar una clave
+
+`GET /_fn/function` tambien devuelve metadata de resolucion de dependencias:
+
+- `metadata.dependency_resolution.mode` (`manifest` o `inferred`)
+- `metadata.dependency_resolution.manifest_generated`
+- `metadata.dependency_resolution.inferred_imports`
+- `metadata.dependency_resolution.resolved_packages`
+- `metadata.dependency_resolution.unresolved_imports`
+- `metadata.dependency_resolution.last_install_status` / `last_error`
 
 ## `/_fn/invoke` (payload completo)
 
@@ -160,3 +196,33 @@ OpenAPI es dinamico y refleja metodos permitidos por funcion/version en tiempo r
 | `503` | runtime caido | socket no disponible |
 | `504` | timeout | funcion excede `timeout_ms` |
 | `500` | error interno | excepcion gateway |
+
+## Diagrama de Ciclo HTTP
+
+```mermaid
+flowchart LR
+  A["Request HTTP"] --> B["Gateway"]
+  B --> C["Router público/admin interno"]
+  C --> D["Invocación runtime"]
+  D --> E["Respuesta HTTP"]
+```
+
+## Contrato
+
+Define la forma esperada de request/response, campos de configuración y garantías de comportamiento.
+
+## Ejemplo End-to-End
+
+Usa los ejemplos de esta página como plantillas canónicas para implementación y testing.
+
+## Casos Límite
+
+- Fallbacks ante configuración faltante
+- Conflictos de rutas y precedencia
+- Matices por runtime
+
+## Ver también
+
+- [Especificación de Funciones](especificacion-funciones.md)
+- [Checklist Ejecutar y Probar](../como-hacer/ejecutar-y-probar.md)
+- [Arquitectura](../explicacion/arquitectura.md)

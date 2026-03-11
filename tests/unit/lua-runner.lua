@@ -130,6 +130,24 @@ local function with_fake_ngx(run)
       fn_cache = fn_cache,
       fn_conc = fn_conc,
     },
+    status = 200,
+    header = {},
+    say = function() end,
+    req = {
+      get_method = function()
+        return "GET"
+      end,
+      get_headers = function()
+        return {}
+      end,
+      read_body = function() end,
+      get_body_data = function()
+        return ""
+      end,
+      get_uri_args = function()
+        return {}
+      end,
+    },
     now = function()
       return now_value
     end,
@@ -138,6 +156,7 @@ local function with_fake_ngx(run)
     end,
     var = {
       host = "localhost",
+      remote_addr = "127.0.0.1",
     },
     escape_uri = function(s)
       return tostring(s)
@@ -224,6 +243,34 @@ local function with_module_stubs(stubs, run)
   if not ok then
     error(err)
   end
+end
+
+local function get_upvalue(fn, wanted_name)
+  if type(fn) ~= "function" then
+    return nil, nil
+  end
+  for idx = 1, 256 do
+    local name, value = debug.getupvalue(fn, idx)
+    if not name then
+      break
+    end
+    if name == wanted_name then
+      return value, idx
+    end
+  end
+  return nil, nil
+end
+
+local function set_upvalue(fn, wanted_name, new_value)
+  if type(fn) ~= "function" then
+    return false, nil
+  end
+  local current, idx = get_upvalue(fn, wanted_name)
+  if not idx then
+    return false, nil
+  end
+  debug.setupvalue(fn, idx, new_value)
+  return true, current
 end
 
 local function test_gateway_utils()
@@ -549,6 +596,103 @@ local function test_ui_state_endpoint_guards()
   _G.ngx = original_ngx
 end
 
+local function test_ui_state_endpoint_full_behavior()
+  with_fake_ngx(function(cache, _conc, _set_now)
+    local cjson = require("cjson.safe")
+
+    with_module_stubs({
+      ["fastfn.console.auth"] = {
+        login_enabled = function()
+          return false
+        end,
+        api_login_enabled = function()
+          return false
+        end,
+        read_session = function()
+          return nil
+        end,
+      },
+    }, function()
+      reset_shared_dict(cache)
+
+      package.loaded["fastfn.console.guard"] = nil
+      require("fastfn.console.guard")
+
+      local out = ""
+      ngx.say = function(s)
+        out = out .. tostring(s)
+      end
+      ngx.req.read_body = function() end
+      ngx.req.get_headers = function()
+        return { ["x-fn-admin-token"] = "secret" }
+      end
+
+      with_env({
+        FN_CONSOLE_API_ENABLED = "1",
+        FN_ADMIN_API_ENABLED = "1",
+        FN_CONSOLE_WRITE_ENABLED = "1",
+        FN_CONSOLE_LOCAL_ONLY = "1",
+        FN_ADMIN_TOKEN = "secret",
+      }, function()
+        -- Method not allowed
+        out = ""
+        ngx.status = 0
+        ngx.req.get_method = function()
+          return "OPTIONS"
+        end
+        dofile(REPO_ROOT .. "/openresty/lua/fastfn/console/ui_state_endpoint.lua")
+        assert_eq(ngx.status, 405, "ui-state method not allowed status")
+        assert_true((cjson.decode(out) or {}).error == "method not allowed", "ui-state method not allowed error")
+
+        -- GET snapshot
+        out = ""
+        ngx.status = 0
+        ngx.req.get_method = function()
+          return "GET"
+        end
+        dofile(REPO_ROOT .. "/openresty/lua/fastfn/console/ui_state_endpoint.lua")
+        assert_eq(ngx.status, 200, "ui-state get status")
+        assert_true(type((cjson.decode(out) or {}).api_enabled) == "boolean", "ui-state snapshot shape")
+
+        -- PUT invalid JSON
+        out = ""
+        ngx.status = 0
+        ngx.req.get_method = function()
+          return "PUT"
+        end
+        ngx.req.get_body_data = function()
+          return "{bad"
+        end
+        dofile(REPO_ROOT .. "/openresty/lua/fastfn/console/ui_state_endpoint.lua")
+        assert_eq(ngx.status, 400, "ui-state invalid json status")
+        assert_true((cjson.decode(out) or {}).error == "invalid json body", "ui-state invalid json error")
+
+        -- PUT update_state
+        out = ""
+        ngx.status = 0
+        ngx.req.get_method = function()
+          return "PUT"
+        end
+        ngx.req.get_body_data = function()
+          return "{\"ui_enabled\":true}"
+        end
+        dofile(REPO_ROOT .. "/openresty/lua/fastfn/console/ui_state_endpoint.lua")
+        assert_eq(ngx.status, 200, "ui-state put status")
+        assert_eq((cjson.decode(out) or {}).ui_enabled, true, "ui-state put updates state")
+
+        -- DELETE clear_state
+        out = ""
+        ngx.status = 0
+        ngx.req.get_method = function()
+          return "DELETE"
+        end
+        dofile(REPO_ROOT .. "/openresty/lua/fastfn/console/ui_state_endpoint.lua")
+        assert_eq(ngx.status, 200, "ui-state delete status")
+      end)
+    end)
+  end)
+end
+
 local function test_console_guard_state_snapshot_current_user()
   with_fake_ngx(function()
     with_module_stubs({
@@ -567,6 +711,146 @@ local function test_console_guard_state_snapshot_current_user()
       assert_eq(snap.current_user, "qa-user", "guard snapshot current_user")
 
       package.loaded["fastfn.console.guard"] = nil
+    end)
+  end)
+end
+
+local function test_console_guard_enforcement_and_state_overrides()
+  with_fake_ngx(function(cache, _conc, _set_now)
+    local cjson = require("cjson.safe")
+
+    with_module_stubs({
+      ["fastfn.console.auth"] = {
+        login_enabled = function()
+          return true
+        end,
+        api_login_enabled = function()
+          return true
+        end,
+        read_session = function()
+          return nil
+        end,
+      },
+    }, function()
+      package.loaded["fastfn.console.guard"] = nil
+      local guard = require("fastfn.console.guard")
+
+      local out = ""
+      ngx.say = function(s)
+        out = out .. tostring(s)
+      end
+      ngx.req.get_headers = function()
+        return {}
+      end
+
+      local function last_error()
+        local decoded = cjson.decode(out) or {}
+        return decoded.error
+      end
+
+      reset_shared_dict(cache)
+
+      with_env({ FN_CONSOLE_API_ENABLED = "0" }, function()
+        out = ""
+        ngx.status = 0
+        local ok = guard.enforce_api()
+        assert_eq(ok, false, "api disabled must block")
+        assert_eq(ngx.status, 404, "api disabled status")
+        assert_eq(last_error(), "console api disabled", "api disabled error")
+      end)
+
+      with_env({ FN_CONSOLE_API_ENABLED = "1", FN_ADMIN_API_ENABLED = "0" }, function()
+        out = ""
+        ngx.status = 0
+        local ok = guard.enforce_api()
+        assert_eq(ok, false, "admin api disabled must block")
+        assert_eq(ngx.status, 404, "admin api disabled status")
+        assert_eq(last_error(), "admin api disabled", "admin api disabled error")
+      end)
+
+      with_env({ FN_CONSOLE_API_ENABLED = "1", FN_ADMIN_API_ENABLED = "1", FN_ADMIN_TOKEN = "secret" }, function()
+        out = ""
+        ngx.status = 0
+        ngx.var.remote_addr = "8.8.8.8"
+        local ok = guard.enforce_api()
+        assert_eq(ok, false, "local-only must block non-local without token")
+        assert_eq(ngx.status, 403, "local-only status")
+        assert_eq(last_error(), "console api local-only", "local-only error")
+      end)
+
+      with_env({ FN_CONSOLE_API_ENABLED = "1", FN_ADMIN_API_ENABLED = "1", FN_ADMIN_TOKEN = "secret", FN_CONSOLE_LOCAL_ONLY = "0" }, function()
+        out = ""
+        ngx.status = 0
+        ngx.var.remote_addr = "127.0.0.1"
+        local ok = guard.enforce_api()
+        assert_eq(ok, false, "login api enabled must require session or token")
+        assert_eq(ngx.status, 401, "login required status")
+        assert_eq(last_error(), "login required", "login required error")
+      end)
+
+      with_env({ FN_CONSOLE_API_ENABLED = "1", FN_ADMIN_API_ENABLED = "1", FN_ADMIN_TOKEN = "secret" }, function()
+        out = ""
+        ngx.status = 0
+        ngx.var.remote_addr = "8.8.8.8"
+        ngx.req.get_headers = function()
+          return { ["x-fn-admin-token"] = "secret" }
+        end
+        local ok = guard.enforce_api()
+        assert_eq(ok, true, "admin token bypasses local-only/login")
+      end)
+
+      -- Write enforcement: no admin token, write disabled (default false).
+      with_env({ FN_ADMIN_TOKEN = "secret", FN_CONSOLE_WRITE_ENABLED = "0", FN_CONSOLE_LOCAL_ONLY = "0" }, function()
+        out = ""
+        ngx.status = 0
+        ngx.req.get_headers = function()
+          return {}
+        end
+        local ok = guard.enforce_write()
+        assert_eq(ok, false, "write disabled must block without token")
+        assert_eq(ngx.status, 403, "write disabled status")
+        assert_eq(last_error(), "console write disabled", "write disabled error")
+      end)
+
+      -- Write enforcement: admin token bypasses write_enabled/local_only.
+      with_env({ FN_ADMIN_TOKEN = "secret", FN_CONSOLE_WRITE_ENABLED = "0", FN_CONSOLE_LOCAL_ONLY = "1" }, function()
+        out = ""
+        ngx.status = 0
+        ngx.var.remote_addr = "8.8.8.8"
+        ngx.req.get_headers = function()
+          return { ["x-fn-admin-token"] = "secret" }
+        end
+        local ok = guard.enforce_write()
+        assert_eq(ok, true, "admin token should allow writes")
+      end)
+
+      local bad0, bad0_err = guard.update_state("not-an-object")
+      assert_eq(bad0, nil, "update_state must reject non-table")
+      assert_true(type(bad0_err) == "string" and bad0_err:find("payload must be", 1, true) ~= nil, "bad payload message")
+
+      local bad1, bad1_err = guard.update_state({ ui_enabled = "yes" })
+      assert_eq(bad1, nil, "update_state must reject non-boolean")
+      assert_true(type(bad1_err) == "string" and bad1_err:find("ui_enabled", 1, true) ~= nil, "bad field message")
+
+      with_env({
+        FN_UI_ENABLED = "0",
+        FN_CONSOLE_API_ENABLED = "1",
+        FN_ADMIN_API_ENABLED = "1",
+        FN_CONSOLE_WRITE_ENABLED = "0",
+        FN_CONSOLE_LOCAL_ONLY = "1",
+      }, function()
+        local snap0 = guard.state_snapshot()
+        assert_eq(snap0.ui_enabled, false, "env baseline ui disabled")
+
+        local updated, u_err = guard.update_state({ ui_enabled = true, local_only = false })
+        assert_true(type(updated) == "table", u_err or "update_state ok")
+        assert_eq(updated.ui_enabled, true, "override ui enabled")
+        assert_eq(updated.local_only, false, "override local_only false")
+
+        local cleared, c_err = guard.clear_state()
+        assert_true(type(cleared) == "table", c_err or "clear_state ok")
+        assert_eq(cleared.ui_enabled, false, "clear_state restores env defaults")
+      end)
     end)
   end)
 end
@@ -1280,6 +1564,16 @@ local function test_routes_policy_routes_disjoint_allow_hosts()
     assert_eq(rt_c, nil, "c.example.com blocked")
     assert_eq(err_c, "host not allowed", "c.example.com host not allowed")
 
+    local rt_wild, fn_wild, _, _, err_wild = routes.resolve_mapped_target("/hosted", "GET", { host = "api.a.example.com" })
+    assert_eq(rt_wild, nil, "wildcard host should not match exact allow_hosts")
+    assert_eq(fn_wild, nil, "wildcard host fn should be nil")
+    assert_eq(err_wild, "host not allowed", "wildcard host blocked")
+
+    local rt_none, fn_none, _, _, err_none = routes.resolve_mapped_target("/hosted", "DELETE", { host = "a.example.com" })
+    assert_eq(rt_none, nil, "method mismatch should not resolve")
+    assert_eq(fn_none, nil, "method mismatch fn should be nil")
+    assert_eq(err_none, nil, "method mismatch without host hit should return nil err")
+
     rm_rf(root)
   end)
 end
@@ -1351,11 +1645,16 @@ local function test_console_data_crud_and_secrets()
       "def handler(event):\n"
         .. "    return {'status':200,'headers':{'Content-Type':'application/json'},'body':'{}'}\n"
     )
+    write_file(root .. "/direct.js", "module.exports.handler = async () => ({ status: 200, headers: { 'Content-Type': 'application/json' }, body: '{}' })\n")
+    write_file(root .. "/direct.php", "<?php\nfunction handler($event){return ['status'=>200,'headers'=>['Content-Type'=>'application/json'],'body'=>'{}'];}\n")
+    write_file(root .. "/direct.lua", "function handler(event) return { status = 200, headers = { ['Content-Type'] = 'application/json' }, body = '{}' } end\n")
+    write_file(root .. "/direct.rs", "pub fn handler(_event: &str) -> &'static str { \"{}\" }\n")
+    write_file(root .. "/direct.go", "package main\nfunc Handler(_ any) any { return map[string]any{\"status\":200,\"headers\":map[string]string{\"Content-Type\":\"application/json\"},\"body\":\"{}\"} }\n")
 
     local cfg = {
       functions_root = root,
       socket_base_dir = "/tmp/fastfn",
-      runtime_order = { "python", "go" },
+      runtime_order = { "python", "node", "php", "lua", "rust", "go" },
       defaults = {
         timeout_ms = 2500,
         max_concurrency = 20,
@@ -1363,6 +1662,10 @@ local function test_console_data_crud_and_secrets()
       },
       runtimes = {
         python = { socket = "unix:/tmp/fastfn/fn-python.sock", timeout_ms = 2500 },
+        node = { socket = "unix:/tmp/fastfn/fn-node.sock", timeout_ms = 2500 },
+        php = { socket = "unix:/tmp/fastfn/fn-php.sock", timeout_ms = 2500 },
+        lua = { socket = "inprocess:lua", timeout_ms = 2500, in_process = true },
+        rust = { socket = "unix:/tmp/fastfn/fn-rust.sock", timeout_ms = 2500 },
         go = { socket = "unix:/tmp/fastfn/fn-go.sock", timeout_ms = 2500 },
       },
     }
@@ -1492,6 +1795,88 @@ local function test_console_data_crud_and_secrets()
     local file_target, file_target_err = data.function_detail("python", "direct.py", nil, false)
     assert_true(file_target ~= nil, file_target_err or "file target detail failed")
     assert_eq(file_target.file_path, root .. "/direct.py", "file target path")
+
+    local file_js, file_js_err = data.function_detail("node", "direct.js", nil, false)
+    assert_true(file_js ~= nil, file_js_err or "file target js failed")
+    assert_eq(file_js.file_path, root .. "/direct.js", "file target js path")
+
+    local mismatch, mismatch_err = data.function_detail("python", "direct.js", nil, false)
+    assert_true(mismatch == nil, "runtime mismatch should fail")
+    assert_true(
+      type(mismatch_err) == "string" and mismatch_err:find("runtime mismatch", 1, true) ~= nil,
+      "runtime mismatch error"
+    )
+
+    local file_php, file_php_err = data.function_detail("php", "direct.php", nil, false)
+    assert_true(file_php ~= nil, file_php_err or "file target php failed")
+    assert_eq(file_php.file_path, root .. "/direct.php", "file target php path")
+
+    local file_lua, file_lua_err = data.function_detail("lua", "direct.lua", nil, false)
+    assert_true(file_lua ~= nil, file_lua_err or "file target lua failed")
+    assert_eq(file_lua.file_path, root .. "/direct.lua", "file target lua path")
+
+    local file_rust, file_rust_err = data.function_detail("rust", "direct.rs", nil, false)
+    assert_true(file_rust ~= nil, file_rust_err or "file target rust failed")
+    assert_eq(file_rust.file_path, root .. "/direct.rs", "file target rust path")
+
+    local file_go, file_go_err = data.function_detail("go", "direct.go", nil, false)
+    assert_true(file_go ~= nil, file_go_err or "file target go failed")
+    assert_eq(file_go.file_path, root .. "/direct.go", "file target go path")
+
+    local node_fn, node_fn_err = data.create_function("node", "unitnode", nil, {
+      summary = "Unit Node",
+      methods = { "GET" },
+      route = "/unit-node",
+    })
+    assert_true(node_fn ~= nil, node_fn_err or "create node failed")
+    write_file(
+      node_fn.function_dir .. "/package.json",
+      cjson.encode({ name = "unitnode", dependencies = { uuid = "1.0.0" }, devDependencies = { jest = "1.0.0" } }) .. "\n"
+    )
+    write_file(node_fn.function_dir .. "/package-lock.json", "{}\n")
+    local node_detail, node_detail_err = data.function_detail("node", "unitnode", nil, false)
+    assert_true(node_detail ~= nil, node_detail_err or "node detail failed")
+    assert_true(node_detail.metadata.node.package_json_exists == true, "node package_json should exist")
+    assert_eq(node_detail.metadata.node.dependency_count, 1, "node deps count")
+    assert_eq(node_detail.metadata.node.dependencies[1], "uuid", "node dep name")
+    assert_eq(node_detail.metadata.node.lock_file, "package-lock.json", "node lock file")
+
+    local php_fn, php_fn_err = data.create_function("php", "unitphp", nil, { summary = "Unit PHP", methods = { "GET" }, route = "/unit-php" })
+    assert_true(php_fn ~= nil, php_fn_err or "create php failed")
+    write_file(
+      php_fn.function_dir .. "/composer.json",
+      cjson.encode({ require = { ["guzzlehttp/guzzle"] = "^7.0" }, ["require-dev"] = { ["phpunit/phpunit"] = "^10.0" } }) .. "\n"
+    )
+    write_file(php_fn.function_dir .. "/composer.lock", "{}\n")
+    local php_detail, php_detail_err = data.function_detail("php", "unitphp", nil, false)
+    assert_true(php_detail ~= nil, php_detail_err or "php detail failed")
+    assert_true(php_detail.metadata.php.composer_json_exists == true, "php composer.json should exist")
+    assert_eq(php_detail.metadata.php.dependency_count, 1, "php deps count")
+    assert_eq(php_detail.metadata.php.dependencies[1], "guzzlehttp/guzzle", "php dep name")
+    assert_true(php_detail.metadata.php.composer_lock_exists == true, "php composer.lock should exist")
+
+    local lua_fn, lua_fn_err = data.create_function("lua", "unitlua", nil, { summary = "Unit Lua", methods = { "GET" }, route = "/unit-lua" })
+    assert_true(lua_fn ~= nil, lua_fn_err or "create lua failed")
+    local lua_detail, lua_detail_err = data.function_detail("lua", "unitlua", nil, false)
+    assert_true(lua_detail ~= nil, lua_detail_err or "lua detail failed")
+    assert_eq(lua_detail.metadata.lua.sandbox, "in-process", "lua sandbox metadata")
+
+    local rust_fn, rust_fn_err = data.create_function("rust", "unitrust", nil, { summary = "Unit Rust", methods = { "GET" }, route = "/unit-rust" })
+    assert_true(rust_fn ~= nil, rust_fn_err or "create rust failed")
+    write_file(
+      rust_fn.function_dir .. "/Cargo.toml",
+      "[package]\nname = \"unitrust\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\nserde = \"1\"\nserde_json = \"1\"\n"
+    )
+    write_file(rust_fn.function_dir .. "/Cargo.lock", "\n")
+    local rust_detail, rust_detail_err = data.function_detail("rust", "unitrust", nil, false)
+    assert_true(rust_detail ~= nil, rust_detail_err or "rust detail failed")
+    assert_true(rust_detail.metadata.rust.cargo_toml_exists == true, "rust Cargo.toml should exist")
+    assert_eq(rust_detail.metadata.rust.dependency_count, 2, "rust deps count")
+
+    local go_fn, go_fn_err = data.create_function("go", "unitgo", nil, { summary = "Unit Go", methods = { "GET" }, route = "/unit-go" })
+    assert_true(go_fn ~= nil, go_fn_err or "create go failed")
+    local go_detail, go_detail_err = data.function_detail("go", "unitgo", nil, false)
+    assert_true(go_detail ~= nil, go_detail_err or "go detail failed")
 
     local secrets0 = data.list_secrets()
     assert_true(type(secrets0) == "table", "list_secrets should return array")
@@ -3060,6 +3445,148 @@ local function test_scheduler_cron_timezone_and_invalid_timezone()
   end)
 end
 
+local function test_scheduler_internal_cron_helpers()
+  with_fake_ngx(function(cache, conc, _set_now)
+    local routes_stub = {
+      get_config = function()
+        return { functions_root = "/tmp", runtimes = { lua = { socket = "inprocess:lua", timeout_ms = 2500, in_process = true } } }
+      end,
+      runtime_is_up = function()
+        return true
+      end,
+      check_runtime_health = function()
+        return true, "ok"
+      end,
+      set_runtime_health = function() end,
+      resolve_function_policy = function()
+        return {}
+      end,
+      runtime_is_in_process = function()
+        return true
+      end,
+    }
+
+    with_module_stubs({
+      ["fastfn.core.routes"] = routes_stub,
+      ["fastfn.core.limits"] = { try_acquire = function() return true end, release = function() end },
+      ["fastfn.core.lua_runtime"] = { call = function() return { status = 200, headers = {}, body = "" } end },
+      ["fastfn.core.client"] = { call_unix = function() return { status = 200, headers = {}, body = "" } end },
+      ["fastfn.core.gateway_utils"] = { map_runtime_error = function() return 502, "runtime error" end },
+    }, function()
+      package.loaded["fastfn.core.scheduler"] = nil
+      local scheduler = require("fastfn.core.scheduler")
+
+      local tick_once = get_upvalue(scheduler.init, "tick_once")
+      assert_true(type(tick_once) == "function", "tick_once helper should be available")
+
+      local compute_next_cron_ts = get_upvalue(tick_once, "compute_next_cron_ts")
+      local parse_cron = get_upvalue(compute_next_cron_ts, "parse_cron")
+      local parse_timezone_offset = get_upvalue(compute_next_cron_ts, "parse_timezone_offset")
+      local cron_field = get_upvalue(parse_cron, "cron_field")
+      local cron_value = get_upvalue(cron_field, "cron_value")
+      local schedule_retry_config = get_upvalue(tick_once, "schedule_retry_config")
+      local dispatch_schedule_invocation = get_upvalue(tick_once, "dispatch_schedule_invocation")
+      local retry_delay_seconds = get_upvalue(dispatch_schedule_invocation, "retry_delay_seconds")
+      local status_retryable = get_upvalue(dispatch_schedule_invocation, "status_retryable")
+
+      assert_true(type(parse_cron) == "function", "parse_cron helper should be available")
+      assert_true(type(parse_timezone_offset) == "function", "parse_timezone_offset helper should be available")
+      assert_true(type(cron_field) == "function", "cron_field helper should be available")
+      assert_true(type(cron_value) == "function", "cron_value helper should be available")
+      assert_true(type(schedule_retry_config) == "function", "schedule_retry_config helper should be available")
+      assert_true(type(retry_delay_seconds) == "function", "retry_delay_seconds helper should be available")
+      assert_true(type(status_retryable) == "function", "status_retryable helper should be available")
+
+      local tz0 = parse_timezone_offset("UTC")
+      assert_eq(tz0, 0, "UTC timezone should resolve to zero offset")
+      local tz_local = parse_timezone_offset("local")
+      assert_eq(tz_local, nil, "local timezone should resolve to nil offset")
+      local tz_plus = parse_timezone_offset("+0530")
+      assert_eq(tz_plus, 19800, "timezone +0530 should be parsed")
+      local tz_minus = parse_timezone_offset("-05:30")
+      assert_eq(tz_minus, -19800, "timezone -05:30 should be parsed")
+      local tz_bad, tz_err = parse_timezone_offset("Mars/Phobos")
+      assert_eq(tz_bad, nil, "unsupported timezone should fail")
+      assert_true(type(tz_err) == "string" and tz_err:find("unsupported timezone", 1, true) ~= nil, "unsupported timezone error")
+
+      local mon = { MON = 1 }
+      local cv1 = cron_value("MON", mon, false)
+      assert_eq(cv1, 1, "cron_value should parse named token")
+      local cv2 = cron_value("7", nil, true)
+      assert_eq(cv2, 0, "cron_value should normalize sunday=7 when allowed")
+      local cv_bad, cv_err = cron_value("", nil, false)
+      assert_eq(cv_bad, nil, "empty cron token should fail")
+      assert_true(type(cv_err) == "string" and cv_err:find("empty token", 1, true) ~= nil, "empty token error")
+
+      local all_hours = cron_field("*", 0, 23, nil, false)
+      assert_true(type(all_hours) == "table" and all_hours.any == true, "wildcard cron field should be any=true")
+      local stepped = cron_field("*/15", 0, 59, nil, false)
+      assert_true(stepped.set[0] == true and stepped.set[15] == true and stepped.set[45] == true, "step field should include expected values")
+      local named_range = cron_field("MON-FRI", 0, 6, { MON = 1, FRI = 5 }, true)
+      assert_true(named_range.set[1] == true and named_range.set[5] == true, "named range should parse")
+      local bad_step, bad_step_err = cron_field("1/0", 0, 59, nil, false)
+      assert_eq(bad_step, nil, "invalid cron step should fail")
+      assert_true(type(bad_step_err) == "string" and bad_step_err:find("invalid step", 1, true) ~= nil, "invalid step error")
+      local bad_range, bad_range_err = cron_field("99", 0, 59, nil, false)
+      assert_eq(bad_range, nil, "out of range cron value should fail")
+      assert_true(type(bad_range_err) == "string" and bad_range_err:find("out of range", 1, true) ~= nil, "out of range error")
+
+      local spec_hourly, spec_hourly_err = parse_cron("@hourly")
+      assert_true(type(spec_hourly) == "table" and spec_hourly_err == nil, "hourly macro should parse")
+      local spec_6, spec_6_err = parse_cron("0 */5 * * * *")
+      assert_true(type(spec_6) == "table" and spec_6_err == nil, "6-field cron should parse")
+      local spec_bad, spec_bad_err = parse_cron("bad cron expression")
+      assert_eq(spec_bad, nil, "invalid cron expression should fail")
+      assert_true(type(spec_bad_err) == "string" and spec_bad_err:find("5 or 6 fields", 1, true) ~= nil, "invalid cron field count error")
+      local spec_bad_mins, spec_bad_mins_err = parse_cron("61 * * * *")
+      assert_eq(spec_bad_mins, nil, "invalid minute range should fail")
+      assert_true(type(spec_bad_mins_err) == "string" and spec_bad_mins_err:find("minutes", 1, true) ~= nil, "minute error should be surfaced")
+
+      local next_ts, next_err = compute_next_cron_ts(1700000000, "*/5 * * * *", "UTC", false)
+      assert_true(type(next_ts) == "number" and next_ts > 1700000000 and next_err == nil, "compute_next_cron_ts should return next timestamp")
+      local inclusive_ts, inclusive_err = compute_next_cron_ts(1700000000, "*/5 * * * *", "UTC", true)
+      assert_true(type(inclusive_ts) == "number" and inclusive_ts >= 1700000000 and inclusive_err == nil, "inclusive cron compute should succeed")
+      local bad_tz_next, bad_tz_next_err = compute_next_cron_ts(1700000000, "*/5 * * * *", "Mars/Phobos", false)
+      assert_eq(bad_tz_next, nil, "invalid timezone should fail cron compute")
+      assert_true(type(bad_tz_next_err) == "string" and bad_tz_next_err:find("unsupported timezone", 1, true) ~= nil, "cron compute should surface timezone error")
+      local impossible_next, impossible_next_err = compute_next_cron_ts(1700000000, "0 0 31 2 *", "UTC", false)
+      assert_eq(impossible_next, nil, "impossible cron should fail by lookahead")
+      assert_true(type(impossible_next_err) == "string" and impossible_next_err:find("lookahead exceeded", 1, true) ~= nil, "cron lookahead exceeded error")
+
+      local rc_disabled = schedule_retry_config(false)
+      assert_eq(rc_disabled.enabled, false, "retry disabled should stay disabled")
+      local rc_default = schedule_retry_config(true)
+      assert_eq(rc_default.enabled, true, "retry true should enable defaults")
+      assert_eq(rc_default.max_attempts, 3, "retry default max_attempts")
+      local rc_clamped = schedule_retry_config({
+        enabled = true,
+        max_attempts = 99,
+        base_delay_seconds = -1,
+        max_delay_seconds = 99999,
+        jitter = 2,
+      })
+      assert_eq(rc_clamped.max_attempts, 10, "max_attempts should clamp")
+      assert_eq(rc_clamped.base_delay_seconds, 0, "base delay should clamp floor")
+      assert_eq(rc_clamped.max_delay_seconds, 3600, "max delay should clamp ceiling")
+      assert_eq(rc_clamped.jitter, 0.5, "jitter should clamp")
+
+      local d1 = retry_delay_seconds({ base_delay_seconds = 1, max_delay_seconds = 2, jitter = 0 }, 10)
+      assert_eq(d1, 2, "retry delay should respect max delay")
+      local d2 = retry_delay_seconds({ base_delay_seconds = 0.5, max_delay_seconds = 10, jitter = 0.5 }, 1)
+      assert_true(type(d2) == "number" and d2 >= 0, "retry delay with jitter should be non-negative")
+
+      assert_eq(status_retryable(0), true, "status 0 should be retryable")
+      assert_eq(status_retryable(429), true, "status 429 should be retryable")
+      assert_eq(status_retryable(503), true, "status 503 should be retryable")
+      assert_eq(status_retryable(500), true, "status >=500 should be retryable")
+      assert_eq(status_retryable(404), false, "status 404 should not be retryable")
+
+      reset_shared_dict(cache)
+      reset_shared_dict(conc)
+    end)
+  end)
+end
+
 local function test_scheduler_persist_state_roundtrip()
   with_fake_ngx(function(cache, conc, _set_now)
     local uniq = tostring(math.floor((ngx.now and ngx.now() or os.time()) * 1000000))
@@ -3328,6 +3855,219 @@ local function test_watchdog_guardrails()
   assert_true(type(err_cb) == "string" and err_cb:find("on_change callback is required", 1, true) ~= nil, "watchdog callback message")
 end
 
+local function test_watchdog_internal_error_paths()
+  with_fake_ngx(function(_cache, _conc, _set_now)
+    local fake_errno = 0
+    local close_calls = 0
+    local add_calls = 0
+    local next_wd = 20
+
+    local fake_ffi = {
+      cdef = function()
+        return true
+      end,
+      errno = function()
+        return fake_errno
+      end,
+      C = {
+        inotify_init1 = function(_flags)
+          return 7
+        end,
+        inotify_add_watch = function(_fd, _path, _mask)
+          add_calls = add_calls + 1
+          next_wd = next_wd + 1
+          return next_wd
+        end,
+        read = function(_fd, _buf, _count)
+          fake_errno = 11
+          return 0
+        end,
+        close = function()
+          close_calls = close_calls + 1
+          return 0
+        end,
+      },
+      new = function()
+        return {}
+      end,
+      sizeof = function()
+        return 16
+      end,
+      cast = function(_ctype, value)
+        return value
+      end,
+      string = function(_ptr, len)
+        return string.rep("\0", tonumber(len) or 0)
+      end,
+    }
+
+    local fake_bit = {
+      bor = function(...)
+        local out = 0
+        for i = 1, select("#", ...) do
+          local part = select(i, ...)
+          out = out + (tonumber(part) or 0)
+        end
+        return out
+      end,
+      band = function(a, b)
+        local na = tonumber(a) or 0
+        local nb = tonumber(b) or 0
+        if na == nb then
+          return na
+        end
+        return 0
+      end,
+    }
+
+    local original_jit = _G.jit
+    local original_timer_every = ngx.timer.every
+    local original_timer_at = ngx.timer.at
+    local ok_case, case_err = pcall(function()
+      with_module_stubs({
+        ["ffi"] = fake_ffi,
+        ["bit"] = fake_bit,
+      }, function()
+        _G.jit = { os = "Linux" }
+        package.loaded["fastfn.core.watchdog"] = nil
+        local watchdog = require("fastfn.core.watchdog")
+
+        local has_ignored_segment = get_upvalue(watchdog.start, "has_ignored_segment")
+        local list_dirs_recursive = get_upvalue(watchdog.start, "list_dirs_recursive")
+        assert_true(type(has_ignored_segment) == "function", "watchdog has_ignored_segment helper should exist")
+        assert_true(type(list_dirs_recursive) == "function", "watchdog list_dirs_recursive helper should exist")
+        assert_eq(has_ignored_segment("/tmp/a/.git/file.txt"), true, "ignored segment should be detected")
+        assert_eq(has_ignored_segment("/tmp/a/src/file.lua"), false, "non-ignored path should pass")
+        local missing_dirs = list_dirs_recursive("/tmp/fastfn-watchdog-does-not-exist-" .. tostring(math.random(1000, 9999)))
+        assert_true(type(missing_dirs) == "table", "list_dirs_recursive should return a table for missing paths")
+
+        local patched = {}
+        local function patch(name, value)
+          local ok, previous = set_upvalue(watchdog.start, name, value)
+          assert_true(ok, "failed to patch watchdog upvalue " .. tostring(name))
+          patched[#patched + 1] = { name = name, previous = previous }
+        end
+        local function restore_patches()
+          for i = #patched, 1, -1 do
+            local row = patched[i]
+            set_upvalue(watchdog.start, row.name, row.previous)
+          end
+        end
+
+        ngx.timer.at = function(_delay, fn, ...)
+          if type(fn) == "function" then
+            fn(false, ...)
+          end
+          return true
+        end
+
+        patch("linux_luajit_ready", function()
+          return false
+        end)
+        local ok_linux, err_linux = watchdog.start({ root = "/tmp", on_change = function() end })
+        assert_eq(ok_linux, false, "watchdog should reject non-linux jit")
+        assert_true(type(err_linux) == "string" and err_linux:find("Linux LuaJIT", 1, true) ~= nil, "linux guard error")
+
+        patch("linux_luajit_ready", function()
+          return true
+        end)
+        patch("ffi_ok", false)
+        local ok_ffi, err_ffi = watchdog.start({ root = "/tmp", on_change = function() end })
+        assert_eq(ok_ffi, false, "watchdog should reject missing ffi")
+        assert_true(type(err_ffi) == "string" and err_ffi:find("requires ffi", 1, true) ~= nil, "ffi guard error")
+
+        patch("ffi_ok", true)
+        patch("bit_ok", false)
+        local ok_bit, err_bit = watchdog.start({ root = "/tmp", on_change = function() end })
+        assert_eq(ok_bit, false, "watchdog should reject missing bit")
+        assert_true(type(err_bit) == "string" and err_bit:find("bit library", 1, true) ~= nil, "bit guard error")
+
+        patch("bit_ok", true)
+        patch("ensure_ffi_cdef", function()
+          return false, "boom-cdef"
+        end)
+        local ok_cdef, err_cdef = watchdog.start({ root = "/tmp", on_change = function() end })
+        assert_eq(ok_cdef, false, "watchdog should reject failed ffi cdef")
+        assert_true(type(err_cdef) == "string" and err_cdef:find("ffi init failed", 1, true) ~= nil, "ffi cdef error")
+
+        patch("ensure_ffi_cdef", function()
+          return true
+        end)
+        patch("list_dirs_recursive", function()
+          return { "/tmp/demo", "/tmp/demo", "", "/tmp/demo/.git", "/tmp/demo/sub" }
+        end)
+
+        local ffi_fail_init = {
+          cdef = fake_ffi.cdef,
+          errno = function()
+            return 77
+          end,
+          C = {
+            inotify_init1 = function()
+              return -1
+            end,
+            inotify_add_watch = fake_ffi.C.inotify_add_watch,
+            read = fake_ffi.C.read,
+            close = fake_ffi.C.close,
+          },
+          new = fake_ffi.new,
+          sizeof = fake_ffi.sizeof,
+          cast = fake_ffi.cast,
+          string = fake_ffi.string,
+        }
+        patch("ffi", ffi_fail_init)
+        local ok_init, err_init = watchdog.start({ root = "/tmp/demo", on_change = function() end })
+        assert_eq(ok_init, false, "watchdog should fail when inotify_init1 fails")
+        assert_true(type(err_init) == "string" and err_init:find("inotify_init1 failed", 1, true) ~= nil, "inotify init error")
+
+        local ffi_add_fail = {
+          cdef = fake_ffi.cdef,
+          errno = function()
+            return 13
+          end,
+          C = {
+            inotify_init1 = function()
+              return 8
+            end,
+            inotify_add_watch = function()
+              return -1
+            end,
+            read = fake_ffi.C.read,
+            close = fake_ffi.C.close,
+          },
+          new = fake_ffi.new,
+          sizeof = fake_ffi.sizeof,
+          cast = fake_ffi.cast,
+          string = fake_ffi.string,
+        }
+        patch("ffi", ffi_add_fail)
+        local ok_add, err_add = watchdog.start({ root = "/tmp/demo", on_change = function() end })
+        assert_eq(ok_add, false, "watchdog should fail when add_watch fails")
+        assert_true(type(err_add) == "string" and err_add:find("inotify_add_watch failed", 1, true) ~= nil, "add watch error")
+
+        patch("ffi", fake_ffi)
+        ngx.timer.every = function(_interval, _fn)
+          return false, "timer-boom"
+        end
+        local ok_timer, err_timer = watchdog.start({ root = "/tmp/demo", on_change = function() end })
+        assert_eq(ok_timer, false, "watchdog should fail when poll timer fails")
+        assert_true(type(err_timer) == "string" and err_timer:find("watchdog timer failed", 1, true) ~= nil, "watchdog timer error")
+
+        restore_patches()
+      end)
+    end)
+    _G.jit = original_jit
+    ngx.timer.every = original_timer_every
+    ngx.timer.at = original_timer_at
+    if not ok_case then
+      error(case_err)
+    end
+
+    assert_true(close_calls >= 2, "watchdog close should run on setup failures")
+    assert_true(add_calls >= 1, "watchdog add_watch should run in patched scenarios")
+  end)
+end
+
 local function test_lua_runtime_in_process()
   with_fake_ngx(function(cache, conc, _set_now)
     local cjson = require("cjson.safe")
@@ -3340,6 +4080,7 @@ local function test_lua_runtime_in_process()
     local root = "/tmp/fastfn-lua-runtime-" .. uniq
     mkdir_p(root .. "/lua/hello")
     mkdir_p(root .. "/lua/raw")
+    mkdir_p(root .. "/lua/envos")
     write_file(
       root .. "/lua/hello/app.lua",
       "local cjson = require('cjson.safe')\n"
@@ -3353,6 +4094,18 @@ local function test_lua_runtime_in_process()
       "function handler(_event)\n"
         .. "  return { ok = true, answer = 42 }\n"
         .. "end\n"
+    )
+    write_file(
+      root .. "/lua/envos/app.lua",
+      "local cjson = require('cjson.safe')\n"
+        .. "function handler(event)\n"
+        .. "  local env = event.env or {}\n"
+        .. "  return { status = 200, headers = { ['Content-Type'] = 'application/json' }, body = cjson.encode({ event_m = env.m, os_m = os.getenv('m') }) }\n"
+        .. "end\n"
+    )
+    write_file(
+      root .. "/lua/envos/fn.env.json",
+      "{ \"m\": \"test\" }\n"
     )
     write_file(
       root .. "/lua/get.health.lua",
@@ -3394,39 +4147,912 @@ local function test_lua_runtime_in_process()
     assert_eq(resp3.status, 200, "lua file-target status")
     assert_eq(resp3.body, "ok", "lua file-target body")
 
+    local resp4 = lua_runtime.call({ fn = "envos", version = nil, event = {} })
+    assert_eq(resp4.status, 200, "lua env status")
+    local env_body = cjson.decode(resp4.body)
+    assert_eq(env_body.event_m, "test", "lua event env injection")
+    assert_eq(env_body.os_m, "test", "lua os.getenv injection")
+
     rm_rf(root)
   end)
 end
 
+local function test_lua_runtime_print_capture()
+  with_fake_ngx(function(cache, conc, _set_now)
+    local cjson = require("cjson.safe")
+    package.loaded["fastfn.core.routes"] = nil
+    local routes = require("fastfn.core.routes")
+    package.loaded["fastfn.core.lua_runtime"] = nil
+    local lua_runtime = require("fastfn.core.lua_runtime")
+
+    local uniq = tostring(math.floor(os.time())) .. "-" .. tostring(math.random(1000, 9999))
+    local root = "/tmp/fastfn-lua-print-" .. uniq
+    mkdir_p(root .. "/lua/printfn")
+    mkdir_p(root .. "/lua/silent")
+    write_file(
+      root .. "/lua/printfn/app.lua",
+      "function handler(event)\n"
+        .. "  print('hello from lua')\n"
+        .. "  print('line two', 42)\n"
+        .. "  return { status = 200, headers = {}, body = 'ok' }\n"
+        .. "end\n"
+    )
+    write_file(
+      root .. "/lua/silent/app.lua",
+      "function handler(event)\n"
+        .. "  return { status = 200, headers = {}, body = 'silent' }\n"
+        .. "end\n"
+    )
+
+    local cfg = {
+      functions_root = root,
+      socket_base_dir = "/tmp/fastfn",
+      runtime_order = { "lua" },
+      defaults = { timeout_ms = 2500, max_concurrency = 20, max_body_bytes = 1024 * 1024 },
+      runtimes = {
+        lua = { socket = "inprocess:lua", timeout_ms = 2500, in_process = true },
+      },
+    }
+
+    reset_shared_dict(cache)
+    reset_shared_dict(conc)
+    cache:set("runtime:config", cjson.encode(cfg))
+    routes.discover_functions(true)
+
+    -- Test handler that prints
+    local resp1 = lua_runtime.call({ fn = "printfn", version = nil, event = {} })
+    assert_eq(resp1.status, 200, "lua print handler status")
+    assert_eq(resp1.body, "ok", "lua print handler body")
+    assert_true(type(resp1.stdout) == "string", "lua print handler should have stdout")
+    assert_true(resp1.stdout:find("hello from lua") ~= nil, "lua stdout should contain first print")
+    assert_true(resp1.stdout:find("line two") ~= nil, "lua stdout should contain second print")
+
+    -- Test silent handler (no print)
+    local resp2 = lua_runtime.call({ fn = "silent", version = nil, event = {} })
+    assert_eq(resp2.status, 200, "lua silent handler status")
+    assert_eq(resp2.body, "silent", "lua silent handler body")
+    assert_true(resp2.stdout == nil, "lua silent handler should NOT have stdout")
+
+    rm_rf(root)
+  end)
+end
+
+local function test_lua_runtime_session_passthrough()
+  with_fake_ngx(function(cache, conc, _set_now)
+    local cjson = require("cjson.safe")
+    package.loaded["fastfn.core.routes"] = nil
+    local routes = require("fastfn.core.routes")
+    package.loaded["fastfn.core.lua_runtime"] = nil
+    local lua_runtime = require("fastfn.core.lua_runtime")
+
+    local uniq = tostring(math.floor(os.time())) .. "-" .. tostring(math.random(1000, 9999))
+    local root = "/tmp/fastfn-lua-session-" .. uniq
+    mkdir_p(root .. "/lua/sesstest")
+    write_file(
+      root .. "/lua/sesstest/app.lua",
+      "local cjson = require('cjson.safe')\n"
+        .. "function handler(event)\n"
+        .. "  local session = event.session or {}\n"
+        .. "  return {\n"
+        .. "    status = 200,\n"
+        .. "    headers = { ['Content-Type'] = 'application/json' },\n"
+        .. "    body = cjson.encode({ sid = session.id, cookies = session.cookies or {} })\n"
+        .. "  }\n"
+        .. "end\n"
+    )
+
+    local cfg = {
+      functions_root = root,
+      socket_base_dir = "/tmp/fastfn",
+      runtime_order = { "lua" },
+      defaults = { timeout_ms = 2500, max_concurrency = 20, max_body_bytes = 1024 * 1024 },
+      runtimes = {
+        lua = { socket = "inprocess:lua", timeout_ms = 2500, in_process = true },
+      },
+    }
+
+    reset_shared_dict(cache)
+    reset_shared_dict(conc)
+    cache:set("runtime:config", cjson.encode(cfg))
+    routes.discover_functions(true)
+
+    local resp = lua_runtime.call({
+      fn = "sesstest",
+      version = nil,
+      event = {
+        session = {
+          id = "abc123",
+          raw = "session_id=abc123; theme=dark",
+          cookies = { session_id = "abc123", theme = "dark" },
+        },
+      },
+    })
+    assert_eq(resp.status, 200, "lua session handler status")
+    local body = cjson.decode(resp.body)
+    assert_eq(body.sid, "abc123", "lua session id")
+    assert_eq(body.cookies.theme, "dark", "lua session cookie")
+
+    rm_rf(root)
+  end)
+end
+
+local function test_lua_runtime_os_time_date()
+  with_fake_ngx(function(cache, conc, _set_now)
+    local cjson = require("cjson.safe")
+    package.loaded["fastfn.core.routes"] = nil
+    local routes = require("fastfn.core.routes")
+    package.loaded["fastfn.core.lua_runtime"] = nil
+    local lua_runtime = require("fastfn.core.lua_runtime")
+
+    local uniq = tostring(math.floor(os.time())) .. "-" .. tostring(math.random(1000, 9999))
+    local root = "/tmp/fastfn-lua-ostime-" .. uniq
+    mkdir_p(root .. "/lua/timefn")
+    write_file(
+      root .. "/lua/timefn/app.lua",
+      "local cjson = require('cjson.safe')\n"
+        .. "function handler(event)\n"
+        .. "  local t = os.time()\n"
+        .. "  local d = os.date('!%Y-%m-%dT%H:%M:%SZ')\n"
+        .. "  local c = os.clock()\n"
+        .. "  local diff = os.difftime(t, t - 10)\n"
+        .. "  return {\n"
+        .. "    status = 200,\n"
+        .. "    headers = { ['Content-Type'] = 'application/json' },\n"
+        .. "    body = cjson.encode({ time = t, date = d, clock_type = type(c), diff = diff })\n"
+        .. "  }\n"
+        .. "end\n"
+    )
+
+    local cfg = {
+      functions_root = root,
+      socket_base_dir = "/tmp/fastfn",
+      runtime_order = { "lua" },
+      defaults = { timeout_ms = 2500, max_concurrency = 20, max_body_bytes = 1024 * 1024 },
+      runtimes = {
+        lua = { socket = "inprocess:lua", timeout_ms = 2500, in_process = true },
+      },
+    }
+
+    reset_shared_dict(cache)
+    reset_shared_dict(conc)
+    cache:set("runtime:config", cjson.encode(cfg))
+    routes.discover_functions(true)
+
+    local resp = lua_runtime.call({ fn = "timefn", version = nil, event = {} })
+    assert_eq(resp.status, 200, "lua os.time/date handler status")
+    local body = cjson.decode(resp.body)
+    assert_true(type(body.time) == "number" and body.time > 0, "os.time() returns positive number")
+    assert_true(type(body.date) == "string" and body.date:match("^%d%d%d%d%-%d%d%-%d%d"), "os.date() returns ISO string")
+    assert_eq(body.clock_type, "number", "os.clock() returns number")
+    assert_eq(body.diff, 10, "os.difftime() returns correct diff")
+
+    rm_rf(root)
+  end)
+end
+
+local function test_lua_runtime_params_injection()
+  with_fake_ngx(function(cache, conc, _set_now)
+    local cjson = require("cjson.safe")
+    package.loaded["fastfn.core.routes"] = nil
+    local routes = require("fastfn.core.routes")
+    package.loaded["fastfn.core.lua_runtime"] = nil
+    local lua_runtime = require("fastfn.core.lua_runtime")
+
+    local uniq = tostring(math.floor(os.time())) .. "-" .. tostring(math.random(1000, 9999))
+    local root = "/tmp/fastfn-lua-params-" .. uniq
+    mkdir_p(root .. "/lua/paramfn")
+    write_file(
+      root .. "/lua/paramfn/app.lua",
+      "local cjson = require('cjson.safe')\n"
+        .. "function handler(event, params)\n"
+        .. "  return {\n"
+        .. "    status = 200,\n"
+        .. "    headers = { ['Content-Type'] = 'application/json' },\n"
+        .. "    body = cjson.encode({\n"
+        .. "      got_id = params.id or 'none',\n"
+        .. "      got_slug = params.slug or 'none',\n"
+        .. "      params_type = type(params)\n"
+        .. "    })\n"
+        .. "  }\n"
+        .. "end\n"
+    )
+
+    local cfg = {
+      functions_root = root,
+      socket_base_dir = "/tmp/fastfn",
+      runtime_order = { "lua" },
+      defaults = { timeout_ms = 2500, max_concurrency = 20, max_body_bytes = 1024 * 1024 },
+      runtimes = {
+        lua = { socket = "inprocess:lua", timeout_ms = 2500, in_process = true },
+      },
+    }
+
+    reset_shared_dict(cache)
+    reset_shared_dict(conc)
+    cache:set("runtime:config", cjson.encode(cfg))
+    routes.discover_functions(true)
+
+    -- Test with params in event
+    local resp = lua_runtime.call({
+      fn = "paramfn",
+      version = nil,
+      event = {
+        params = { id = "42", slug = "hello-world" },
+      },
+    })
+    assert_eq(resp.status, 200, "lua params handler status")
+    local body = cjson.decode(resp.body)
+    assert_eq(body.got_id, "42", "lua params id injected")
+    assert_eq(body.got_slug, "hello-world", "lua params slug injected")
+    assert_eq(body.params_type, "table", "lua params is table")
+
+    -- Test without params — should get empty table
+    local resp2 = lua_runtime.call({
+      fn = "paramfn",
+      version = nil,
+      event = {},
+    })
+    assert_eq(resp2.status, 200, "lua no-params handler status")
+    local body2 = cjson.decode(resp2.body)
+    assert_eq(body2.got_id, "none", "lua no-params id fallback")
+    assert_eq(body2.params_type, "table", "lua no-params still gets table")
+
+    rm_rf(root)
+  end)
+end
+
+local function test_routes_file_exists_regression()
+  -- Regression: file_exists used io.popen("[ -f ... ]") which silently fails
+  -- on Docker Desktop VirtioFS mounts inside OpenResty worker processes.
+  -- The fix uses io.open + read(0) to detect files vs directories.
+  with_fake_ngx(function(cache, _conc, _set_now)
+    local cjson = require("cjson.safe")
+    package.loaded["fastfn.core.routes"] = nil
+    local routes = require("fastfn.core.routes")
+    local uniq = tostring(math.floor(os.time() * 1000000))
+    local root = "/tmp/fastfn-lua-fileexists-" .. uniq
+
+    rm_rf(root)
+    mkdir_p(root .. "/lua/admin/session-demo")
+    mkdir_p(root .. "/python/user/hello")
+
+    write_file(
+      root .. "/lua/admin/session-demo/app.lua",
+      "return function(event) return {status=200,body='ok'} end\n"
+    )
+    write_file(
+      root .. "/python/user/hello/app.py",
+      "def handler(event):\n    return {'status':200,'body':'ok'}\n"
+    )
+
+    local cfg = {
+      functions_root = root,
+      socket_base_dir = "/tmp/fastfn",
+      runtime_order = { "lua", "python" },
+      defaults = { timeout_ms = 2500, max_concurrency = 20, max_body_bytes = 1048576 },
+      runtimes = {
+        lua = { in_process = true, timeout_ms = 2500 },
+        python = { socket = "unix:/tmp/fastfn/fn-python.sock", timeout_ms = 2500 },
+      },
+    }
+    reset_shared_dict(cache)
+    cache:set("runtime:config", cjson.encode(cfg))
+
+    -- resolve_function_entrypoint should find the actual file, not the directory
+    local lua_entry, lua_err = routes.resolve_function_entrypoint("lua", "admin/session-demo", nil)
+    assert_true(lua_entry ~= nil, "lua entrypoint resolved: " .. tostring(lua_err))
+    assert_true(lua_entry:match("app%.lua$") ~= nil, "lua entrypoint is app.lua, got: " .. tostring(lua_entry))
+
+    local py_entry, py_err = routes.resolve_function_entrypoint("python", "user/hello", nil)
+    assert_true(py_entry ~= nil, "python entrypoint resolved: " .. tostring(py_err))
+    assert_true(py_entry:match("app%.py$") ~= nil, "python entrypoint is app.py, got: " .. tostring(py_entry))
+
+    -- Accessing the internal file_exists via upvalue chain to verify directly
+    local resolve_fn = routes.resolve_function_entrypoint
+    local file_exists = get_upvalue(resolve_fn, "file_exists")
+    if type(file_exists) == "function" then
+      -- file_exists must return true for a real file
+      assert_true(file_exists(root .. "/lua/admin/session-demo/app.lua"), "file_exists: regular file")
+      -- file_exists must return false for a directory (the core regression)
+      assert_true(not file_exists(root .. "/lua/admin/session-demo"), "file_exists: directory must be false")
+      -- file_exists must return false for non-existent path
+      assert_true(not file_exists(root .. "/lua/admin/session-demo/nonexistent.lua"), "file_exists: missing file")
+      -- file_exists must return false for empty file (edge case: should still be true)
+      write_file(root .. "/lua/admin/session-demo/empty.lua", "")
+      assert_true(file_exists(root .. "/lua/admin/session-demo/empty.lua"), "file_exists: empty file is still a file")
+    end
+
+    rm_rf(root)
+  end)
+end
+
+local function test_routes_internal_helpers_and_edge_cases()
+  with_fake_ngx(function(_cache, _conc, _set_now)
+    package.loaded["fastfn.core.routes"] = nil
+    local routes = require("fastfn.core.routes")
+
+    local resolve_mapped_target = routes.resolve_mapped_target
+    local resolve_request_host_values = get_upvalue(resolve_mapped_target, "resolve_request_host_values")
+    local host_allowlist_matches = get_upvalue(resolve_mapped_target, "host_allowlist_matches")
+    local sort_dynamic_routes = get_upvalue(resolve_mapped_target, "sort_dynamic_routes")
+    local extract_dynamic_route_params = get_upvalue(resolve_mapped_target, "extract_dynamic_route_params")
+
+    local split_host_port = get_upvalue(resolve_request_host_values, "split_host_port")
+    local normalize_host_token = get_upvalue(split_host_port, "normalize_host_token")
+    local host_matches_pattern = get_upvalue(host_allowlist_matches, "host_matches_pattern")
+
+    local discover_functions = routes.discover_functions
+    local normalize_allow_hosts = get_upvalue(discover_functions, "normalize_allow_hosts")
+    local host_constraints_overlap = get_upvalue(discover_functions, "host_constraints_overlap")
+    local normalize_policy = get_upvalue(discover_functions, "normalize_policy")
+    local normalize_edge = get_upvalue(normalize_policy, "normalize_edge")
+    local normalize_keep_warm = get_upvalue(normalize_policy, "normalize_keep_warm")
+    local normalize_worker_pool = get_upvalue(normalize_policy, "normalize_worker_pool")
+    local detect_file_based_routes_in_dir = get_upvalue(discover_functions, "detect_file_based_routes_in_dir")
+    local parse_method_and_tokens = get_upvalue(detect_file_based_routes_in_dir, "parse_method_and_tokens")
+    local split_file_tokens = get_upvalue(parse_method_and_tokens, "split_file_tokens")
+    local normalize_route_token = get_upvalue(detect_file_based_routes_in_dir, "normalize_route_token")
+    local split_rel_segments = get_upvalue(detect_file_based_routes_in_dir, "split_rel_segments")
+    local dynamic_route_sort_key = get_upvalue(sort_dynamic_routes, "dynamic_route_sort_key")
+    local compile_dynamic_route_pattern = get_upvalue(extract_dynamic_route_params, "compile_dynamic_route_pattern")
+
+    assert_true(type(normalize_host_token) == "function", "normalize_host_token helper")
+    assert_true(type(split_host_port) == "function", "split_host_port helper")
+    assert_true(type(host_matches_pattern) == "function", "host_matches_pattern helper")
+    assert_true(type(normalize_allow_hosts) == "function", "normalize_allow_hosts helper")
+    assert_true(type(host_constraints_overlap) == "function", "host_constraints_overlap helper")
+    assert_true(type(normalize_policy) == "function", "normalize_policy helper")
+    assert_true(type(normalize_edge) == "function", "normalize_edge helper")
+    assert_true(type(normalize_keep_warm) == "function", "normalize_keep_warm helper")
+    assert_true(type(normalize_worker_pool) == "function", "normalize_worker_pool helper")
+    assert_true(type(parse_method_and_tokens) == "function", "parse_method_and_tokens helper")
+    assert_true(type(split_file_tokens) == "function", "split_file_tokens helper")
+    assert_true(type(normalize_route_token) == "function", "normalize_route_token helper")
+    assert_true(type(split_rel_segments) == "function", "split_rel_segments helper")
+    assert_true(type(dynamic_route_sort_key) == "function", "dynamic_route_sort_key helper")
+    assert_true(type(compile_dynamic_route_pattern) == "function", "compile_dynamic_route_pattern helper")
+
+    assert_eq(normalize_host_token("  ExAmple.com  "), "example.com", "normalize host token trims/lowercases")
+    assert_eq(normalize_host_token(""), nil, "normalize host token empty")
+
+    local ipv6_host, ipv6_authority = split_host_port("[2001:db8::1]:443")
+    assert_eq(ipv6_host, "2001:db8::1", "split_host_port ipv6 host")
+    assert_eq(ipv6_authority, "[2001:db8::1]:443", "split_host_port ipv6 authority")
+    local host1, authority1 = split_host_port("api.example.com:8443")
+    assert_eq(host1, "api.example.com", "split_host_port hostname")
+    assert_eq(authority1, "api.example.com:8443", "split_host_port host:port")
+
+    assert_eq(host_matches_pattern("api.example.com", "api.example.com"), true, "exact host match")
+    assert_eq(host_matches_pattern("x.api.example.com", "*.example.com"), true, "wildcard host match")
+    assert_eq(host_matches_pattern("example.com", "*.example.com"), false, "wildcard should not match apex")
+    assert_eq(host_matches_pattern("", "*.example.com"), false, "empty host never matches")
+
+    assert_eq(host_allowlist_matches(nil, "", ""), true, "nil allowlist means allow all")
+    assert_eq(host_allowlist_matches({}, "", ""), true, "empty allowlist means allow all")
+    assert_eq(host_allowlist_matches({ "api.example.com" }, "", ""), false, "missing request host should deny")
+    assert_eq(host_allowlist_matches({ "api.example.com:8443" }, "api.example.com", "api.example.com:8443"), true, "host+port allowlist")
+    assert_eq(host_allowlist_matches({ "*.example.com" }, "example.com", "example.com"), false, "wildcard excludes apex")
+
+    local fwd_host, fwd_authority = resolve_request_host_values("edge.example.com:80", "api.example.com:443, proxy.example.com")
+    assert_eq(fwd_host, "api.example.com", "forwarded host preferred")
+    assert_eq(fwd_authority, "api.example.com:443", "forwarded authority preferred")
+    local req_host, req_authority = resolve_request_host_values("edge.example.com:80", nil)
+    assert_eq(req_host, "edge.example.com", "fallback host header")
+    assert_eq(req_authority, "edge.example.com:80", "fallback authority")
+
+    local allow_hosts = normalize_allow_hosts(" api.example.com,*.example.com,bad/host,api.example.com , ")
+    assert_true(type(allow_hosts) == "table" and #allow_hosts == 2, "normalize_allow_hosts dedupe and sanitize")
+    assert_eq(allow_hosts[1], "api.example.com", "normalize_allow_hosts first entry")
+    assert_eq(allow_hosts[2], "*.example.com", "normalize_allow_hosts wildcard entry")
+    assert_eq(normalize_allow_hosts({ "bad host", "/" }), nil, "normalize_allow_hosts rejects invalid list")
+
+    assert_eq(host_constraints_overlap({}, { "a.example.com" }), true, "empty host set overlaps all")
+    assert_eq(host_constraints_overlap({ "a.example.com" }, { "b.example.com" }), false, "distinct hosts do not overlap")
+    assert_eq(host_constraints_overlap({ "*.example.com" }, { "a.example.com" }), true, "wildcard overlap is conservative")
+    assert_eq(host_constraints_overlap({ "a.example.com" }, { "a.example.com" }), true, "exact host overlap")
+
+    assert_eq(normalize_edge({}), nil, "empty edge config is nil")
+    local edge_cfg = normalize_edge({
+      base_url = " https://api.example.com ",
+      allow_hosts = { "api.example.com", "api.example.com", "", "bad host" },
+      allow_private = true,
+      max_response_bytes = "4096",
+    })
+    assert_true(type(edge_cfg) == "table", "edge config normalized")
+    assert_eq(edge_cfg.base_url, "https://api.example.com", "edge base_url trimmed")
+    assert_true(type(edge_cfg.allow_hosts) == "table" and #edge_cfg.allow_hosts == 2, "edge allow_hosts deduped")
+    assert_eq(edge_cfg.allow_private, true, "edge allow_private normalized")
+    assert_eq(edge_cfg.max_response_bytes, 4096, "edge max_response_bytes normalized")
+
+    local keep_warm_disabled = normalize_keep_warm({ enabled = false, min_warm = 0, ping_every_seconds = 0, idle_ttl_seconds = 0 })
+    assert_true(type(keep_warm_disabled) == "table", "disabled keep_warm still normalizes explicit min_warm")
+    assert_eq(keep_warm_disabled.enabled, false, "keep_warm disabled flag")
+    assert_eq(keep_warm_disabled.min_warm, 0, "keep_warm disabled min_warm")
+    local keep_warm = normalize_keep_warm({ enabled = true, min_warm = -5, ping_every_seconds = -1, idle_ttl_seconds = 5 })
+    assert_true(type(keep_warm) == "table", "keep_warm normalized")
+    assert_eq(keep_warm.enabled, true, "keep_warm enabled")
+    assert_eq(keep_warm.min_warm, 1, "keep_warm default min_warm")
+    assert_eq(keep_warm.ping_every_seconds, 45, "keep_warm default ping")
+    assert_eq(keep_warm.idle_ttl_seconds, 5, "keep_warm provided idle ttl")
+
+    assert_eq(normalize_worker_pool({ enabled = false }, nil), nil, "fully disabled worker pool without overrides")
+    local pool_cfg = normalize_worker_pool({
+      enabled = true,
+      min_warm = 10,
+      max_workers = 2,
+      max_queue = -1,
+      idle_ttl_seconds = 0,
+      queue_timeout_ms = -1,
+      queue_poll_ms = 0,
+      overflow_status = 418,
+    }, 5)
+    assert_true(type(pool_cfg) == "table", "worker pool normalized")
+    assert_eq(pool_cfg.max_workers, 2, "worker pool max_workers")
+    assert_eq(pool_cfg.min_warm, 2, "worker pool min_warm clamped to max_workers")
+    assert_eq(pool_cfg.max_queue, 0, "worker pool max_queue defaulted")
+    assert_eq(pool_cfg.queue_timeout_ms, 0, "worker pool queue_timeout defaulted")
+    assert_eq(pool_cfg.queue_poll_ms, 20, "worker pool queue_poll defaulted")
+    assert_eq(pool_cfg.overflow_status, 429, "worker pool overflow_status default fallback")
+
+    local toks = split_file_tokens("get.users.[id].[...slug]")
+    assert_true(type(toks) == "table" and #toks == 4, "split_file_tokens should preserve bracket groups")
+    local m1, parts1, explicit1 = parse_method_and_tokens("post.users.[id]")
+    assert_eq(m1, "POST", "parse_method_and_tokens method")
+    assert_eq(explicit1, true, "parse_method_and_tokens explicit flag")
+    assert_true(type(parts1) == "table" and parts1[1] == "users", "parse_method_and_tokens parts")
+    local m2, parts2, explicit2 = parse_method_and_tokens("users.index")
+    assert_eq(m2, "GET", "parse_method_and_tokens default method")
+    assert_eq(explicit2, false, "parse_method_and_tokens default explicit flag")
+    assert_true(type(parts2) == "table" and #parts2 == 2, "parse_method_and_tokens default parts")
+
+    assert_eq(normalize_route_token("[id]"), ":id", "normalize dynamic segment")
+    assert_eq(normalize_route_token("[[...slug]]"), ":slug*", "normalize optional catch-all")
+    assert_eq(normalize_route_token("edge_header_inject"), "edge-header-inject", "normalize underscores to hyphen")
+    assert_eq(normalize_route_token("index"), nil, "normalize index should be ignored")
+
+    local rel_tokens = split_rel_segments("api/[id]/index/[...slug]")
+    assert_true(type(rel_tokens) == "table" and #rel_tokens == 3, "split_rel_segments output size")
+    assert_eq(rel_tokens[1], "api", "split_rel_segments static")
+    assert_eq(rel_tokens[2], ":id", "split_rel_segments dynamic")
+    assert_eq(rel_tokens[3], ":slug*", "split_rel_segments catch-all")
+
+    local s1, t1, c1, d1 = dynamic_route_sort_key("/users/:id")
+    local s2, t2, c2, d2 = dynamic_route_sort_key("/users/:id*")
+    assert_true(s1 == s2 and t1 == t2 and c1 < c2 and d1 > d2, "dynamic_route_sort_key specificity tuple")
+
+    local dyn_sorted = sort_dynamic_routes({
+      ["/users/:id*"] = true,
+      ["/users/:id"] = true,
+      ["/users/*"] = true,
+    })
+    assert_true(type(dyn_sorted) == "table" and dyn_sorted[1] == "/users/:id", "sort_dynamic_routes prefers specific route")
+
+    local pattern, names = compile_dynamic_route_pattern("/files/*")
+    assert_eq(pattern, "^/files/(.+)$", "compile_dynamic_route_pattern wildcard pattern")
+    assert_true(type(names) == "table" and names[1] == "wildcard", "compile_dynamic_route_pattern wildcard name")
+    local dyn_params = extract_dynamic_route_params("/files/*", "/files/a/b/c")
+    assert_true(type(dyn_params) == "table", "extract_dynamic_route_params table")
+    assert_eq(dyn_params.wildcard, "a/b/c", "extract_dynamic_route_params wildcard value")
+  end)
+end
+
+local function test_console_data_validation_edges_and_helpers()
+  with_fake_ngx(function(cache, conc, _set_now)
+    local cjson = require("cjson.safe")
+    local uniq = tostring(math.floor((ngx.now and ngx.now() or os.time()) * 1000000))
+    local root = "/tmp/fastfn-lua-console-edge-" .. uniq
+
+    rm_rf(root)
+    mkdir_p(root .. "/python/existing")
+    mkdir_p(root .. "/node")
+
+    write_file(
+      root .. "/python/existing/app.py",
+      "def handler(event):\n"
+        .. "    return {'status':200,'headers':{'Content-Type':'application/json'},'body':'{}'}\n"
+    )
+    write_file(
+      root .. "/node/get.helper-demo.js",
+      "// @summary helper demo\n"
+        .. "// @methods GET,POST\n"
+        .. "// @query {\"name\":\"FastFN\"}\n"
+        .. "// @body {\"ok\":true}\n"
+        .. "// @content_type application/json\n"
+        .. "exports.handler = async () => ({ status: 200, headers: { 'Content-Type': 'application/json' }, body: '{}' });\n"
+    )
+    write_file(root .. "/direct.py", "def handler(event):\n    return {'status':200,'headers':{},'body':'{}'}\n")
+    write_file(root .. "/node/package.json", cjson.encode({ dependencies = { axios = "1.0.0" } }) .. "\n")
+    write_file(root .. "/rust.toml", "[dependencies]\nserde = \"1\"\n")
+
+    local cfg = {
+      functions_root = root,
+      socket_base_dir = "/tmp/fastfn",
+      runtime_order = { "python", "node", "php", "lua", "rust", "go" },
+      defaults = {
+        timeout_ms = 2500,
+        max_concurrency = 20,
+        max_body_bytes = 1048576,
+      },
+      runtimes = {
+        python = { socket = "unix:/tmp/fastfn/fn-python.sock", timeout_ms = 2500 },
+        node = { socket = "unix:/tmp/fastfn/fn-node.sock", timeout_ms = 2500 },
+        php = { socket = "unix:/tmp/fastfn/fn-php.sock", timeout_ms = 2500 },
+        lua = { socket = "inprocess:lua", timeout_ms = 2500, in_process = true },
+        rust = { socket = "unix:/tmp/fastfn/fn-rust.sock", timeout_ms = 2500 },
+        go = { socket = "unix:/tmp/fastfn/fn-go.sock", timeout_ms = 2500 },
+      },
+    }
+
+    package.loaded["fastfn.core.routes"] = nil
+    local routes = require("fastfn.core.routes")
+    reset_shared_dict(cache)
+    reset_shared_dict(conc)
+    cache:set("runtime:config", cjson.encode(cfg))
+    routes.discover_functions(true)
+
+    package.loaded["fastfn.console.data"] = nil
+    local data = require("fastfn.console.data")
+
+    local normalize_config_payload = get_upvalue(data.set_function_config, "normalize_config_payload")
+    local normalize_env_payload = get_upvalue(data.set_function_env, "normalize_env_payload")
+    local parse_handler_hints = get_upvalue(data.function_detail, "parse_handler_hints")
+    local parse_requirements_file = get_upvalue(data.function_detail, "parse_requirements_file")
+    local parse_cargo_dependency_names = get_upvalue(data.function_detail, "parse_cargo_dependency_names")
+    local merge_invoke = get_upvalue(data.function_detail, "merge_invoke")
+    local build_query_string = get_upvalue(merge_invoke, "build_query_string")
+    local merge_unique_routes = get_upvalue(merge_invoke, "merge_unique_routes")
+    if type(merge_unique_routes) ~= "function" then
+      merge_unique_routes = get_upvalue(data.function_detail, "merge_unique_routes")
+    end
+
+    assert_true(type(normalize_config_payload) == "function", "normalize_config_payload helper")
+    assert_true(type(normalize_env_payload) == "function", "normalize_env_payload helper")
+    assert_true(type(parse_handler_hints) == "function", "parse_handler_hints helper")
+    assert_true(type(parse_requirements_file) == "function", "parse_requirements_file helper")
+    assert_true(type(parse_cargo_dependency_names) == "function", "parse_cargo_dependency_names helper")
+    assert_true(type(merge_invoke) == "function", "merge_invoke helper")
+    assert_true(type(build_query_string) == "function", "build_query_string helper")
+    assert_true(type(merge_unique_routes) == "function", "merge_unique_routes helper")
+
+    local bad_cfg0, bad_cfg0_err = normalize_config_payload("bad")
+    assert_eq(bad_cfg0, nil, "normalize_config_payload non-table")
+    assert_true(type(bad_cfg0_err) == "string" and bad_cfg0_err:find("payload must be", 1, true) ~= nil, "normalize_config_payload error")
+
+    local bad_cfg1, bad_cfg1_err = normalize_config_payload({
+      timeout_ms = -1,
+      invoke = { allow_hosts = 1 },
+    })
+    assert_eq(bad_cfg1, nil, "normalize_config_payload invalid timeout")
+    assert_true(type(bad_cfg1_err) == "string" and bad_cfg1_err:find("timeout_ms", 1, true) ~= nil, "normalize_config_payload timeout error")
+
+    local bad_cfg2, bad_cfg2_err = normalize_config_payload({
+      schedule = {
+        cron = "@invalid",
+      },
+    })
+    assert_eq(bad_cfg2, nil, "normalize_config_payload invalid cron macro")
+    assert_true(type(bad_cfg2_err) == "string" and bad_cfg2_err:find("supported @macro", 1, true) ~= nil, "normalize_config_payload cron macro error")
+
+    local bad_cfg3, bad_cfg3_err = normalize_config_payload({
+      schedule = {
+        retry = {
+          base_delay_seconds = 2,
+          max_delay_seconds = 1,
+        },
+      },
+    })
+    assert_eq(bad_cfg3, nil, "normalize_config_payload retry max<base")
+    assert_true(type(bad_cfg3_err) == "string" and bad_cfg3_err:find("max_delay_seconds", 1, true) ~= nil, "normalize_config_payload retry ordering error")
+
+    local good_cfg, good_cfg_err = normalize_config_payload({
+      group = "edge-group",
+      response = { include_debug_headers = true },
+      invoke = {
+        methods = { "GET", "post", "INVALID" },
+        route = "/edge-demo",
+        routes = { "/edge-demo", "/edge-demo/v2" },
+        handler = "handler",
+        allow_hosts = { "api.example.com", "api.example.com" },
+      },
+      schedule = {
+        enabled = true,
+        every_seconds = 5,
+        timezone = "+02:00",
+        method = "GET",
+      },
+      shared_deps = "base_pack,base_pack,tools_pack",
+      edge = {
+        base_url = "https://api.example.com",
+        allow_hosts = { "api.example.com" },
+        allow_private = false,
+        max_response_bytes = 1024,
+      },
+    })
+    assert_true(type(good_cfg) == "table", good_cfg_err or "normalize_config_payload success")
+    assert_true(type(good_cfg.invoke) == "table" and type(good_cfg.invoke.routes) == "table", "normalized invoke routes")
+    assert_true(type(good_cfg.shared_deps) == "table" and #good_cfg.shared_deps == 2, "normalized shared_deps")
+
+    -- Top-level routes (sent by dashboard) are accepted and mapped to invoke.routes
+    local top_routes_cfg, top_routes_err = normalize_config_payload({
+      timeout_ms = 5000,
+      methods = { "GET", "POST" },
+      routes = { "/alice/demo", "/alice/demo/{id}" },
+    })
+    assert_true(type(top_routes_cfg) == "table", top_routes_err or "normalize_config_payload top-level routes")
+    assert_true(type(top_routes_cfg.invoke) == "table", "top-level routes: invoke created")
+    assert_true(type(top_routes_cfg.invoke.routes) == "table", "top-level routes: invoke.routes created")
+    assert_eq(#top_routes_cfg.invoke.routes, 2, "top-level routes: count")
+    assert_eq(top_routes_cfg.invoke.routes[1], "/alice/demo", "top-level routes: first")
+    assert_eq(top_routes_cfg.invoke.routes[2], "/alice/demo/{id}", "top-level routes: second")
+    assert_true(type(top_routes_cfg.invoke.methods) == "table", "top-level routes: methods also mapped")
+
+    -- invoke.routes takes precedence over top-level routes when both provided
+    local override_cfg, override_err = normalize_config_payload({
+      routes = { "/alice/old-route" },
+      invoke = { routes = { "/alice/new-route", "/alice/new-route/{slug}" } },
+    })
+    assert_true(type(override_cfg) == "table", override_err or "normalize_config_payload invoke override")
+    assert_eq(#override_cfg.invoke.routes, 2, "invoke.routes takes precedence: count")
+    assert_eq(override_cfg.invoke.routes[1], "/alice/new-route", "invoke.routes takes precedence: first")
+
+    local bad_env0, bad_env0_err = normalize_env_payload("bad")
+    assert_eq(bad_env0, nil, "normalize_env_payload non-table")
+    assert_true(type(bad_env0_err) == "string" and bad_env0_err:find("payload must be", 1, true) ~= nil, "normalize_env_payload error")
+
+    local bad_env1, bad_env1_err = normalize_env_payload({
+      API_TOKEN = { value = {} },
+    })
+    assert_eq(bad_env1, nil, "normalize_env_payload invalid object value")
+    assert_true(type(bad_env1_err) == "string" and bad_env1_err:find("env value must be", 1, true) ~= nil, "normalize_env_payload invalid value error")
+
+    local good_env, good_env_err = normalize_env_payload({
+      API_TOKEN = { value = "secret-1", is_secret = true },
+      DEBUG = true,
+      DELETE_ME = cjson.null,
+    })
+    assert_true(type(good_env) == "table", good_env_err or "normalize_env_payload success")
+    assert_true(type(good_env.updates) == "table", "normalize_env_payload updates table")
+
+    local hints = parse_handler_hints(root .. "/node/get.helper-demo.js")
+    assert_eq(hints.summary, "helper demo", "parse_handler_hints summary")
+    assert_true(type(hints.methods) == "table" and #hints.methods >= 2, "parse_handler_hints methods")
+    assert_true(type(hints.query_example) == "table" and hints.query_example.name == "FastFN", "parse_handler_hints query")
+
+    local reqs = parse_requirements_file("requests==2.0.0\n# comment\nfastapi>=0.1\n")
+    assert_true(type(reqs) == "table" and #reqs == 2, "parse_requirements_file count")
+    assert_eq(reqs[1], "fastapi", "parse_requirements_file sorted first")
+    local cargo_deps = parse_cargo_dependency_names("[dependencies]\nserde = \"1\"\nserde_json = \"1\"\n\n[dev-dependencies]\ninsta = \"1\"\n")
+    assert_true(type(cargo_deps) == "table" and #cargo_deps == 2, "parse_cargo_dependency_names count")
+    local qs = build_query_string({ b = 2, a = "x", no = { bad = true } })
+    assert_eq(qs, "a=x&b=2", "build_query_string sorted and scalar-only")
+    local merged = merge_unique_routes({ "/a", "/b" }, { "/b", "/c" })
+    assert_true(type(merged) == "table" and #merged == 3, "merge_unique_routes dedupe")
+
+    local bad_create0, bad_create0_err = data.create_function("python", "bad/name", nil, {})
+    assert_eq(bad_create0, nil, "create_function invalid name")
+    assert_true(type(bad_create0_err) == "string" and bad_create0_err:find("invalid function", 1, true) ~= nil, "create_function invalid name error")
+
+    local bad_create1, bad_create1_err = data.create_function("python", "edge_create_invalid_filename", nil, { filename = "../evil.py" })
+    assert_eq(bad_create1, nil, "create_function invalid filename")
+    assert_true(type(bad_create1_err) == "string" and bad_create1_err:find("invalid filename", 1, true) ~= nil, "create_function invalid filename error")
+
+    local bad_create2, bad_create2_err = data.create_function("python", "edge_create_reserved_route", nil, { route = "/_fn/private" })
+    assert_eq(bad_create2, nil, "create_function reserved route blocked")
+    assert_true(type(bad_create2_err) == "string" and bad_create2_err:find("invoke.routes", 1, true) ~= nil, "create_function reserved route error")
+
+    local created, created_err = data.create_function("python", "edge_create_ok", nil, {
+      summary = "Edge Create",
+      methods = { "GET", "POST" },
+      route = "/edge-create-ok",
+    })
+    assert_true(created ~= nil, created_err or "create_function edge_create_ok")
+
+    local bad_set_cfg0, bad_set_cfg0_err = data.set_function_config("python", "edge_create_ok", nil, {
+      response = "bad",
+    })
+    assert_eq(bad_set_cfg0, nil, "set_function_config invalid response type")
+    assert_true(type(bad_set_cfg0_err) == "string" and bad_set_cfg0_err:find("response must be an object", 1, true) ~= nil, "set_function_config invalid response error")
+
+    local bad_set_env0, bad_set_env0_err = data.set_function_env("python", "edge_create_ok", nil, "bad")
+    assert_eq(bad_set_env0, nil, "set_function_env invalid payload")
+    assert_true(type(bad_set_env0_err) == "string" and bad_set_env0_err:find("payload must be", 1, true) ~= nil, "set_function_env invalid payload error")
+
+    local bad_set_code0, bad_set_code0_err = data.set_function_code("python", "edge_create_ok", nil, {
+      code = string.rep("x", 2 * 1024 * 1024 + 1),
+    })
+    assert_eq(bad_set_code0, nil, "set_function_code too large")
+    assert_true(type(bad_set_code0_err) == "string" and bad_set_code0_err:find("maximum size", 1, true) ~= nil, "set_function_code too large error")
+
+    local file_target_detail, file_target_err = data.function_detail("python", "direct.py", nil, false)
+    assert_true(file_target_detail ~= nil, file_target_err or "file target detail direct.py")
+    local mismatch_detail, mismatch_err = data.function_detail("node", "direct.py", nil, false)
+    assert_eq(mismatch_detail, nil, "file target runtime mismatch")
+    assert_true(type(mismatch_err) == "string" and mismatch_err:find("runtime mismatch", 1, true) ~= nil, "file target runtime mismatch error")
+
+    rm_rf(root)
+  end)
+end
+
+local function test_jobs_internal_helpers_and_edge_cases()
+  with_fake_ngx(function(cache, conc, _set_now)
+    local cjson = require("cjson.safe")
+    local uniq = tostring(math.floor((ngx.now and ngx.now() or os.time()) * 1000000))
+    local root = "/tmp/fastfn-lua-jobs-helpers-" .. uniq
+    rm_rf(root)
+    mkdir_p(root)
+
+    local routes_stub = {
+      get_config = function()
+        return { functions_root = root, socket_base_dir = root, runtimes = { lua = { socket = "inprocess:lua", timeout_ms = 2500, in_process = true } } }
+      end,
+      resolve_named_target = function(name, version)
+        if name == "demo" then
+          return "lua", version
+        end
+        return nil, nil
+      end,
+      discover_functions = function()
+        return {
+          mapped_routes = {
+            ["/demo/:id"] = {
+              { runtime = "lua", fn_name = "demo", version = nil, methods = { "GET", "POST" } },
+            },
+            ["/demo/:tail*"] = {
+              { runtime = "lua", fn_name = "demo", version = nil, methods = { "GET" } },
+            },
+          },
+          runtimes = {},
+        }
+      end,
+      resolve_function_policy = function()
+        return {
+          methods = { "GET", "POST" },
+          timeout_ms = 1000,
+          max_concurrency = 2,
+          max_body_bytes = 4096,
+        }
+      end,
+      get_runtime_config = function()
+        return { socket = "inprocess:lua", timeout_ms = 2500, in_process = true }
+      end,
+      runtime_is_up = function()
+        return true
+      end,
+      check_runtime_health = function()
+        return true, "ok"
+      end,
+      set_runtime_health = function() end,
+      runtime_is_in_process = function()
+        return true
+      end,
+    }
+
+    with_module_stubs({
+      ["fastfn.core.routes"] = routes_stub,
+      ["fastfn.core.limits"] = { try_acquire = function() return true end, release = function() end },
+      ["fastfn.core.gateway_utils"] = { map_runtime_error = function() return 502, "runtime error" end, resolve_numeric = function(a, b) return tonumber(a) or tonumber(b) end },
+      ["fastfn.core.lua_runtime"] = { call = function() return { status = 200, headers = {}, body = cjson.encode({ ok = true }) } end },
+      ["fastfn.core.client"] = { call_unix = function() return nil, "connect_error", "down" end },
+      ["fastfn.core.invoke_rules"] = { normalize_route = function(route) if type(route) == "string" and route:sub(1, 1) == "/" then return route end return nil end },
+    }, function()
+      package.loaded["fastfn.core.jobs"] = nil
+      local jobs = require("fastfn.core.jobs")
+
+      local parse_params_object = get_upvalue(jobs.enqueue, "parse_params_object")
+      local interpolate_route_params = get_upvalue(jobs.enqueue, "interpolate_route_params")
+      local encode_path_segment = get_upvalue(interpolate_route_params, "encode_path_segment")
+      local encode_catch_all = get_upvalue(interpolate_route_params, "encode_catch_all")
+      local method_allowed = get_upvalue(jobs.enqueue, "method_allowed")
+      local allow_header_value = get_upvalue(jobs.enqueue, "allow_header_value")
+
+      assert_true(type(parse_params_object) == "function", "parse_params_object helper")
+      assert_true(type(interpolate_route_params) == "function", "interpolate_route_params helper")
+      assert_true(type(encode_path_segment) == "function", "encode_path_segment helper")
+      assert_true(type(encode_catch_all) == "function", "encode_catch_all helper")
+      assert_true(type(method_allowed) == "function", "method_allowed helper")
+      assert_true(type(allow_header_value) == "function", "allow_header_value helper")
+
+      local parsed_ok, parsed_ok_err = parse_params_object({ id = 123, active = true, n = cjson.null })
+      assert_true(type(parsed_ok) == "table", parsed_ok_err or "parse_params_object success")
+      assert_eq(parsed_ok.id, "123", "parse_params_object numeric cast")
+      assert_eq(parsed_ok.active, "true", "parse_params_object boolean cast")
+      local parsed_bad0, parsed_bad0_err = parse_params_object({ "list" })
+      assert_eq(parsed_bad0, nil, "parse_params_object array should fail")
+      assert_true(type(parsed_bad0_err) == "string" and parsed_bad0_err:find("JSON object", 1, true) ~= nil, "parse_params_object array error")
+
+      assert_eq(encode_path_segment("a b"), "a b", "encode_path_segment uses ngx.escape_uri")
+      assert_eq(encode_catch_all("a/b/c"), "a/b/c", "encode_catch_all keeps separators")
+
+      local rendered0, missing0 = interpolate_route_params("/demo/:id", { id = "x y" })
+      assert_eq(rendered0, "/demo/x y", "interpolate_route_params simple")
+      assert_eq(missing0, nil, "interpolate_route_params no missing")
+      local rendered1, missing1 = interpolate_route_params("/demo/:tail*", { tail = "a/b/c" })
+      assert_eq(rendered1, "/demo/a/b/c", "interpolate_route_params catch-all")
+      assert_eq(missing1, nil, "interpolate_route_params catch-all missing nil")
+      local rendered2, missing2 = interpolate_route_params("/demo/:id/:tail*", { id = "x" })
+      assert_eq(rendered2, nil, "interpolate_route_params missing should fail")
+      assert_true(type(missing2) == "table" and missing2[1] == "tail", "interpolate_route_params missing names")
+
+      assert_eq(method_allowed("GET", nil), true, "method_allowed default GET")
+      assert_eq(method_allowed("POST", nil), false, "method_allowed default denies POST")
+      assert_eq(method_allowed("POST", { "GET", "POST" }), true, "method_allowed explicit")
+      assert_eq(allow_header_value(nil), "GET", "allow_header_value default")
+      assert_eq(allow_header_value({ "GET", "POST" }), "GET, POST", "allow_header_value list")
+
+      local enqueue_ok, enqueue_status = jobs.enqueue({
+        runtime = "lua",
+        name = "demo",
+        method = "GET",
+        route = "/demo/:id",
+        params = { id = "ok" },
+      })
+      assert_eq(enqueue_status, 201, "jobs enqueue status")
+      assert_true(type(enqueue_ok) == "table" and type(enqueue_ok.id) == "string", "jobs enqueue response")
+    end)
+
+    rm_rf(root)
+    reset_shared_dict(cache)
+    reset_shared_dict(conc)
+  end)
+end
+
 local function main()
-  test_gateway_utils()
-  test_fn_limits()
-  test_invoke_rules()
-  test_openapi_builder()
-  test_ui_state_endpoint_guards()
-  test_console_guard_state_snapshot_current_user()
-  test_routes_discovery_and_host_routing()
-  test_routes_skip_disabled_runtime_file_routes()
-  test_routes_nested_project_root_scan_with_file_routes()
-  test_routes_force_url_policy_override()
-  test_routes_force_url_ignored_for_version_scoped_configs()
-  test_routes_force_url_breaks_policy_ties()
-  test_routes_force_url_global_env_policy_override()
-  test_routes_force_url_global_env_keeps_policy_policy_conflict()
-  test_routes_policy_routes_disjoint_allow_hosts()
-  test_routes_dynamic_order_is_deterministic_and_specific()
-  test_console_data_crud_and_secrets()
-  test_core_client_frame_protocol()
-  test_core_http_client_request_paths()
-  test_assistant_modes_and_providers()
-  test_jobs_module_queue_and_result()
-  test_scheduler_tick_and_snapshot()
-  test_scheduler_cron_and_retry_backoff()
-  test_scheduler_persist_state_roundtrip()
-  test_watchdog_mock_linux_backend()
-  test_lua_runtime_in_process()
-  test_watchdog_guardrails()
-  dofile(REPO_ROOT .. "/tests/unit/test-console-security.lua")
+  local trace_enabled = tostring(os.getenv("FASTFN_LUA_TEST_TRACE") or "") == "1"
+  local function run_test(name, fn)
+    if trace_enabled then
+      io.stdout:write("[lua-runner] start " .. tostring(name) .. "\n")
+      io.stdout:flush()
+    end
+    fn()
+    if trace_enabled then
+      io.stdout:write("[lua-runner] done " .. tostring(name) .. "\n")
+      io.stdout:flush()
+    end
+  end
+
+  run_test("test_gateway_utils", test_gateway_utils)
+  run_test("test_fn_limits", test_fn_limits)
+  run_test("test_invoke_rules", test_invoke_rules)
+  run_test("test_openapi_builder", test_openapi_builder)
+  run_test("test_ui_state_endpoint_guards", test_ui_state_endpoint_guards)
+  run_test("test_ui_state_endpoint_full_behavior", test_ui_state_endpoint_full_behavior)
+  run_test("test_console_guard_state_snapshot_current_user", test_console_guard_state_snapshot_current_user)
+  run_test("test_console_guard_enforcement_and_state_overrides", test_console_guard_enforcement_and_state_overrides)
+  run_test("test_routes_discovery_and_host_routing", test_routes_discovery_and_host_routing)
+  run_test("test_routes_skip_disabled_runtime_file_routes", test_routes_skip_disabled_runtime_file_routes)
+  run_test("test_routes_nested_project_root_scan_with_file_routes", test_routes_nested_project_root_scan_with_file_routes)
+  run_test("test_routes_force_url_policy_override", test_routes_force_url_policy_override)
+  run_test("test_routes_force_url_ignored_for_version_scoped_configs", test_routes_force_url_ignored_for_version_scoped_configs)
+  run_test("test_routes_force_url_breaks_policy_ties", test_routes_force_url_breaks_policy_ties)
+  run_test("test_routes_force_url_global_env_policy_override", test_routes_force_url_global_env_policy_override)
+  run_test("test_routes_force_url_global_env_keeps_policy_policy_conflict", test_routes_force_url_global_env_keeps_policy_policy_conflict)
+  run_test("test_routes_policy_routes_disjoint_allow_hosts", test_routes_policy_routes_disjoint_allow_hosts)
+  run_test("test_routes_dynamic_order_is_deterministic_and_specific", test_routes_dynamic_order_is_deterministic_and_specific)
+  run_test("test_routes_file_exists_regression", test_routes_file_exists_regression)
+  run_test("test_routes_internal_helpers_and_edge_cases", test_routes_internal_helpers_and_edge_cases)
+  run_test("test_console_data_crud_and_secrets", test_console_data_crud_and_secrets)
+  run_test("test_console_data_validation_edges_and_helpers", test_console_data_validation_edges_and_helpers)
+  run_test("test_core_client_frame_protocol", test_core_client_frame_protocol)
+  run_test("test_core_http_client_request_paths", test_core_http_client_request_paths)
+  run_test("test_assistant_modes_and_providers", test_assistant_modes_and_providers)
+  run_test("test_jobs_module_queue_and_result", test_jobs_module_queue_and_result)
+  run_test("test_jobs_internal_helpers_and_edge_cases", test_jobs_internal_helpers_and_edge_cases)
+  run_test("test_scheduler_tick_and_snapshot", test_scheduler_tick_and_snapshot)
+  run_test("test_scheduler_cron_and_retry_backoff", test_scheduler_cron_and_retry_backoff)
+  run_test("test_scheduler_cron_timezone_and_invalid_timezone", test_scheduler_cron_timezone_and_invalid_timezone)
+  run_test("test_scheduler_internal_cron_helpers", test_scheduler_internal_cron_helpers)
+  run_test("test_scheduler_persist_state_roundtrip", test_scheduler_persist_state_roundtrip)
+  run_test("test_watchdog_mock_linux_backend", test_watchdog_mock_linux_backend)
+  run_test("test_watchdog_guardrails", test_watchdog_guardrails)
+  run_test("test_watchdog_internal_error_paths", test_watchdog_internal_error_paths)
+  run_test("test_lua_runtime_in_process", test_lua_runtime_in_process)
+  run_test("test_lua_runtime_print_capture", test_lua_runtime_print_capture)
+  run_test("test_lua_runtime_session_passthrough", test_lua_runtime_session_passthrough)
+  run_test("test_lua_runtime_os_time_date", test_lua_runtime_os_time_date)
+  run_test("test_lua_runtime_params_injection", test_lua_runtime_params_injection)
+  run_test("test_console_security", function()
+    dofile(REPO_ROOT .. "/tests/unit/test-console-security.lua")
+  end)
   print("lua unit tests passed")
 end
 

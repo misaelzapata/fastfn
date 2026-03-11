@@ -1,5 +1,8 @@
 # Plantilla de handler Rust
 
+
+> Estado verificado al **10 de marzo de 2026**.
+> Nota de runtime: FastFN auto-instala dependencias locales por función desde `requirements.txt` / `package.json`; en `fastfn dev --native` necesitas runtimes instalados en host, mientras que `fastfn dev` depende de Docker daemon activo.
 El runtime Rust ya esta implementado. Usa esta plantilla para `app.rs` o `handler.rs`.
 
 ```rust title="rust-handler.rs"
@@ -19,3 +22,23 @@ pub fn handler(event: Value) -> Value {
     })
 }
 ```
+
+## Contrato
+
+Define la forma esperada de request/response, campos de configuración y garantías de comportamiento.
+
+## Ejemplo End-to-End
+
+Usa los ejemplos de esta página como plantillas canónicas para implementación y testing.
+
+## Casos Límite
+
+- Fallbacks ante configuración faltante
+- Conflictos de rutas y precedencia
+- Matices por runtime
+
+## Ver también
+
+- [Especificación de Funciones](especificacion-funciones.md)
+- [Referencia API HTTP](api-http.md)
+- [Checklist Ejecutar y Probar](../como-hacer/ejecutar-y-probar.md)

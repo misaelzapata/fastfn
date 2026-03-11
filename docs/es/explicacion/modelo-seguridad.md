@@ -1,5 +1,8 @@
 # Modelo de seguridad
 
+
+> Estado verificado al **10 de marzo de 2026**.
+> Nota de runtime: FastFN auto-instala dependencias locales por función desde `requirements.txt` / `package.json`; en `fastfn dev --native` necesitas runtimes instalados en host, mientras que `fastfn dev` depende de Docker daemon activo.
 La seguridad en fastfn es por capas. El gateway protege rutas y políticas; los runtimes aplican restricciones durante ejecución.
 
 ## Alcance y supuestos
@@ -76,3 +79,23 @@ La comunicación gateway-runtime usa sockets Unix, sin listeners TCP públicos.
 
 - El sandbox es a nivel runtime/lenguaje, no kernel.
 - Para aislamiento multi-tenant fuerte, agregar controles host-level (contenedores, seccomp, cgroups, workers aislados).
+
+## Problema
+
+Qué dolor operativo o de DX resuelve este tema.
+
+## Modelo Mental
+
+Cómo razonar esta feature en entornos similares a producción.
+
+## Decisiones de Diseño
+
+- Por qué existe este comportamiento
+- Qué tradeoffs se aceptan
+- Cuándo conviene una alternativa
+
+## Ver también
+
+- [Especificación de Funciones](../referencia/especificacion-funciones.md)
+- [Referencia API HTTP](../referencia/api-http.md)
+- [Checklist Ejecutar y Probar](../como-hacer/ejecutar-y-probar.md)

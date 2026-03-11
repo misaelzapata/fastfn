@@ -1,158 +1,115 @@
-# Primeros pasos
+# Inicio Rápido
 
-Esta guia te muestra el flujo completo de FastFN con validaciones reales.
 
-Vas a:
+> Estado verificado al **10 de marzo de 2026**.
+> Nota de runtime: FastFN auto-instala dependencias locales por función desde `requirements.txt` / `package.json`; en `fastfn dev --native` necesitas runtimes instalados en host, mientras que `fastfn dev` depende de Docker daemon activo.
+¡Bienvenido a FastFN! Esta guía es la forma más rápida de experimentar la magia del enrutamiento basado en archivos y la generación automática de OpenAPI.
 
-1. compilar el CLI
-2. levantar el runtime
-3. enviar trafico HTTP real
-4. validar salud, ruteo y OpenAPI
+Si vienes de FastAPI o de las rutas API de Next.js, te sentirás como en casa: suelta un archivo, obtén un endpoint. Cero boilerplate.
 
-Si vienes de FastAPI o de rutas API de Next.js, el modelo es familiar: los archivos definen rutas y luego la capa de config/politica ajusta comportamiento.
+## 1. Inicializa tu proyecto
 
-## Antes de empezar
-
-Desde la raiz del repo:
+Vamos a construir tu primer endpoint de API. En FastFN, tu estructura de carpetas es tu API. Abre tu terminal y ejecuta:
 
 ```bash
-make build-cli
+fastfn init hello --template node
 ```
 
-Esto genera `./bin/fastfn`.
+Esto crea `node/hello/` con un archivo `handler.js`. ¡Eso es todo! Acabas de crear un endpoint de API.
 
-Modos de ejecucion:
+## 2. Inicia el servidor de desarrollo
 
-- `docker` (default, recomendado para primera corrida): `./bin/fastfn dev .`
-- `native` (requiere OpenResty en PATH): `./bin/fastfn dev --native .`
-
-Referencias relacionadas:
-
-- [Flags del CLI](../referencia/cli-reference.md)
-- [Desplegar en produccion](../como-hacer/desplegar-a-produccion.md)
-- [Arquitectura](../explicacion/arquitectura.md)
-
-## 1) Crear una primera funcion
-
-Crea una funcion minima:
+Inicia FastFN en tu directorio actual:
 
 ```bash
-./bin/fastfn init hello --template node
+fastfn dev .
 ```
 
-Se crea una carpeta con:
+Detrás de escena, FastFN levanta un gateway OpenResty, inicia los runtimes necesarios para los handlers descubiertos y mapea tus carpetas a rutas HTTP en vivo.
 
-- `fn.config.json` (config y politica de la funcion)
-- `handler.js` (handler runtime)
+!!! note "Qué se instala automáticamente (y qué no)"
+    - FastFN auto-instala dependencias por función desde `requirements.txt` / `package.json` junto al handler.
+    - FastFN no instala runtimes del host (`python`, `node`, etc.).
+    - En `fastfn dev` (modo portable), Docker debe estar activo.
+    - En `fastfn dev --native`, necesitas OpenResty + runtimes instalados en el host.
 
-Referencia:
+## 3. Mira la Magia: Documentación Interactiva Automática
 
-- [Especificacion de funciones](../referencia/especificacion-funciones.md)
-- [Configuracion fastfn.json](../referencia/config-fastfn.md)
+FastFN genera automáticamente documentación OpenAPI 3.1 para cada función que creas.
 
-## 2) Levantar FastFN
+Abre tu navegador y navega a:
+👉 **[http://127.0.0.1:8080/docs](http://127.0.0.1:8080/docs)**
 
-Modo Docker:
+![Swagger UI mostrando rutas de FastFN](../../assets/screenshots/swagger-ui.png)
 
-```bash
-./bin/fastfn dev .
-```
+¡Puedes probar tu endpoint directamente desde esta interfaz! Haz clic en la ruta `GET /hello`, haz clic en "Try it out" y presiona "Execute".
 
-Modo Native:
+## 4. Llama a tu API
 
-```bash
-./bin/fastfn dev --native .
-```
-
-Que inicia internamente:
-
-1. gateway (OpenResty)
-2. daemons de runtime (Node/Python/PHP/Lua y runtimes experimentales opcionales)
-3. discovery de archivos y generacion del mapa de rutas
-
-Mas detalle:
-
-- [Flujo de invocacion](../explicacion/flujo-invocacion.md)
-- [Contrato runtime](../referencia/contrato-runtime.md)
-
-## 3) Verificar salud del sistema
-
-En otra terminal:
-
-```bash
-curl -sS 'http://127.0.0.1:8080/_fn/health' | jq
-```
-
-Esperado:
-
-- gateway accesible
-- cada runtime habilitado con `"up": true`
-
-Si un runtime aparece caido:
-
-- revisar dependencias faltantes en modo native (`openresty`, `node`, `python3`, etc.)
-- revisar daemon de Docker en modo docker
-
-Rutas de troubleshooting:
-
-- [Ejecutar y probar](../como-hacer/ejecutar-y-probar.md)
-- [Recetas operativas](../como-hacer/recetas-operativas.md)
-
-## 4) Enviar la primera request
+También puedes llamar a tu nuevo endpoint usando tu navegador o `curl`:
 
 ```bash
 curl -i 'http://127.0.0.1:8080/hello?name=Mundo'
 ```
 
-Esto valida:
-
-1. resolucion de ruta publica
-2. dispatch gateway -> socket runtime
-3. normalizacion de salida del handler a respuesta HTTP
-
-Modelo de ruteo:
-
-- [Especificacion de funciones](../referencia/especificacion-funciones.md)
-- [Arquitectura](../explicacion/arquitectura.md)
-
-## 5) Validar consistencia de docs y mapa de rutas
-
-OpenAPI:
-
-```bash
-curl -sS 'http://127.0.0.1:8080/_fn/openapi.json' | jq '.paths | keys'
+**Salida Esperada:**
+```json
+{
+  "status": 200,
+  "body": "Hello Mundo"
+}
 ```
 
-Catalogo:
+### Atajo de respuesta sencilla
 
-```bash
-curl -sS 'http://127.0.0.1:8080/_fn/catalog' | jq '{mapped_routes, mapped_route_conflicts}'
+En `node`, `php` y `lua` puedes devolver un valor directo (sin envelope completo) y FastFN lo normaliza.
+
+Ejemplo (Node):
+
+```js
+exports.handler = async () => "Hello Mundo";
 ```
 
-Esperado:
+Resultado para `GET /hello`:
 
-- la ruta aparece en catalogo y OpenAPI
-- `mapped_route_conflicts` vacio
+- HTTP `200`
+- `Content-Type: text/plain; charset=utf-8`
+- body: `Hello Mundo`
 
-Referencias:
+Para mantener portabilidad entre runtimes (incluyendo `go` y `rust`), conviene usar `{ status, headers, body }` explicito.
 
-- [API HTTP](../referencia/api-http.md)
-- [Funciones de ejemplo](../referencia/funciones-ejemplo.md)
+## 5. Detén el servidor
 
-## 6) Apagar limpio
+Cuando hayas terminado, simplemente presiona `Ctrl+C` en la terminal donde se está ejecutando `fastfn dev` para detener el servidor limpiamente.
 
-Modo Docker:
+## Siguientes Pasos
 
-```bash
-docker compose down --remove-orphans
-```
+¿Notaste cómo no tuviste que escribir ninguna lógica de enrutamiento ni configurar un servidor?
+- Aprende a usar parámetros dinámicos en [Enrutamiento y Parámetros](./routing.md).
+- Profundiza con nuestro [Curso Desde Cero](./desde-cero/index.md).
 
-Modo Native:
+## Objetivo
 
-- detener con `Ctrl+C` en la terminal de `fastfn dev --native`.
+Alcance claro, resultado esperado y público al que aplica esta guía.
 
-## Siguientes lecturas
+## Prerrequisitos
 
-- [Construir API completa](./construir-api-completa.md)
-- [Ejecutar y probar (validacion completa)](../como-hacer/ejecutar-y-probar.md)
-- [Desplegar a produccion](../como-hacer/desplegar-a-produccion.md)
+- CLI de FastFN disponible
+- Dependencias por modo verificadas (Docker para `fastfn dev`, OpenResty+runtimes para `fastfn dev --native`)
+
+## Checklist de Validación
+
+- Los comandos de ejemplo devuelven estados esperados
+- Las rutas aparecen en OpenAPI cuando aplica
+- Las referencias del final son navegables
+
+## Solución de Problemas
+
+- Si un runtime cae, valida dependencias de host y endpoint de health
+- Si faltan rutas, vuelve a ejecutar discovery y revisa layout de carpetas
+
+## Ver también
+
+- [Especificación de Funciones](../referencia/especificacion-funciones.md)
+- [Referencia API HTTP](../referencia/api-http.md)
+- [Checklist Ejecutar y Probar](../como-hacer/ejecutar-y-probar.md)

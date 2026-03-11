@@ -16,6 +16,13 @@ if method == "GET" then
   -- In a real implementation this would fetch from a secrets store (e.g. Vault or encrypted JSON)
   -- Current implementation reads from console.data backing store.
   local secrets = console.list_secrets() or {}
+  if type(secrets) ~= "table" then
+    secrets = {}
+  end
+  if #secrets == 0 then
+    guard.write_json(200, cjson.empty_array or {})
+    return
+  end
   guard.write_json(200, secrets)
   return
 end

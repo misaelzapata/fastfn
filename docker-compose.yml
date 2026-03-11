@@ -10,6 +10,8 @@ services:
       # To run the shipped demos with docker-compose directly:
       #   FN_FUNCTIONS_ROOT=./examples/functions docker compose up
       - ${FN_FUNCTIONS_ROOT:-./srv/fn/functions}:/app/srv/fn/functions
+      # Mount Lua sources for development hot-reload
+      - ./openresty/lua/fastfn:/app/openresty/lua/fastfn
     environment:
       FN_RUNTIMES: ${FN_RUNTIMES:-python,node,php,lua}
       FN_RUNTIME_SOCKETS: ${FN_RUNTIME_SOCKETS:-}
@@ -30,12 +32,24 @@ services:
       FN_HOT_RELOAD_WATCHDOG: ${FN_HOT_RELOAD_WATCHDOG:-0}
       FN_PREINSTALL_PY_DEPS_ON_START: ${FN_PREINSTALL_PY_DEPS_ON_START:-1}
       FN_PREINSTALL_NODE_DEPS_ON_START: ${FN_PREINSTALL_NODE_DEPS_ON_START:-1}
+      FN_AUTO_REQUIREMENTS: ${FN_AUTO_REQUIREMENTS:-1}
+      FN_AUTO_NODE_DEPS: ${FN_AUTO_NODE_DEPS:-1}
+      FN_AUTO_PHP_DEPS: ${FN_AUTO_PHP_DEPS:-1}
+      FN_AUTO_INFER_PY_DEPS: ${FN_AUTO_INFER_PY_DEPS:-1}
+      FN_AUTO_INFER_NODE_DEPS: ${FN_AUTO_INFER_NODE_DEPS:-1}
+      FN_AUTO_INFER_WRITE_MANIFEST: ${FN_AUTO_INFER_WRITE_MANIFEST:-1}
+      FN_AUTO_INFER_STRICT: ${FN_AUTO_INFER_STRICT:-1}
+      FN_ZERO_CONFIG_IGNORE_DIRS: ${FN_ZERO_CONFIG_IGNORE_DIRS:-}
       FN_DEFAULT_TIMEOUT_MS: ${FN_DEFAULT_TIMEOUT_MS:-}
       FN_HTTP_VERIFY_TLS: ${FN_HTTP_VERIFY_TLS:-1}
       FN_PUBLIC_BASE_URL: ${FN_PUBLIC_BASE_URL:-}
       FN_ASSISTANT_ENABLED: ${FN_ASSISTANT_ENABLED:-0}
       FN_ASSISTANT_PROVIDER: ${FN_ASSISTANT_PROVIDER:-mock}
       FN_FORCE_URL: ${FN_FORCE_URL:-0}
+      FN_LUA_COVERAGE: ${FN_LUA_COVERAGE:-0}
+      FN_LUA_COVERAGE_STATS: ${FN_LUA_COVERAGE_STATS:-/tmp/luacov.stats.out}
+      FN_LUA_COVERAGE_REPORT: ${FN_LUA_COVERAGE_REPORT:-/tmp/luacov.report.out}
+      LUACOV_CONFIG: ${LUACOV_CONFIG:-/tmp/.luacov}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}

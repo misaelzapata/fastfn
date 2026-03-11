@@ -401,7 +401,9 @@ try {
     $hasHandler = function_exists('handler');
     $resp = null;
     if ($hasHandler) {
-        $resp = handler($event);
+        $params = isset($event['params']) && is_array($event['params']) ? $event['params'] : [];
+        $rf = new ReflectionFunction('handler');
+        $resp = $rf->getNumberOfParameters() > 1 ? handler($event, $params) : handler($event);
     }
 
     $capturedOutput = (string) ob_get_clean();

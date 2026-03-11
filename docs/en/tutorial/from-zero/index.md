@@ -1,50 +1,62 @@
-# From Zero Tutorial (Absolute Beginner)
+# From Zero Course: Build a Task Manager API
 
-If this is your first time building a function, start here.
 
-This tutorial assumes **zero prior knowledge** of FastFN.
+> Verified status as of **March 10, 2026**.
+> Runtime note: FastFN auto-installs function-local dependencies from `requirements.txt` / `package.json`; host runtimes are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
+Welcome to the FastFN "From Zero" course! If this is your first time building a function, start here. This tutorial assumes **zero prior knowledge** of FastFN.
 
-## What is fastfn in one sentence?
+## What are we building?
 
-`fastfn` lets you put code in a folder and call it like an HTTP endpoint.
+Over the next 4 parts, we will build a complete **Task Manager API** from scratch. You will learn how to:
+1. Create your first endpoint and return data.
+2. Handle dynamic routes (like `/tasks/1`) and read request bodies.
+3. Manage environment variables and function configuration.
+4. Return rich responses like HTML or custom headers.
 
-Example endpoint:
+## Prerequisites
 
-- `http://127.0.0.1:8080/hello-world`
+You only need the FastFN CLI installed. 
+- **Portable mode (recommended):** Docker Desktop running.
+- **Native mode:** `fastfn dev --native` (requires OpenResty + runtimes installed on the host).
 
-## What you need before Chapter 1
+Everything in this tutorial works identically in both modes.
 
-Pick one:
+## Learning Path
 
-1. Portable mode (recommended for beginners): Docker Desktop running.
-2. Native mode: `fastfn dev --native` (requires OpenResty + runtimes installed on the host).
+1. [Part 1: Setup and Your First Route](./1-setup-and-first-route.md)
+2. [Part 2: Routing and Data](./2-routing-and-data.md)
+3. [Part 3: Configuration and Secrets](./3-config-and-secrets.md)
+4. [Part 4: Advanced Responses](./4-advanced-responses.md)
 
-Everything in this tutorial works in both modes.
+Let's get started!
 
-## Confirm it is alive
+## Flow Diagram
 
-Start your dev server (Chapter 1 shows the full command), then:
-
-```bash
-curl -sS 'http://127.0.0.1:8080/_fn/health'
+```mermaid
+flowchart LR
+  A["Client request"] --> B["Route discovery"]
+  B --> C["Policy and method validation"]
+  C --> D["Runtime handler execution"]
+  D --> E["HTTP response + OpenAPI parity"]
 ```
 
-You should see JSON output. If you get `connection refused`, wait a few seconds and try again.
+## Objective
 
-## Folder you will use
+Clear scope, expected outcome, and who should use this page.
 
-All chapters use this folder:
+## Validation Checklist
 
-- `functions/hello-world/`
+- Command examples execute with expected status codes
+- Routes appear in OpenAPI where applicable
+- References at the end are reachable
 
-## Learning path
+## Troubleshooting
 
-1. [Chapter 1 - Hello World](./chapter-01-hello-world.md)
-2. [Chapter 2 - Query String and Body](./chapter-02-query-and-body.md)
-3. [Chapter 3 - Environment Variables (`fn.env.json`)](./chapter-03-env.md)
-4. [Chapter 4 - Function Metadata and Methods (`fn.config.json`)](./chapter-04-meta-and-methods.md)
-5. [Chapter 5 - Edge Proxy (Workers-style)](./chapter-05-edge-proxy.md)
-6. [Chapter 6 - External Libraries](./chapter-06-external-libraries.md)
-7. [Chapter 7 - HTML/CSV/PNG Responses](./chapter-07-rich-responses.md)
-8. [Chapter 8 - Session, Context, and Basic Memory](./chapter-08-session-context-memory.md)
-9. [Chapter 9 - Shared Dependencies and Shared Config Patterns](./chapter-09-shared-deps-env.md)
+- If runtime is down, verify host dependencies and health endpoint
+- If routes are missing, re-run discovery and check folder layout
+
+## See also
+
+- [Function Specification](../../reference/function-spec.md)
+- [HTTP API Reference](../../reference/http-api.md)
+- [Run and Test Checklist](../../how-to/run-and-test.md)

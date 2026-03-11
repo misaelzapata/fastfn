@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import importlib.util
 import json
+import os
 import socket
 import struct
 import tempfile
@@ -203,12 +204,14 @@ def test_run_php_handler_and_direct_request_paths() -> None:
     try:
         php_daemon._resolve_handler_path = lambda *_a, **_k: Path("/tmp/unit.php")
         php_daemon._ensure_composer_deps = lambda _p: None
-        php_daemon._read_function_env = lambda _p: {"FN_ENV": "1"}
+        php_daemon._read_function_env = lambda _p: {"FN_ENV": "1", "UNIT_PROCESS_ENV": "yes"}
         seen = {}
+        previous_unit_env = os.environ.get("UNIT_PROCESS_ENV")
 
         def fake_run(_path, event, timeout_ms):
             seen["event"] = event
             seen["timeout_ms"] = timeout_ms
+            seen["process_env"] = os.environ.get("UNIT_PROCESS_ENV")
             return {"status": 200, "headers": {}, "body": "ok"}
 
         php_daemon._run_php_handler = fake_run
@@ -218,7 +221,9 @@ def test_run_php_handler_and_direct_request_paths() -> None:
         assert resp["status"] == 200
         assert seen["event"]["env"]["A"] == "2"
         assert seen["event"]["env"]["FN_ENV"] == "1"
+        assert seen["process_env"] == "yes"
         assert seen["timeout_ms"] == 350
+        assert os.environ.get("UNIT_PROCESS_ENV") == previous_unit_env
 
         try:
             php_daemon._handle_request_direct({"fn": "", "event": {}})
@@ -726,6 +731,47 @@ def test_additional_edge_branches() -> None:
         php_daemon._write_frame = old_write
 
 
+def test_php_worker_has_reflection_param_injection() -> None:
+    """php-worker.php uses ReflectionFunction to inject route params as second arg."""
+    worker_path = RUNTIME_DIR / "php-worker.php"
+    assert worker_path.exists(), "php-worker.php must exist"
+    content = worker_path.read_text(encoding="utf-8")
+    assert "ReflectionFunction" in content, \
+        "worker must use ReflectionFunction for param inspection"
+    assert "getNumberOfParameters" in content, \
+        "worker must check handler param count"
+    assert "$params" in content, \
+        "worker must extract params from event"
+    assert "handler($event, $params)" in content, \
+        "worker must pass params as second arg when handler accepts it"
+
+
+def test_php_handle_request_passes_params_through() -> None:
+    """Params in event should be passed through to the PHP handler."""
+    old_resolve = php_daemon._resolve_handler_path
+    old_env = php_daemon._read_function_env
+    old_run = php_daemon._run_php_handler
+    seen = {}
+    try:
+        php_daemon._resolve_handler_path = lambda *_a, **_k: Path("/tmp/handler.php")
+        php_daemon._read_function_env = lambda _p: {}
+
+        def fake_run(_handler_path, event, timeout_ms, **_kw):
+            seen["event"] = event
+            return {"status": 200, "headers": {}, "body": "ok"}
+
+        php_daemon._run_php_handler = fake_run
+        resp = php_daemon._handle_request_direct(
+            {"fn": "demo", "event": {"params": {"id": "42"}}}
+        )
+        assert resp["status"] == 200
+        assert seen["event"]["params"]["id"] == "42"
+    finally:
+        php_daemon._resolve_handler_path = old_resolve
+        php_daemon._read_function_env = old_env
+        php_daemon._run_php_handler = old_run
+
+
 def main() -> None:
     test_bool_env()
     test_parse_extra_allow_roots_and_function_env()
@@ -735,6 +781,8 @@ def main() -> None:
     test_pool_and_serve_conn_paths()
     test_composer_deps_reaper_and_main_paths()
     test_additional_edge_branches()
+    test_php_worker_has_reflection_param_injection()
+    test_php_handle_request_passes_params_through()
     print("php daemon unit tests passed")
 
 

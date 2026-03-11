@@ -8,6 +8,7 @@ import stat
 import struct
 import subprocess
 import threading
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -68,6 +69,13 @@ func main() {
     }
   }
 
+  if params, ok := event["params"].(map[string]interface{}); ok {
+    for k, v := range params {
+      if _, exists := event[k]; !exists {
+        event[k] = v
+      }
+    }
+  }
   out := __FASTFN_HANDLER__(event)
   enc, err := json.Marshal(out)
   if err != nil {
@@ -101,6 +109,35 @@ def _read_function_env(handler_path: Path) -> Dict[str, str]:
         if value is not None:
             out[key] = str(value)
     return out
+
+
+@contextmanager
+def _patched_process_env(env: Dict[str, Any]) -> Any:
+    if not isinstance(env, dict) or not env:
+        yield
+        return
+
+    tracked: list[str] = []
+    previous: Dict[str, str] = {}
+    for raw_key, raw_value in env.items():
+        if not isinstance(raw_key, str) or not raw_key:
+            continue
+        tracked.append(raw_key)
+        if raw_key in os.environ:
+            previous[raw_key] = os.environ[raw_key]
+        if raw_value is None:
+            os.environ.pop(raw_key, None)
+        else:
+            os.environ[raw_key] = str(raw_value)
+
+    try:
+        yield
+    finally:
+        for key in tracked:
+            if key in previous:
+                os.environ[key] = previous[key]
+            else:
+                os.environ.pop(key, None)
 
 
 def _recvall(conn: socket.socket, size: int) -> bytes:
@@ -370,13 +407,17 @@ def _run_go_handler(binary: Path, event: Dict[str, Any], timeout_ms: int) -> Dic
             "body": json.dumps({"error": "invalid go handler response", "raw": raw[:400]}, separators=(",", ":")),
         }
     try:
-        return _normalize_response(parsed)
+        result = _normalize_response(parsed)
     except Exception as exc:
         return {
             "status": 500,
             "headers": {"Content-Type": "application/json"},
             "body": json.dumps({"error": str(exc)}, separators=(",", ":")),
         }
+    stderr_str = (proc.stderr or "").strip()
+    if stderr_str:
+        result["stderr"] = stderr_str
+    return result
 
 
 def _handle_request(req: Dict[str, Any]) -> Dict[str, Any]:
@@ -408,7 +449,8 @@ def _handle_request(req: Dict[str, Any]) -> Dict[str, Any]:
     timeout_ms = max(50, timeout_ms)
 
     binary = _ensure_go_binary(handler_path)
-    return _run_go_handler(binary, event_with_env, timeout_ms)
+    with _patched_process_env(event_with_env.get("env", {})):
+        return _run_go_handler(binary, event_with_env, timeout_ms)
 
 
 def _ensure_socket_dir(path: str) -> None:

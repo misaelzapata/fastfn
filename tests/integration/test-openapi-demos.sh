@@ -5,10 +5,45 @@ ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 WAIT_SECS="${WAIT_SECS:-120}"
 KEEP_UP="${KEEP_UP:-0}"
 
+TEST_HOST="${TEST_HOST:-127.0.0.1}"
+TEST_PORT="${TEST_PORT:-${FN_HOST_PORT:-8080}}"
+BASE_URL="${BASE_URL:-http://${TEST_HOST}:${TEST_PORT}}"
+CURL_CONNECT_TIMEOUT_SECS="${CURL_CONNECT_TIMEOUT_SECS:-2}"
+CURL_MAX_TIME_SECS="${CURL_MAX_TIME_SECS:-30}"
+
+export FN_HOST_PORT="${FN_HOST_PORT:-$TEST_PORT}"
+export FASTFN_TEST_BASE_URL="$BASE_URL"
+
+curl_fastfn() {
+  curl --connect-timeout "$CURL_CONNECT_TIMEOUT_SECS" --max-time "$CURL_MAX_TIME_SECS" "$@"
+}
+
 STACK_PID=""
 STACK_LOG=""
 
+export_lua_coverage_report() {
+  if [[ "${FN_LUA_COVERAGE:-0}" != "1" ]]; then
+    return
+  fi
+  local out_path="${FN_LUA_COVERAGE_REPORT_HOST:-$ROOT_DIR/coverage/lua/luacov.integration.report.out}"
+  mkdir -p "$(dirname "$out_path")"
+  (
+    cd "$ROOT_DIR"
+    docker compose exec -T openresty sh -lc '
+      report="${FN_LUA_COVERAGE_REPORT:-/tmp/luacov.report.out}"
+      cfg="${LUACOV_CONFIG:-/tmp/.luacov}"
+      if command -v luacov >/dev/null 2>&1 && [ -f "$cfg" ]; then
+        LUACOV_CONFIG="$cfg" luacov >/dev/null 2>&1 || true
+      fi
+      if [ -f "$report" ]; then
+        cat "$report"
+      fi
+    '
+  ) >"$out_path" 2>/dev/null || true
+}
+
 cleanup() {
+  export_lua_coverage_report
   if [[ -n "$STACK_PID" ]] && kill -0 "$STACK_PID" >/dev/null 2>&1; then
     kill "$STACK_PID" >/dev/null 2>&1 || true
     wait "$STACK_PID" >/dev/null 2>&1 || true
@@ -24,7 +59,7 @@ wait_for_health() {
   local ready=0
   for _ in $(seq 1 "$WAIT_SECS"); do
     local code
-    code="$(curl -sS -o /tmp/fastfn-openapi-demos-health.out -w '%{http_code}' 'http://127.0.0.1:8080/_fn/health' 2>/dev/null || true)"
+    code="$(curl_fastfn -sS -o /tmp/fastfn-openapi-demos-health.out -w '%{http_code}' "${BASE_URL}/_fn/health" 2>/dev/null || true)"
     if [[ "$code" == "200" ]]; then
       if python3 - <<'PY' >/dev/null 2>&1
 import json
@@ -71,6 +106,10 @@ start_stack() {
       FN_SCHEDULER_ENABLED=0 \
       FN_DEFAULT_TIMEOUT_MS="${FN_DEFAULT_TIMEOUT_MS:-90000}" \
       FN_RUNTIMES="${FN_RUNTIMES:-python,node,php,rust}" \
+      FN_LUA_COVERAGE="${FN_LUA_COVERAGE:-0}" \
+      FN_LUA_COVERAGE_STATS="${FN_LUA_COVERAGE_STATS:-/tmp/luacov.stats.out}" \
+      FN_LUA_COVERAGE_REPORT="${FN_LUA_COVERAGE_REPORT:-/tmp/luacov.report.out}" \
+      LUACOV_CONFIG="${LUACOV_CONFIG:-/tmp/.luacov}" \
       EDGE_AUTH_TOKEN=dev-token \
       EDGE_FILTER_API_KEY=dev \
       GITHUB_WEBHOOK_SECRET=dev \
@@ -87,7 +126,7 @@ warm_endpoint() {
   local method="${4:-GET}"
   for _ in $(seq 1 "$attempts"); do
     local code
-    code="$(curl -sS -X "$method" -o /tmp/fastfn-openapi-demos-warm.out -w '%{http_code}' "http://127.0.0.1:8080$path" 2>/dev/null || true)"
+    code="$(curl_fastfn -sS -X "$method" -o /tmp/fastfn-openapi-demos-warm.out -w '%{http_code}' "${BASE_URL}$path" 2>/dev/null || true)"
     if [[ "$code" == "$expected" ]]; then
       return 0
     fi
@@ -117,7 +156,7 @@ assert_openapi_examples() {
   # Use a temp file instead of stdin because python reads the script from stdin.
   local openapi_path rc
   openapi_path="$(mktemp -t fastfn-openapi-demos-openapi.XXXXXX.json)"
-  curl -sS 'http://127.0.0.1:8080/_fn/openapi.json' >"$openapi_path"
+  curl_fastfn -sS "${BASE_URL}/_fn/openapi.json" >"$openapi_path"
   set +e
   python3 - "$openapi_path" <<'PY'
 import json
@@ -128,6 +167,7 @@ with open(sys.argv[1], "r", encoding="utf-8") as f:
 paths = obj.get("paths") or {}
 
 assert "/node/fastfn-types/d" not in paths, "must not expose .d.ts helper files as API routes"
+assert "/rust/session-demo/src" not in paths, "must not expose runtime source internals as API routes"
 
 def query_param_map(op):
     out = {}
@@ -188,7 +228,7 @@ import urllib.parse
 import urllib.request
 from copy import deepcopy
 
-BASE = "http://127.0.0.1:8080"
+BASE = os.environ.get("FASTFN_TEST_BASE_URL", "http://127.0.0.1:8080")
 openapi = json.load(urllib.request.urlopen(BASE + "/_fn/openapi.json"))
 paths = openapi.get("paths", {})
 METHODS = ["get", "post", "put", "patch", "delete", "options", "head"]
@@ -401,6 +441,26 @@ def is_expected_warn(item):
     if path == "/polyglot-db-demo/items/{id}" and method in ("PUT", "DELETE") and code == 404:
         return True
 
+    # Platform-equivalents demo endpoints intentionally enforce auth/validation.
+    if path == "/platform-equivalents/api/v1/orders" and method == "POST" and code == 400:
+        return True
+    if path == "/platform-equivalents/api/v1/orders/{id}" and method in ("GET", "PUT") and code == 400:
+        return True
+    if path == "/platform-equivalents/auth/login" and method == "POST" and code == 400:
+        return True
+    if path == "/platform-equivalents/auth/profile" and method == "GET" and code == 401:
+        return True
+    if path == "/platform-equivalents/jobs/render-report" and method == "POST" and code == 400:
+        return True
+    if path == "/platform-equivalents/jobs/render-report/{id}" and method == "GET" and code == 404:
+        return True
+    if path == "/platform-equivalents/webhooks/github-signed" and method == "POST" and code == 401:
+        return True
+
+    # Session demos intentionally require authenticated session context.
+    if path in ("/node/session-demo", "/php/session-demo", "/python/session-demo") and method == "GET" and code == 401:
+        return True
+
     return False
 
 
@@ -436,7 +496,7 @@ assert_openapi_examples
 warm_heavy_endpoints
 
 echo "== versioned compat route (/hello@v2) =="
-code="$(curl -sS -o /tmp/fastfn-openapi-demos-hello-v2.out -w '%{http_code}' 'http://127.0.0.1:8080/hello@v2?name=World' 2>/dev/null || true)"
+code="$(curl_fastfn -sS -o /tmp/fastfn-openapi-demos-hello-v2.out -w '%{http_code}' "${BASE_URL}/hello@v2?name=World" 2>/dev/null || true)"
 if [[ "$code" != "200" ]]; then
   echo "FAIL /hello@v2 expected=200 got=$code"
   cat /tmp/fastfn-openapi-demos-hello-v2.out || true

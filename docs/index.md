@@ -1,167 +1,131 @@
 ---
 hide:
-  - navigation
   - toc
 ---
 
-<div align="center">
-  <img src="./logo.PNG" alt="FastFN logo" width="170" />
-  <h1>FastFN</h1>
-  <p><strong>Drop code. Get endpoints.</strong><br/>Polyglot runtimes, OpenAPI by default, production gateway.</p>
-  <p>
-    <a href="https://github.com/misaelzapata/fastfn">GitHub</a>
-    ·
-    <a href="./fastfn-landing.html">Marketing Landing</a>
-    ·
-    <a href="./en/index.md">English Docs</a>
-    ·
-    <a href="./es/index.md">Documentación en Español</a>
-  </p>
-</div>
+<style>
+.md-content .md-typeset h1 { display: none; }
+</style>
 
 <p align="center">
-  <a href="https://github.com/misaelzapata/fastfn"><img src="https://img.shields.io/badge/GitHub-misaelzapata%2Ffastfn-181717?logo=github&logoColor=white" alt="GitHub" /></a>
-  <a href="https://github.com/misaelzapata/fastfn/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/misaelzapata/fastfn/ci.yml?branch=main&label=CI&logo=github" alt="CI" /></a>
-  <a href="https://github.com/misaelzapata/fastfn/actions/workflows/docs.yml"><img alt="Docs" src="https://github.com/misaelzapata/fastfn/actions/workflows/docs.yml/badge.svg" /></a>
-  <a href="https://codecov.io/gh/misaelzapata/fastfn"><img alt="Coverage" src="https://codecov.io/gh/misaelzapata/fastfn/graph/badge.svg" /></a>
-  <img src="https://img.shields.io/badge/OpenAPI-3.1-6BA539?logo=openapiinitiative&logoColor=white" alt="OpenAPI" />
-  <img src="https://img.shields.io/badge/runtimes-python%20%7C%20node%20%7C%20php%20%7C%20lua%20(%2B%20rust%2C%20go%20experimental)-0A7EA4" alt="Runtimes" />
+  <img src="logo.PNG" alt="FastFN Logo" width="180">
 </p>
+<p align="center">
+    <em>FastFN framework, high performance, easy to learn, fast to code, ready for production</em>
+</p>
+<p align="center">
+<a href="https://github.com/misaelzapata/fastfn" target="_blank">
+    <img src="https://img.shields.io/badge/GitHub-misaelzapata%2Ffastfn-181717?logo=github&logoColor=white" alt="GitHub">
+</a>
+<a href="https://github.com/misaelzapata/fastfn/actions/workflows/ci.yml" target="_blank">
+    <img src="https://github.com/misaelzapata/fastfn/actions/workflows/ci.yml/badge.svg" alt="CI">
+</a>
+<a href="https://github.com/misaelzapata/fastfn/actions/workflows/docs.yml" target="_blank">
+    <img src="https://github.com/misaelzapata/fastfn/actions/workflows/docs.yml/badge.svg" alt="Docs">
+</a>
+<a href="https://codecov.io/gh/misaelzapata/fastfn" target="_blank">
+    <img src="https://codecov.io/gh/misaelzapata/fastfn/graph/badge.svg" alt="Coverage">
+</a>
+</p>
+
+<hr />
+<p><strong>Documentation</strong>: <a href="./en/index.md" target="_blank">https://misaelzapata.github.io/fastfn/en/</a></p>
+<p><strong>Source Code</strong>: <a href="https://github.com/misaelzapata/fastfn" target="_blank">https://github.com/misaelzapata/fastfn</a></p>
+<hr />
+
+<p>FastFN is a modern, fast (high-performance), serverless framework for building APIs with multiple languages based on file-system routing.</p>
+
+<p>The key features are:</p>
+<ul>
+<li><strong>Fast to code</strong>: Increase the speed to develop features by about 200% to 300%. Drop a file, get an endpoint.</li>
+<li><strong>Automatic Docs</strong>: Interactive API documentation (Swagger UI) generated automatically from your code.</li>
+<li><strong>Polyglot Power</strong>: Use the best tool for the job. AI in Python, IO in Node, glue logic in Lua, performance in Rust.</li>
+</ul>
 
 ## Start in 60 seconds
 
-### Option A: Run the demo app from this repo
+### 1. Drop a file, get an endpoint
+
+Create a file named `hello.js` (or `.py`, `.php`, `.rs`):
+
+=== "Node.js"
+    ```js
+    // hello.js
+    exports.handler = async () => "Hello World";
+    ```
+
+=== "Python"
+    ```python
+    # hello.py
+    def handler(event):
+        return {"hello": "world"}
+    ```
+
+=== "PHP"
+    ```php
+    <?php
+    function handler($event) {
+        return "Hello World";
+    }
+    ```
+
+=== "Lua"
+    ```lua
+    function handler(event)
+      return { hello = "world" }
+    end
+    ```
+
+=== "Go"
+    ```go
+    package main
+
+    func handler(event map[string]interface{}) map[string]interface{} {
+        return map[string]interface{}{
+            "status": 200,
+            "body": "Hello World",
+        }
+    }
+    ```
+
+=== "Rust"
+    ```rust
+    use serde_json::{json, Value};
+
+    pub fn handler(_event: Value) -> Value {
+        json!({
+            "status": 200,
+            "body": "Hello World"
+        })
+    }
+    ```
+
+### 2. Run the server
 
 ```bash
-bin/fastfn dev examples/functions/next-style
+fastfn dev
 ```
 
-Then open:
+### 3. Call your API
 
-- `http://127.0.0.1:8080/showcase`
-- `http://127.0.0.1:8080/docs`
+<p align="center">
+  <img src="assets/screenshots/browser-hello-world.png" alt="FastFN full browser view for /hello" width="100%">
+</p>
 
-### Option B: Drop a file, get an endpoint
-
-1. Create `hello.js`
-2. Run `fastfn dev .`
-3. Call `GET /hello`
-
-```js
-// hello.js
-exports.handler = async (event) => ({
-  message: 'Hello from FastFN!',
-  query: event.query || {},
-  runtime: 'node',
-});
-```
-
-```bash
-curl -sS 'http://127.0.0.1:8080/hello?name=World'
-```
+<p align="center">
+  <img src="demo.gif" alt="FastFN Terminal Demo" width="100%">
+</p>
 
 No `serverless.yml`. No framework boilerplate. File routes are discovered automatically.
 
-Next:
-
-- Example catalog: [Example Function Catalog](./en/reference/builtin-functions.md)
-- Routing rules: [Zero-Config Routing](./en/how-to/zero-config-routing.md)
-
-## Install
-
-```bash
-brew tap misaelzapata/homebrew-fastfn
-brew install fastfn
-```
-
-More: [Install and Release (Homebrew)](./en/how-to/homebrew.md)
-
-## Multi-language from the first page
-
-### Python
-
-```python
-# hello.py
-import json
-
-def handler(event):
-    query = event.get("query") or {}
-    name = query.get("name", "World")
-    return {
-        "status": 200,
-        "headers": {"Content-Type": "application/json"},
-        "body": json.dumps({"hello": name, "runtime": "python"}),
-    }
-```
-
-### Node.js
-
-```js
-// hello.js
-exports.handler = async (event) => ({
-  hello: (event.query || {}).name || 'World',
-  runtime: 'node',
-});
-```
-
-### PHP
-
-```php
-<?php
-function handler(array $event): array {
-  $query = $event["query"] ?? [];
-  $name = $query["name"] ?? "World";
-  return [
-    "status" => 200,
-    "headers" => ["Content-Type" => "application/json"],
-    "body" => json_encode(["hello" => $name, "runtime" => "php"], JSON_UNESCAPED_SLASHES),
-  ];
-}
-```
-
-### Lua
-
-```lua
-local cjson = require("cjson.safe")
-
-function handler(event)
-  local query = event.query or {}
-  local name = query.name or "World"
-  return {
-    status = 200,
-    headers = { ["Content-Type"] = "application/json" },
-    body = cjson.encode({ hello = name, runtime = "lua" }),
-  }
-end
-```
-
-### Rust (Experimental)
-
-```rust
-use serde_json::{json, Value};
-
-pub fn handler(event: Value) -> Value {
-    let name = event
-        .get("query")
-        .and_then(|q| q.get("name"))
-        .and_then(|v| v.as_str())
-        .unwrap_or("World");
-
-    json!({
-        "status": 200,
-        "headers": {"Content-Type": "application/json"},
-        "body": json!({ "hello": name, "runtime": "rust" }).to_string()
-    })
-}
-```
-
 ## Where to go next
 
-- New users: [English docs](./en/index.md)
-- Usuarios en español: [Documentación en español](./es/index.md)
-- File routing rules: [Zero-Config Routing](./en/how-to/zero-config-routing.md)
-- Full marketing landing: [FastFN landing](./fastfn-landing.html)
+<div class="grid cards" markdown>
 
----
+-   **Documentation**
+    
+    Start learning FastFN step-by-step.
+    
+    [Read the Docs](./en/index.md)
 
-Note: Rust and Go are experimental and require explicit opt-in via `FN_RUNTIMES`.
+</div>

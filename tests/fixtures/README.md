@@ -9,6 +9,7 @@ Canonical fixture root for integration and E2E scenarios.
 - `keep-warm/`: keep-warm scheduler visibility fixture.
 - `worker-pool/`: worker pool behavior and observability fixture.
 - `dep-isolation/`: per-function deps isolation fixture (node/python/php/rust).
+- `compat/`: provider-compat fixtures (for example Cloudflare Worker router migration).
 - `local-dev-samples/`: dependency-heavy local fixtures used by coverage/integration flows.
 - `local-dev-samples-migrated/`: migrated local development samples previously stored in top-level `test/`.
 

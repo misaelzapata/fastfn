@@ -1,5 +1,8 @@
 # CLI Reference
 
+
+> Verified status as of **March 10, 2026**.
+> Runtime note: FastFN auto-installs function-local dependencies from `requirements.txt` / `package.json`; host runtimes are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
 The **fastfn** CLI automates project creation and local development.
 
 ## Installation
@@ -127,3 +130,23 @@ Open the local Swagger UI (when the server is running).
 ```bash
 fastfn docs
 ```
+
+## Contract
+
+Defines expected request/response shape, configuration fields, and behavioral guarantees.
+
+## End-to-End Example
+
+Use the examples in this page as canonical templates for implementation and testing.
+
+## Edge Cases
+
+- Missing configuration fallbacks
+- Route conflicts and precedence
+- Runtime-specific nuances
+
+## See also
+
+- [Function Specification](function-spec.md)
+- [HTTP API Reference](http-api.md)
+- [Run and Test Checklist](../how-to/run-and-test.md)

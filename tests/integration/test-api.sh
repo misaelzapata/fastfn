@@ -7,6 +7,19 @@ KEEP_UP="${KEEP_UP:-0}"
 KEEP_FIXTURE_ARTIFACTS="${KEEP_FIXTURE_ARTIFACTS:-0}"
 RUNTIMES_WITH_RUST="${RUNTIMES_WITH_RUST:-python,node,php,rust}"
 
+TEST_HOST="${TEST_HOST:-127.0.0.1}"
+TEST_PORT="${TEST_PORT:-${FN_HOST_PORT:-8080}}"
+BASE_URL="${BASE_URL:-http://${TEST_HOST}:${TEST_PORT}}"
+CURL_CONNECT_TIMEOUT_SECS="${CURL_CONNECT_TIMEOUT_SECS:-2}"
+CURL_MAX_TIME_SECS="${CURL_MAX_TIME_SECS:-30}"
+
+export FASTFN_TEST_BASE_URL="$BASE_URL"
+export FN_HOST_PORT="${FN_HOST_PORT:-$TEST_PORT}"
+
+curl_fastfn() {
+  curl --connect-timeout "$CURL_CONNECT_TIMEOUT_SECS" --max-time "$CURL_MAX_TIME_SECS" "$@"
+}
+
 if [[ -n "${FORCE_COLOR:-}" && -n "${NO_COLOR:-}" ]]; then
   unset NO_COLOR
 fi
@@ -25,6 +38,22 @@ cleanup_fixture_artifacts() {
     -prune -exec rm -rf {} + >/dev/null 2>&1 || true
   find "$fixtures_dir" -type f \( -name "*.pyc" -o -name "*.pyo" \) \
     -delete >/dev/null 2>&1 || true
+
+  # Remove dependency state files created by runtime auto-install/inference.
+  find "$fixtures_dir" -type f -name ".fastfn-deps-state.json" -delete >/dev/null 2>&1 || true
+}
+
+reset_dep_isolation_fixture() {
+  local no_deps_dir="$ROOT_DIR/tests/fixtures/dep-isolation/node/node-no-deps"
+  if [[ ! -d "$no_deps_dir" ]]; then
+    return 0
+  fi
+
+  # Keep this fixture intentionally manifest-free for isolation assertions.
+  rm -rf "$no_deps_dir/node_modules" \
+         "$no_deps_dir/package.json" \
+         "$no_deps_dir/package-lock.json" \
+         "$no_deps_dir/.fastfn-deps-state.json"
 }
 
 cleanup() {
@@ -44,13 +73,14 @@ trap cleanup EXIT
 
 if [[ "$KEEP_FIXTURE_ARTIFACTS" != "1" ]]; then
   cleanup_fixture_artifacts
+  reset_dep_isolation_fixture
 fi
 
 wait_for_health() {
   local ready=0
   for _ in $(seq 1 "$WAIT_SECS"); do
     local code
-    code="$(curl -sS -o /tmp/fastfn-health.out -w '%{http_code}' 'http://127.0.0.1:8080/_fn/health' 2>/dev/null || true)"
+    code="$(curl_fastfn -sS -o /tmp/fastfn-health.out -w '%{http_code}' "${BASE_URL}/_fn/health" 2>/dev/null || true)"
     if [[ "$code" == "200" ]]; then
       if python3 - <<'PY' >/dev/null 2>&1
 import json
@@ -93,7 +123,7 @@ wait_for_catalog_ready() {
   for _ in $(seq 1 "$WAIT_SECS"); do
     local body_file code
     body_file="$(mktemp)"
-    code="$(curl -sS -o "$body_file" -w '%{http_code}' 'http://127.0.0.1:8080/_fn/catalog' 2>/dev/null || true)"
+    code="$(curl_fastfn -sS -o "$body_file" -w '%{http_code}' "${BASE_URL}/_fn/catalog" 2>/dev/null || true)"
 
     if [[ "$code" == "404" ]]; then
       rm -f "$body_file"
@@ -188,7 +218,7 @@ assert_status() {
   local body_file
   body_file="$(mktemp)"
   local code
-  code="$(curl -sS -X "$method" -o "$body_file" -w '%{http_code}' "http://127.0.0.1:8080$path")"
+  code="$(curl_fastfn -sS -X "$method" -o "$body_file" -w '%{http_code}' "${BASE_URL}$path")"
   if [[ "$code" != "$expected" ]]; then
     echo "FAIL $method $path expected=$expected got=$code"
     cat "$body_file" || true
@@ -206,7 +236,7 @@ assert_status_extra() {
   local body_file
   body_file="$(mktemp)"
   local code
-  code="$(curl -sS -X "$method" "$@" -o "$body_file" -w '%{http_code}' "http://127.0.0.1:8080$path")"
+  code="$(curl_fastfn -sS -X "$method" "$@" -o "$body_file" -w '%{http_code}' "${BASE_URL}$path")"
   if [[ "$code" != "$expected" ]]; then
     echo "FAIL $method $path expected=$expected got=$code"
     cat "$body_file" || true
@@ -226,7 +256,7 @@ assert_body_contains() {
   local path="$2"
   local needle="$3"
   local body
-  body="$(curl -sS -X "$method" "http://127.0.0.1:8080$path")"
+  body="$(curl_fastfn -sS -X "$method" "${BASE_URL}$path")"
   if [[ "$body" != *"$needle"* ]]; then
     echo "FAIL $method $path missing body fragment: $needle"
     echo "Body: $body"
@@ -243,7 +273,7 @@ assert_download_attachment() {
   local headers_file body_file code
   headers_file="$(mktemp)"
   body_file="$(mktemp)"
-  code="$(curl -sS -D "$headers_file" -o "$body_file" -w '%{http_code}' "http://127.0.0.1:8080$path")"
+  code="$(curl_fastfn -sS -D "$headers_file" -o "$body_file" -w '%{http_code}' "${BASE_URL}$path")"
   if [[ "$code" != "200" ]]; then
     echo "FAIL GET $path expected=200 got=$code"
     cat "$body_file" || true
@@ -277,7 +307,7 @@ assert_download_attachment() {
 
 assert_invoke_uses_mapped_route() {
   local catalog
-  catalog="$(curl -sS 'http://127.0.0.1:8080/_fn/catalog')"
+  catalog="$(curl_fastfn -sS "${BASE_URL}/_fn/catalog")"
   local payload
   payload="$(CATALOG_JSON="$catalog" python3 - <<'PY'
 import json, os, re
@@ -341,7 +371,7 @@ print(json.dumps(chosen, separators=(",", ":")))
 PY
 )"
   local body
-  body="$(curl -sS -X POST 'http://127.0.0.1:8080/_fn/invoke' -H 'Content-Type: application/json' --data "$payload")"
+  body="$(curl_fastfn -sS -X POST "${BASE_URL}/_fn/invoke" -H 'Content-Type: application/json' --data "$payload")"
   INVOKE_BODY="$body" INVOKE_PAYLOAD="$payload" python3 - <<'PY'
 import json, os
 
@@ -425,11 +455,11 @@ PY
 
 assert_invoke_with_route_params() {
   local catalog
-  catalog="$(curl -sS 'http://127.0.0.1:8080/_fn/catalog')"
+  catalog="$(curl_fastfn -sS "${BASE_URL}/_fn/catalog")"
   local payload
   payload="$(build_dynamic_invoke_payload "$catalog")"
   local body
-  body="$(curl -sS -X POST 'http://127.0.0.1:8080/_fn/invoke' -H 'Content-Type: application/json' --data "$payload")"
+  body="$(curl_fastfn -sS -X POST "${BASE_URL}/_fn/invoke" -H 'Content-Type: application/json' --data "$payload")"
   INVOKE_BODY="$body" INVOKE_PAYLOAD="$payload" python3 - <<'PY'
 import json, os
 
@@ -448,12 +478,12 @@ PY
 
 assert_enqueue_with_route_params() {
   local catalog
-  catalog="$(curl -sS 'http://127.0.0.1:8080/_fn/catalog')"
+  catalog="$(curl_fastfn -sS "${BASE_URL}/_fn/catalog")"
   local payload
   payload="$(build_dynamic_invoke_payload "$catalog")"
 
   local enqueue_body
-  enqueue_body="$(curl -sS -X POST 'http://127.0.0.1:8080/_fn/jobs' -H 'Content-Type: application/json' --data "$payload")"
+  enqueue_body="$(curl_fastfn -sS -X POST "${BASE_URL}/_fn/jobs" -H 'Content-Type: application/json' --data "$payload")"
   local job_id
   job_id="$(ENQUEUE_BODY="$enqueue_body" python3 - <<'PY'
 import json, os
@@ -468,7 +498,7 @@ PY
   local status="queued"
   for _ in $(seq 1 25); do
     local meta
-    meta="$(curl -sS "http://127.0.0.1:8080/_fn/jobs/$job_id")"
+    meta="$(curl_fastfn -sS "${BASE_URL}/_fn/jobs/$job_id")"
     status="$(JOB_META="$meta" python3 - <<'PY'
 import json, os
 obj = json.loads(os.environ["JOB_META"])
@@ -483,12 +513,12 @@ PY
 
   if [[ "$status" != "done" ]]; then
     echo "FAIL enqueue job did not complete successfully (status=$status)"
-    curl -sS "http://127.0.0.1:8080/_fn/jobs/$job_id" || true
+    curl_fastfn -sS "${BASE_URL}/_fn/jobs/$job_id" || true
     exit 1
   fi
 
   local result
-  result="$(curl -sS "http://127.0.0.1:8080/_fn/jobs/$job_id/result")"
+  result="$(curl_fastfn -sS "${BASE_URL}/_fn/jobs/$job_id/result")"
   JOB_RESULT="$result" JOB_PAYLOAD="$payload" python3 - <<'PY'
 import json, os
 
@@ -507,8 +537,8 @@ assert_openapi_paths() {
   local mode="$1"
   local openapi
   local catalog
-  openapi="$(curl -sS 'http://127.0.0.1:8080/_fn/openapi.json')"
-  catalog="$(curl -sS 'http://127.0.0.1:8080/_fn/catalog')"
+  openapi="$(curl_fastfn -sS "${BASE_URL}/_fn/openapi.json")"
+  catalog="$(curl_fastfn -sS "${BASE_URL}/_fn/catalog")"
   OPENAPI_JSON="$openapi" CATALOG_JSON="$catalog" OPENAPI_MODE="$mode" python3 - <<'PY'
 import json, os, sys
 
@@ -658,7 +688,7 @@ assert_scheduler_nonblocking() {
   local ready=0
   local snapshot=""
   for _ in $(seq 1 40); do
-    snapshot="$(curl -sS 'http://127.0.0.1:8080/_fn/schedules')"
+    snapshot="$(curl_fastfn -sS "${BASE_URL}/_fn/schedules")"
     if SNAPSHOT_JSON="$snapshot" python3 - <<'PY' >/dev/null 2>&1
 import json
 import os
@@ -699,7 +729,7 @@ PY
   for _ in $(seq 1 12); do
     local body_file out code secs ms
     body_file="$(mktemp)"
-    out="$(curl -sS -o "$body_file" -w '%{http_code} %{time_total}' 'http://127.0.0.1:8080/health')"
+    out="$(curl_fastfn -sS -o "$body_file" -w '%{http_code} %{time_total}' "${BASE_URL}/health")"
     code="${out%% *}"
     secs="${out##* }"
     if [[ "$code" != "200" ]]; then
@@ -723,7 +753,7 @@ PY
 
   if (( max_ms > threshold_ms )); then
     echo "FAIL scheduler blocked public calls: max /health latency ${max_ms}ms exceeds ${threshold_ms}ms"
-    curl -sS 'http://127.0.0.1:8080/_fn/schedules' || true
+    curl_fastfn -sS "${BASE_URL}/_fn/schedules" || true
     exit 1
   fi
 
@@ -774,7 +804,7 @@ PY
       echo "(missing)"
     fi
     echo "---- /_fn/schedules ----"
-    curl -sS 'http://127.0.0.1:8080/_fn/schedules' || true
+    curl_fastfn -sS "${BASE_URL}/_fn/schedules" || true
     exit 1
   fi
 
@@ -787,9 +817,9 @@ assert_keep_warm_visibility() {
   local health=""
   local catalog=""
   for _ in $(seq 1 30); do
-    snapshot="$(curl -sS 'http://127.0.0.1:8080/_fn/schedules')"
-    health="$(curl -sS 'http://127.0.0.1:8080/_fn/health')"
-    catalog="$(curl -sS 'http://127.0.0.1:8080/_fn/catalog')"
+    snapshot="$(curl_fastfn -sS "${BASE_URL}/_fn/schedules")"
+    health="$(curl_fastfn -sS "${BASE_URL}/_fn/health")"
+    catalog="$(curl_fastfn -sS "${BASE_URL}/_fn/catalog")"
     if SNAPSHOT_JSON="$snapshot" HEALTH_JSON="$health" CATALOG_JSON="$catalog" python3 - <<'PY' >/dev/null 2>&1
 import json
 import os
@@ -870,11 +900,13 @@ assert_worker_pool_runtime_fn_version() {
   summary="$(python3 - <<'PY'
 import concurrent.futures
 import json
+import os
 import time
 import urllib.error
 import urllib.request
 
-URL = "http://127.0.0.1:8080/slow"
+BASE_URL = os.environ.get("FASTFN_TEST_BASE_URL", "http://127.0.0.1:8080")
+URL = BASE_URL + "/slow"
 
 def one_call():
     req = urllib.request.Request(url=URL, method="GET", headers={"Accept": "application/json"})
@@ -931,9 +963,10 @@ PY
   local isolation
   isolation="$(python3 - <<'PY'
 import json
+import os
 import urllib.request
 
-BASE = "http://127.0.0.1:8080"
+BASE = os.environ.get("FASTFN_TEST_BASE_URL", "http://127.0.0.1:8080")
 
 def call(path):
     req = urllib.request.Request(url=BASE + path, method="GET", headers={"Accept": "application/json"})
@@ -965,14 +998,15 @@ PY
 
 assert_worker_pool_parallel_multiruntime() {
   local summary
-  summary="$(python3 - <<'PY'
+summary="$(python3 - <<'PY'
 import concurrent.futures
 import json
+import os
 import time
 import urllib.error
 import urllib.request
 
-BASE = "http://127.0.0.1:8080"
+BASE = os.environ.get("FASTFN_TEST_BASE_URL", "http://127.0.0.1:8080")
 TARGETS = [
     {"runtime": "node", "path": "/slow-node"},
     {"runtime": "python", "path": "/slow-python"},
@@ -1045,9 +1079,11 @@ assert_worker_pool_health_observability() {
   local summary
   summary="$(python3 - <<'PY'
 import json
+import os
 import urllib.request
 
-with urllib.request.urlopen("http://127.0.0.1:8080/_fn/health", timeout=8) as resp:
+BASE_URL = os.environ.get("FASTFN_TEST_BASE_URL", "http://127.0.0.1:8080")
+with urllib.request.urlopen(BASE_URL + "/_fn/health", timeout=8) as resp:
     health = json.loads(resp.read().decode("utf-8"))
 
 functions = health.get("functions") or {}
@@ -1099,11 +1135,13 @@ assert_python_dep_worker_persistent() {
   local summary
   summary="$(python3 - <<'PY'
 import json
+import os
 import time
 import urllib.error
 import urllib.request
 
-URL = "http://127.0.0.1:8080/py-persistent"
+BASE_URL = os.environ.get("FASTFN_TEST_BASE_URL", "http://127.0.0.1:8080")
+URL = BASE_URL + "/py-persistent"
 
 def call_once():
     req = urllib.request.Request(url=URL, method="GET", headers={"Accept": "application/json"})
@@ -1144,11 +1182,13 @@ assert_python_with_deps_available() {
   local summary
   summary="$(python3 - <<'PY'
 import json
+import os
 import time
 import urllib.error
 import urllib.request
 
-URL = "http://127.0.0.1:8080/py-with-deps"
+BASE_URL = os.environ.get("FASTFN_TEST_BASE_URL", "http://127.0.0.1:8080")
+URL = BASE_URL + "/py-with-deps"
 deadline = time.time() + 180
 last_err = None
 
@@ -1187,7 +1227,7 @@ import time
 import urllib.error
 import urllib.request
 
-BASE_URL = "http://127.0.0.1:8080"
+BASE_URL = os.environ.get("FASTFN_TEST_BASE_URL", "http://127.0.0.1:8080")
 THRESHOLD_MS = int(os.environ.get("PARALLEL_THRESHOLD_MS", "3500"))
 WARM_TIMEOUT_SEC = float(os.environ.get("PARALLEL_WARM_TIMEOUT_SEC", "45"))
 WARM_TIMEOUT_RUST_SEC = float(os.environ.get("PARALLEL_WARM_TIMEOUT_RUST_SEC", "180"))
@@ -1311,6 +1351,76 @@ print(json.dumps({"routes": len(uniq), "max_ms": max_ms}, separators=(",", ":"))
 PY
 )"
   echo "parallel mapped routes non-blocking check: $summary"
+}
+
+assert_cloudflare_v1_router_fixture() {
+  local body_file code
+
+  body_file="$(mktemp)"
+  code="$(curl_fastfn -sS -o "$body_file" -w '%{http_code}' "${BASE_URL}/api/v1/status")"
+  if [[ "$code" != "200" ]]; then
+    echo "FAIL GET /api/v1/status expected=200 got=$code"
+    cat "$body_file" || true
+    rm -f "$body_file"
+    exit 1
+  fi
+  STATUS_BODY_FILE="$body_file" python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+obj = json.loads(Path(os.environ["STATUS_BODY_FILE"]).read_text(encoding="utf-8"))
+if obj.get("success") is not True:
+    raise SystemExit("status payload missing success=true")
+data = obj.get("data") or {}
+if data.get("status") != "healthy":
+    raise SystemExit("status payload missing healthy state")
+if data.get("environment") != "compat-fixture":
+    raise SystemExit("status payload missing fixture ENVIRONMENT")
+if data.get("version") != "1.0.0":
+    raise SystemExit("status payload missing version")
+if not isinstance(data.get("timestamp"), str) or not data.get("timestamp"):
+    raise SystemExit("status payload missing timestamp")
+PY
+  rm -f "$body_file"
+
+  assert_status_extra POST "/api/v1/messages" "415" \
+    -H 'Content-Type: text/plain' \
+    --data 'not-json'
+  assert_body_contains POST "/api/v1/messages" "\"message\":\"Content-Type must be application/json\""
+
+  body_file="$(mktemp)"
+  code="$(curl_fastfn -sS -X POST -H 'Content-Type: application/json' --data '{"message":"hola"}' \
+    -o "$body_file" -w '%{http_code}' "${BASE_URL}/api/v1/messages")"
+  if [[ "$code" != "201" ]]; then
+    echo "FAIL POST /api/v1/messages expected=201 got=$code"
+    cat "$body_file" || true
+    rm -f "$body_file"
+    exit 1
+  fi
+  MESSAGE_BODY_FILE="$body_file" python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+obj = json.loads(Path(os.environ["MESSAGE_BODY_FILE"]).read_text(encoding="utf-8"))
+if obj.get("success") is not True:
+    raise SystemExit("message payload missing success=true")
+data = obj.get("data") or {}
+if data.get("message") != "hola":
+    raise SystemExit("message payload missing echoed message")
+if not isinstance(data.get("timestamp"), str) or not data.get("timestamp"):
+    raise SystemExit("message payload missing timestamp")
+if not isinstance(data.get("id"), str) or not data.get("id"):
+    raise SystemExit("message payload missing id")
+PY
+  rm -f "$body_file"
+
+  assert_status GET "/api/v1/unknown" "404"
+  assert_body_contains GET "/api/v1/unknown" "\"message\":\"Not Found\""
+
+  assert_status GET "/api/v2/status" "400"
+  assert_body_contains GET "/api/v2/status" "\"message\":\"Invalid API version\""
 }
 
 echo "== Phase 1: Next-style single app =="
@@ -1458,9 +1568,11 @@ assert_worker_pool_health_observability
 stop_stack
 
 echo "== Phase 9: per-function dependency isolation =="
+reset_dep_isolation_fixture
 start_stack "tests/fixtures/dep-isolation" \
   "FN_UI_ENABLED=0" "FN_CONSOLE_WRITE_ENABLED=0" \
   "FN_PREINSTALL_PY_DEPS_ON_START=0" "FN_PREINSTALL_NODE_DEPS_ON_START=0" \
+  "FN_AUTO_INFER_PY_DEPS=0" "FN_AUTO_INFER_NODE_DEPS=0" \
   "FN_DEFAULT_TIMEOUT_MS=90000" \
   "FN_RUNTIMES=$RUNTIMES_WITH_RUST"
 
@@ -1500,6 +1612,77 @@ assert_status GET "/rust-basic" "200"
 assert_body_contains GET "/rust-basic" "\"runtime\":\"rust\""
 assert_body_contains GET "/rust-basic" "\"ok\":true"
 
+stop_stack
+
+echo "== Phase 10: Cloudflare Worker compat fixture =="
+if node -e 'process.exit((typeof Request === "function" && typeof Response === "function") ? 0 : 1)' >/dev/null 2>&1; then
+  start_stack "tests/fixtures/compat" "FN_UI_ENABLED=0" "FN_CONSOLE_WRITE_ENABLED=0" "FN_RUNTIMES=node"
+  assert_reload_methods
+  assert_cloudflare_v1_router_fixture
+  stop_stack
+else
+  echo "skip cloudflare compat fixture: Node Request/Response globals unavailable"
+fi
+
+echo "== Phase 11: Secrets vault injection =="
+# Use the polyglot demo stack (Phase 5 left it up — restart with write enabled)
+start_stack "examples/functions/next-style" "FN_CONSOLE_WRITE_ENABLED=1" "FN_RUNTIMES=python" "FN_DEFAULT_TIMEOUT_MS=5000"
+
+# 11a. List secrets — initially empty
+assert_body_contains GET "/_fn/secrets" "[]"
+
+# 11b. Create a secret
+body=$(curl_fastfn -s -X POST "${BASE_URL}/_fn/secrets" \
+  -H 'Content-Type: application/json' \
+  -d '{"key":"TEST_SECRET","value":"s3cret-value-42"}')
+echo "$body" | grep -q '"status":"created"' || { echo "FAIL: create secret"; echo "$body"; exit 1; }
+echo "  ok: secret created"
+
+# 11c. List secrets — should contain TEST_SECRET
+body=$(curl_fastfn -s "${BASE_URL}/_fn/secrets")
+echo "$body" | grep -q '"key":"TEST_SECRET"' || { echo "FAIL: secret not in list"; echo "$body"; exit 1; }
+echo "  ok: secret listed"
+
+# 11d. Create a Python function that reads event.secrets
+mkdir -p /tmp/fastfn-secrets-test/python/secret-checker
+cat > /tmp/fastfn-secrets-test/python/secret-checker/app.py << 'PYEOF'
+def handler(event):
+    secrets = event.get("secrets") or {}
+    val = secrets.get("TEST_SECRET", "")
+    return {"status": 200, "body": {"has_secret": bool(val), "masked": val[:4] + "..." if val else ""}}
+PYEOF
+cat > /tmp/fastfn-secrets-test/python/secret-checker/fn.config.json << 'CFGEOF'
+{"invoke":{"methods":["GET"],"routes":["/secret-checker","/secret-checker/*"]}}
+CFGEOF
+
+# Copy function into the running stack's functions directory (idempotent).
+# Remove destination first to avoid nested copy (secret-checker/secret-checker),
+# which can create version-route conflicts and hide /secret-checker.
+docker compose exec -T openresty sh -lc \
+  'rm -rf /app/srv/fn/functions/python/secret-checker && mkdir -p /app/srv/fn/functions/python/secret-checker'
+docker compose cp /tmp/fastfn-secrets-test/python/secret-checker/. openresty:/app/srv/fn/functions/python/secret-checker
+curl_fastfn -s -X POST "${BASE_URL}/_fn/reload" > /dev/null
+
+# 11e. Call the function — should receive the secret
+sleep 2
+body=$(curl_fastfn -s "${BASE_URL}/secret-checker")
+echo "$body" | grep -q '"has_secret":true' || { echo "FAIL: secret not injected into event"; echo "$body"; exit 1; }
+echo "$body" | grep -q '"masked":"s3cr..."' || { echo "FAIL: secret value mismatch"; echo "$body"; exit 1; }
+echo "  ok: secret injected into event.secrets"
+
+# 11f. Delete the secret
+body=$(curl_fastfn -s -X DELETE "${BASE_URL}/_fn/secrets?key=TEST_SECRET")
+echo "$body" | grep -q '"status":"deleted"' || { echo "FAIL: delete secret"; echo "$body"; exit 1; }
+echo "  ok: secret deleted"
+
+# 11g. Call function again — secret should be gone
+body=$(curl_fastfn -s "${BASE_URL}/secret-checker")
+echo "$body" | grep -q '"has_secret":false' || { echo "FAIL: secret still present after delete"; echo "$body"; exit 1; }
+echo "  ok: secret removed from event after deletion"
+
+# Cleanup
+rm -rf /tmp/fastfn-secrets-test
+docker compose exec -T openresty sh -lc 'rm -rf /app/srv/fn/functions/python/secret-checker' >/dev/null 2>&1 || true
 stop_stack
 
 echo "PASS test-api.sh (routing/admin/polyglot integration)"

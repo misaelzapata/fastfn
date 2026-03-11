@@ -1,5 +1,8 @@
 # Workers Compatibility (Beta): portar Cloudflare Workers y Lambda a FastFN
 
+
+> Estado verificado al **10 de marzo de 2026**.
+> Nota de runtime: FastFN auto-instala dependencias locales por función desde `requirements.txt` / `package.json`; en `fastfn dev --native` necesitas runtimes instalados en host, mientras que `fastfn dev` depende de Docker daemon activo.
 Esta feature beta busca reducir al minimo el overhead para reutilizar handlers existentes en FastFN sin reescribir toda la logica de negocio.
 
 ## Objetivo
@@ -145,3 +148,33 @@ exports.handler = (event, context, callback) => {
 - [Cloudflare: How Workers works](https://developers.cloudflare.com/workers/reference/how-workers-works/)
 - [Cloudflare Worker example repo](https://github.com/advissor/nodejs-cloudflare-workers/blob/main/src/index.js)
 - [AWS Lambda Node.js handlers](https://docs.aws.amazon.com/lambda/latest/dg/nodejs-handler.html)
+
+## Diagrama de Flujo
+
+```mermaid
+flowchart LR
+  A["Request del cliente"] --> B["Discovery de rutas"]
+  B --> C["Validación de políticas y método"]
+  C --> D["Ejecución del handler runtime"]
+  D --> E["Respuesta HTTP + paridad OpenAPI"]
+```
+
+## Problema
+
+Qué dolor operativo o de DX resuelve este tema.
+
+## Modelo Mental
+
+Cómo razonar esta feature en entornos similares a producción.
+
+## Decisiones de Diseño
+
+- Por qué existe este comportamiento
+- Qué tradeoffs se aceptan
+- Cuándo conviene una alternativa
+
+## Ver también
+
+- [Especificación de Funciones](../referencia/especificacion-funciones.md)
+- [Referencia API HTTP](../referencia/api-http.md)
+- [Checklist Ejecutar y Probar](../como-hacer/ejecutar-y-probar.md)

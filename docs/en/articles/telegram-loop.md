@@ -1,5 +1,8 @@
 # Telegram Loop Mode (Self-Contained)
 
+
+> Verified status as of **March 10, 2026**.
+> Runtime note: FastFN auto-installs function-local dependencies from `requirements.txt` / `package.json`; host runtimes are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
 This article explains how `telegram-ai-reply` can run a full E2E loop **inside a single endpoint**. The same URL can:
 
 - send a prompt to your chat,
@@ -73,3 +76,33 @@ These can be provided in `fn.env.json` for `telegram-ai-reply`, or via container
 
 Memory is stored locally in `<FN_FUNCTIONS_ROOT>/node/telegram-ai-reply/.memory.json`.
 Loop offset state is stored in `<FN_FUNCTIONS_ROOT>/node/telegram-ai-reply/.loop_state.json`.
+
+## Flow Diagram
+
+```mermaid
+flowchart LR
+  A["Client request"] --> B["Route discovery"]
+  B --> C["Policy and method validation"]
+  C --> D["Runtime handler execution"]
+  D --> E["HTTP response + OpenAPI parity"]
+```
+
+## Problem
+
+What operational or developer pain this topic solves.
+
+## Mental Model
+
+How to reason about this feature in production-like environments.
+
+## Design Decisions
+
+- Why this behavior exists
+- Tradeoffs accepted
+- When to choose alternatives
+
+## See also
+
+- [Function Specification](../reference/function-spec.md)
+- [HTTP API Reference](../reference/http-api.md)
+- [Run and Test Checklist](../how-to/run-and-test.md)

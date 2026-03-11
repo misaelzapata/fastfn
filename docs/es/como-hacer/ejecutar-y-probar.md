@@ -1,5 +1,8 @@
 # Ejecutar y probar
 
+
+> Estado verificado al **10 de marzo de 2026**.
+> Nota de runtime: FastFN auto-instala dependencias locales por función desde `requirements.txt` / `package.json`; en `fastfn dev --native` necesitas runtimes instalados en host, mientras que `fastfn dev` depende de Docker daemon activo.
 ## Ficha rapida
 
 - Complejidad: Intermedia
@@ -144,6 +147,8 @@ Suites focalizadas:
 bash tests/integration/test-openapi-system.sh
 bash tests/integration/test-openapi-native.sh
 bash tests/integration/test-api.sh
+bash tests/integration/test-auto-install-inference.sh
+bash tests/integration/test-platform-equivalents.sh
 ```
 
 Criterio de aceptacion:
@@ -159,9 +164,47 @@ Criterio de aceptacion:
 - [ ] `mapped_route_conflicts` vacio (o conflicto documentado)
 - [ ] `test-openapi-system.sh` en verde
 - [ ] `test-openapi-native.sh` en verde (o justificado fuera de entorno native)
+- [ ] `test-auto-install-inference.sh` en verde (inferencia strict + metadata visible)
+- [ ] `test-platform-equivalents.sh` en verde (ejemplos avanzados de auth/webhook/jobs/orders)
 - [ ] docs y links internos actualizados con el cambio
 
 Siguiente paso para hardening:
 
 - [Desplegar a produccion](./desplegar-a-produccion.md)
 - [Checklist de seguridad](./checklist-seguridad-produccion.md)
+
+## Diagrama de Flujo
+
+```mermaid
+flowchart LR
+  A["Request del cliente"] --> B["Discovery de rutas"]
+  B --> C["Validación de políticas y método"]
+  C --> D["Ejecución del handler runtime"]
+  D --> E["Respuesta HTTP + paridad OpenAPI"]
+```
+
+## Objetivo
+
+Alcance claro, resultado esperado y público al que aplica esta guía.
+
+## Prerrequisitos
+
+- CLI de FastFN disponible
+- Dependencias por modo verificadas (Docker para `fastfn dev`, OpenResty+runtimes para `fastfn dev --native`)
+
+## Checklist de Validación
+
+- Los comandos de ejemplo devuelven estados esperados
+- Las rutas aparecen en OpenAPI cuando aplica
+- Las referencias del final son navegables
+
+## Solución de Problemas
+
+- Si un runtime cae, valida dependencias de host y endpoint de health
+- Si faltan rutas, vuelve a ejecutar discovery y revisa layout de carpetas
+
+## Ver también
+
+- [Especificación de Funciones](../referencia/especificacion-funciones.md)
+- [Referencia API HTTP](../referencia/api-http.md)
+- [Arquitectura](../explicacion/arquitectura.md)

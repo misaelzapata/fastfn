@@ -5,6 +5,17 @@ ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 WORK_DIR="$(mktemp -d -t fastfn-cli-init-auto.XXXXXX)"
 STACK_PID=""
 STACK_LOG=""
+TEST_HOST="${TEST_HOST:-127.0.0.1}"
+TEST_PORT="${TEST_PORT:-${FN_HOST_PORT:-8080}}"
+BASE_URL="${BASE_URL:-http://${TEST_HOST}:${TEST_PORT}}"
+CURL_CONNECT_TIMEOUT_SECS="${CURL_CONNECT_TIMEOUT_SECS:-2}"
+CURL_MAX_TIME_SECS="${CURL_MAX_TIME_SECS:-30}"
+
+export FN_HOST_PORT="${FN_HOST_PORT:-$TEST_PORT}"
+
+curl_fastfn() {
+  curl --connect-timeout "$CURL_CONNECT_TIMEOUT_SECS" --max-time "$CURL_MAX_TIME_SECS" "$@"
+}
 
 cleanup() {
   if [[ -n "$STACK_PID" ]] && kill -0 "$STACK_PID" >/dev/null 2>&1; then
@@ -16,11 +27,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Ensure no previous stack leaks into this test run.
+(cd "$ROOT_DIR" && docker compose down --remove-orphans >/dev/null 2>&1) || true
+
 wait_for_health() {
   local ready=0
   for _ in $(seq 1 90); do
     local code
-    code="$(curl -sS -o /tmp/fastfn-cli-init-health.out -w '%{http_code}' 'http://127.0.0.1:8080/_fn/health' 2>/dev/null || true)"
+    code="$(curl_fastfn -sS -o /tmp/fastfn-cli-init-health.out -w '%{http_code}' "${BASE_URL}/_fn/health" 2>/dev/null || true)"
     if [[ "$code" == "200" ]]; then
       ready=1
       break
@@ -40,7 +54,7 @@ wait_for_function_in_catalog() {
   local ready=0
   for _ in $(seq 1 30); do
     local catalog
-    catalog="$(curl -sS 'http://127.0.0.1:8080/_fn/catalog' || true)"
+    catalog="$(curl_fastfn -sS "${BASE_URL}/_fn/catalog" || true)"
     if CATALOG_JSON="$catalog" RUNTIME="$runtime" NAME="$name" python3 - <<'PY' >/dev/null 2>&1
 import json
 import os
@@ -65,7 +79,7 @@ PY
 
   if [[ "$ready" != "1" ]]; then
     echo "FAIL function not found in catalog runtime=${runtime} name=${name}"
-    curl -sS 'http://127.0.0.1:8080/_fn/catalog' || true
+    curl_fastfn -sS "${BASE_URL}/_fn/catalog" || true
     exit 1
   fi
 }
@@ -77,7 +91,7 @@ wait_for_status() {
   local ready=0
   for _ in $(seq 1 30); do
     local code
-    code="$(curl -sS -X "$method" -o /tmp/fastfn-cli-init-route.out -w '%{http_code}' "http://127.0.0.1:8080${path}" 2>/dev/null || true)"
+    code="$(curl_fastfn -sS -X "$method" -o /tmp/fastfn-cli-init-route.out -w '%{http_code}' "${BASE_URL}${path}" 2>/dev/null || true)"
     if [[ "$code" == "$expected" ]]; then
       ready=1
       break
@@ -96,7 +110,7 @@ assert_body_contains() {
   local path="$2"
   local needle="$3"
   local body
-  body="$(curl -sS -X "$method" "http://127.0.0.1:8080${path}")"
+  body="$(curl_fastfn -sS -X "$method" "${BASE_URL}${path}")"
   if [[ "$body" != *"$needle"* ]]; then
     echo "FAIL $method $path missing body fragment: $needle"
     echo "Body: $body"
@@ -109,7 +123,7 @@ assert_status() {
   local path="$2"
   local expected="$3"
   local code
-  code="$(curl -sS -X "$method" -o /tmp/fastfn-cli-init-status.out -w '%{http_code}' "http://127.0.0.1:8080${path}")"
+  code="$(curl_fastfn -sS -X "$method" -o /tmp/fastfn-cli-init-status.out -w '%{http_code}' "${BASE_URL}${path}")"
   if [[ "$code" != "$expected" ]]; then
     echo "FAIL $method $path expected=$expected got=$code"
     cat /tmp/fastfn-cli-init-status.out || true
@@ -121,7 +135,7 @@ assert_invoke_hello_node() {
   local name="$1"
   local who="$2"
   local invoke
-  invoke="$(curl -sS -X POST 'http://127.0.0.1:8080/_fn/invoke' \
+  invoke="$(curl_fastfn -sS -X POST "${BASE_URL}/_fn/invoke" \
     -H 'Content-Type: application/json' \
     --data "{\"runtime\":\"node\",\"name\":\"${name}\",\"method\":\"GET\",\"query\":{\"name\":\"${who}\"},\"body\":\"\"}")"
 
@@ -152,7 +166,7 @@ echo "== cli init auto-discovery smoke =="
 STACK_LOG="$(mktemp -t fastfn-cli-init-stack.XXXXXX.log)"
 (
   cd "$ROOT_DIR"
-  FN_UI_ENABLED=0 FN_CONSOLE_WRITE_ENABLED=0 ./bin/fastfn dev --build "$WORK_DIR" >"$STACK_LOG" 2>&1
+  FN_UI_ENABLED=0 FN_CONSOLE_WRITE_ENABLED=0 FN_ZERO_CONFIG_IGNORE_DIRS=dist,tmp ./bin/fastfn dev --build "$WORK_DIR" >"$STACK_LOG" 2>&1
 ) &
 STACK_PID="$!"
 
@@ -234,6 +248,18 @@ module.exports.handler = async () => ({ status: 200, headers: {}, body: "{}" });
 JS
 sleep 2
 assert_status GET "/node/ignored/helper" 404
+
+echo "== configurable ignored directories (env) =="
+mkdir -p "$WORK_DIR/dist"
+cat > "$WORK_DIR/dist/get.shadow.js" <<'JS'
+exports.handler = async () => ({
+  status: 200,
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ shadowed: true }),
+});
+JS
+sleep 2
+assert_status GET "/dist/shadow" 404
 
 echo "== fn.routes.json mapping override should win over file route =="
 mkdir -p "$WORK_DIR/routes-override"

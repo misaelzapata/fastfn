@@ -50,3 +50,41 @@ Guidelines for coding agents working in this repository.
 - Keep the working tree clean of generated junk.
 - Do not commit local caches, virtualenv internals, or build outputs.
 - Do not remove or revert user changes that are unrelated to the requested task.
+
+## Video Recording
+
+- Video demo scripts live in `fastfn-server/videos/`
+- `helpers.py` — shared Playwright helpers (overlays, arrows, highlights, human typing)
+- Individual scripts: `record_<feature>.py` (one per video ticket)
+- Requires Playwright venv at `/tmp/pw-venv/` (`source /tmp/pw-venv/bin/activate`)
+- Dashboard must be running at `http://127.0.0.1:8000` with `demo-user`/`demo-user` credentials
+- Output goes to `/tmp/fastfn-videos/<feature-name>/`
+- Convert .webm → .mp4: `ffmpeg -i input.webm -c:v libx264 -preset slow -crf 22 output.mp4`
+- Convert .webm → .gif: `ffmpeg -i input.webm -vf "fps=10,scale=800:-1" -loop 0 output.gif`
+- 24 video tickets exist (search `bd list` for `[video demo]`)
+
+## Landing the Plane (Session Completion)
+
+**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
+
+**MANDATORY WORKFLOW:**
+
+1. **File issues for remaining work** - Create issues for anything that needs follow-up
+2. **Run quality gates** (if code changed) - Tests, linters, builds
+3. **Update issue status** - Close finished work, update in-progress items
+4. **PUSH TO REMOTE** - This is MANDATORY:
+   ```bash
+   git pull --rebase
+   bd sync
+   git push
+   git status  # MUST show "up to date with origin"
+   ```
+5. **Clean up** - Clear stashes, prune remote branches
+6. **Verify** - All changes committed AND pushed
+7. **Hand off** - Provide context for next session
+
+**CRITICAL RULES:**
+- Work is NOT complete until `git push` succeeds
+- NEVER stop before pushing - that leaves work stranded locally
+- NEVER say "ready to push when you are" - YOU must push
+- If push fails, resolve and retry until it succeeds

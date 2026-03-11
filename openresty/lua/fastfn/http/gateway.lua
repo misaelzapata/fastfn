@@ -63,6 +63,34 @@ local function new_request_id()
   return string.format("req-%d-%d-%06d", ts_ms, ngx.worker.pid(), math.random(0, 999999))
 end
 
+local function parse_cookies(cookie_header)
+  local cookies = {}
+  if type(cookie_header) ~= "string" or cookie_header == "" then
+    return cookies
+  end
+  for pair in cookie_header:gmatch("[^;]+") do
+    local k, v = pair:match("^%s*([^=]+)%s*=%s*(.-)%s*$")
+    if k and k ~= "" then
+      cookies[k] = v or ""
+    end
+  end
+  return cookies
+end
+
+local function build_session(headers)
+  local raw = headers["cookie"] or ""
+  if raw == "" then
+    return nil
+  end
+  local cookies = parse_cookies(raw)
+  local session_id = cookies["session_id"] or cookies["sessionid"] or cookies["sid"] or nil
+  return {
+    id = session_id,
+    raw = raw,
+    cookies = cookies,
+  }
+end
+
 local function extract_user_context(query)
   if type(query) ~= "table" then
     return nil
@@ -606,6 +634,7 @@ local ok, run_err = xpcall(function()
   local query = ngx.req.get_uri_args()
   local resolved_params = type(path_params) == "table" and path_params or {}
   local user_context = extract_user_context(query)
+  local session = build_session(headers)
   local event = {
     id = request_id,
     ts = math.floor(ngx.now() * 1000),
@@ -617,6 +646,7 @@ local ok, run_err = xpcall(function()
     path_params = resolved_params,
     headers = headers,
     body = body,
+    session = session,
     client = {
       ip = ngx.var.remote_addr,
       ua = headers["user-agent"],
@@ -649,6 +679,20 @@ local ok, run_err = xpcall(function()
     },
   }
 
+  -- Inject secrets vault into event.secrets
+  local console_data = require "fastfn.console.data"
+  local secrets_list = console_data.list_secrets() or {}
+  if #secrets_list > 0 then
+    local secrets_map = {}
+    for _, item in ipairs(secrets_list) do
+      local val = FCACHE:get("sys:secret:val:" .. item.key)
+      if val then
+        secrets_map[item.key] = val
+      end
+    end
+    event.secrets = secrets_map
+  end
+
   local resp, err_code, err_msg
   if routes_mod.runtime_is_in_process(runtime, runtime_cfg) then
     resp, err_code, err_msg = lua_runtime.call({
@@ -678,6 +722,8 @@ local ok, run_err = xpcall(function()
 
   result.status = resp.status
   result.headers = resp.headers or {}
+  result.stdout = resp.stdout
+  result.stderr = resp.stderr
   if FCACHE and (result.status or 500) < 500 then
     FCACHE:set(warm_key, ngx.now())
   end
@@ -747,6 +793,12 @@ if policy.include_debug_headers == true then
   result.headers["X-Fn-Latency-Ms"] = tostring(latency_ms)
   result.headers["X-Fn-Worker-Pool-Max-Workers"] = tostring(pool_max_workers)
   result.headers["X-Fn-Worker-Pool-Max-Queue"] = tostring(pool_max_queue)
+  if type(result.stdout) == "string" and result.stdout ~= "" then
+    result.headers["X-Fn-Stdout"] = result.stdout:sub(1, 4096)
+  end
+  if type(result.stderr) == "string" and result.stderr ~= "" then
+    result.headers["X-Fn-Stderr"] = result.stderr:sub(1, 4096)
+  end
 end
 if queued then
   result.headers["X-FastFN-Queued"] = "true"

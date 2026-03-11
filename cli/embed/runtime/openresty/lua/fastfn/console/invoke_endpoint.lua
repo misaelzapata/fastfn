@@ -1,5 +1,6 @@
 local cjson = require "cjson.safe"
 local guard = require "fastfn.console.guard"
+local console = require "fastfn.console.data"
 local routes = require "fastfn.core.routes"
 local invoke_rules = require "fastfn.core.invoke_rules"
 local client = require "fastfn.core.client"

@@ -2,6 +2,21 @@ local cjson = require "cjson.safe"
 local routes = require "fastfn.core.routes"
 
 local M = {}
+local _native_getenv = os.getenv
+local _current_event_env = nil
+
+local function runtime_getenv(name)
+  if type(name) ~= "string" or name == "" then
+    return _native_getenv(name)
+  end
+  if type(_current_event_env) == "table" then
+    local value = _current_event_env[name]
+    if value ~= nil then
+      return tostring(value)
+    end
+  end
+  return _native_getenv(name)
+end
 
 local function json_body(payload)
   local encoded = cjson.encode(payload)
@@ -45,7 +60,82 @@ local function contains_response_fields(obj)
     or obj.proxy ~= nil
 end
 
-local function build_sandbox_env()
+local function normalize_function_env(raw)
+  if type(raw) ~= "table" then
+    return {}
+  end
+  local out = {}
+  for key, value in pairs(raw) do
+    if type(key) == "string" and key ~= "" then
+      if type(value) == "table" then
+        local scalar = value.value
+        if scalar ~= nil then
+          out[key] = tostring(scalar)
+        end
+      elseif value ~= nil then
+        out[key] = tostring(value)
+      end
+    end
+  end
+  return out
+end
+
+local function read_function_env(entrypoint)
+  if type(entrypoint) ~= "string" or entrypoint == "" then
+    return {}
+  end
+  local fn_dir = entrypoint:match("^(.*)/[^/]+$") or "."
+  local env_path = fn_dir .. "/fn.env.json"
+  local f = io.open(env_path, "rb")
+  if not f then
+    return {}
+  end
+  local raw = f:read("*a")
+  f:close()
+  if type(raw) ~= "string" or raw == "" then
+    return {}
+  end
+  local parsed = cjson.decode(raw)
+  return normalize_function_env(parsed)
+end
+
+local function merge_event_env(event, fn_env)
+  local out_event = {}
+  if type(event) == "table" then
+    for k, v in pairs(event) do
+      out_event[k] = v
+    end
+  end
+
+  local merged_env = {}
+  local incoming_env = out_event.env
+  if type(incoming_env) == "table" then
+    for k, v in pairs(incoming_env) do
+      if type(k) == "string" and k ~= "" and v ~= nil then
+        merged_env[k] = tostring(v)
+      end
+    end
+  end
+  if type(fn_env) == "table" then
+    for k, v in pairs(fn_env) do
+      if type(k) == "string" and k ~= "" and v ~= nil then
+        merged_env[k] = tostring(v)
+      end
+    end
+  end
+  out_event.env = merged_env
+  return out_event, merged_env
+end
+
+local function with_event_env_scope(env_table, run)
+  local prev_env = _current_event_env
+  _current_event_env = type(env_table) == "table" and env_table or nil
+  local ok, result = pcall(run)
+  _current_event_env = prev_env
+  return ok, result
+end
+
+local function build_sandbox_env(captured_stdout)
   local env = {
     _VERSION = _VERSION,
     assert = assert,
@@ -64,6 +154,20 @@ local function build_sandbox_env()
     table = table,
     cjson = cjson,
     json = cjson,
+    os = {
+      getenv = runtime_getenv,
+      time = os.time,
+      date = os.date,
+      clock = os.clock,
+      difftime = os.difftime,
+    },
+    print = function(...)
+      local parts = {}
+      for i = 1, select("#", ...) do
+        parts[#parts + 1] = tostring(select(i, ...))
+      end
+      captured_stdout[#captured_stdout + 1] = table.concat(parts, "\t")
+    end,
   }
 
   env.require = function(name)
@@ -77,13 +181,13 @@ local function build_sandbox_env()
   return env
 end
 
-local function load_handler(entrypoint)
+local function load_handler(entrypoint, captured_stdout)
   local chunk, load_err = loadfile(entrypoint)
   if not chunk then
     return nil, "failed to load lua entrypoint: " .. tostring(load_err)
   end
 
-  local env = build_sandbox_env()
+  local env = build_sandbox_env(captured_stdout)
   setfenv(chunk, env)
 
   local ok_exec, result_or_err = pcall(chunk)
@@ -173,17 +277,28 @@ function M.call(req_obj)
     return error_response(path_err or "lua function entrypoint not found"), nil, nil
   end
 
-  local handler, handler_err = load_handler(entrypoint)
+  local fn_env = read_function_env(entrypoint)
+  local event_with_env, merged_env = merge_event_env(event, fn_env)
+
+  local captured_stdout = {}
+  local handler, handler_err = load_handler(entrypoint, captured_stdout)
   if not handler then
     return error_response(handler_err), nil, nil
   end
 
-  local ok_run, result_or_err = pcall(handler, event)
+  local route_params = type(event_with_env.params) == "table" and event_with_env.params or {}
+  local ok_run, result_or_err = with_event_env_scope(merged_env, function()
+    return handler(event_with_env, route_params)
+  end)
   if not ok_run then
     return error_response("lua handler error: " .. tostring(result_or_err)), nil, nil
   end
 
-  return normalize_response(result_or_err), nil, nil
+  local resp = normalize_response(result_or_err)
+  if #captured_stdout > 0 then
+    resp.stdout = table.concat(captured_stdout, "\n")
+  end
+  return resp, nil, nil
 end
 
 return M

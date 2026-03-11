@@ -1,5 +1,8 @@
 # Why FastFN? A Technical Comparison
 
+
+> Verified status as of **March 10, 2026**.
+> Runtime note: FastFN auto-installs function-local dependencies from `requirements.txt` / `package.json`; host runtimes are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
 Comparing FastFN to other tools helps clarify where it fits in your stack. FastFN is designed to fill the "gap" between rigid FaaS platforms and traditional web frameworks.
 
 ## Summary
@@ -70,3 +73,23 @@ Next.js pioneered the file-system routing Developer Experience (DX).
 - **Rapid Prototyping**: Launch an API in minutes.
 - **Polyglot Monorepos**: One team writing Python, another Node, all under one URL structure.
 - **Self-Hosted FaaS**: When you want AWS Lambda/Vercel DX but on your own EC2 instance or Raspberry Pi.
+
+## Problem
+
+What operational or developer pain this topic solves.
+
+## Mental Model
+
+How to reason about this feature in production-like environments.
+
+## Design Decisions
+
+- Why this behavior exists
+- Tradeoffs accepted
+- When to choose alternatives
+
+## See also
+
+- [Function Specification](../reference/function-spec.md)
+- [HTTP API Reference](../reference/http-api.md)
+- [Run and Test Checklist](../how-to/run-and-test.md)

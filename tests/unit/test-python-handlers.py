@@ -1168,6 +1168,364 @@ def test_python_prefers_handler_over_main():
         assert body["from"] == "handler"
 
 
+PYTHON_WORKER = load_module(ROOT / "srv/fn/runtimes/python-function-worker.py")
+
+
+def test_python_worker_captures_stdout():
+    """print() during handler execution should be captured in response."""
+    worker = PYTHON_WORKER
+
+    with tempfile.TemporaryDirectory() as tmp:
+        fn_path = Path(tmp) / "app.py"
+        fn_path.write_text(
+            "def handler(event):\n"
+            "    print('hello from stdout')\n"
+            "    print('second line')\n"
+            "    return {'status': 200, 'headers': {}, 'body': 'ok'}\n",
+            encoding="utf-8",
+        )
+
+        worker._handler_cache.clear()
+        resp = worker._handle({
+            "handler_path": str(fn_path),
+            "handler_name": "handler",
+            "deps_dirs": [],
+            "event": {},
+        })
+        assert resp["status"] == 200
+        assert resp["body"] == "ok"
+        assert "stdout" in resp, "stdout should be captured"
+        assert "hello from stdout" in resp["stdout"]
+        assert "second line" in resp["stdout"]
+
+
+def test_python_worker_captures_stderr():
+    """sys.stderr writes during handler execution should be captured."""
+    worker = PYTHON_WORKER
+
+    with tempfile.TemporaryDirectory() as tmp:
+        fn_path = Path(tmp) / "app.py"
+        fn_path.write_text(
+            "import sys\n"
+            "def handler(event):\n"
+            "    sys.stderr.write('error output\\n')\n"
+            "    return {'status': 200, 'headers': {}, 'body': 'ok'}\n",
+            encoding="utf-8",
+        )
+
+        worker._handler_cache.clear()
+        resp = worker._handle({
+            "handler_path": str(fn_path),
+            "handler_name": "handler",
+            "deps_dirs": [],
+            "event": {},
+        })
+        assert resp["status"] == 200
+        assert "stderr" in resp, "stderr should be captured"
+        assert "error output" in resp["stderr"]
+
+
+def test_python_worker_no_stdout_when_silent():
+    """Response should NOT contain stdout/stderr when handler is silent."""
+    worker = PYTHON_WORKER
+
+    with tempfile.TemporaryDirectory() as tmp:
+        fn_path = Path(tmp) / "app.py"
+        fn_path.write_text(
+            "def handler(event):\n"
+            "    return {'status': 200, 'headers': {}, 'body': 'ok'}\n",
+            encoding="utf-8",
+        )
+
+        worker._handler_cache.clear()
+        resp = worker._handle({
+            "handler_path": str(fn_path),
+            "handler_name": "handler",
+            "deps_dirs": [],
+            "event": {},
+        })
+        assert resp["status"] == 200
+        assert "stdout" not in resp, "no stdout when handler is silent"
+        assert "stderr" not in resp, "no stderr when handler is silent"
+
+
+def test_python_daemon_preserves_stdout_stderr():
+    """_normalize_response should preserve stdout/stderr from worker."""
+    daemon = PYTHON_DAEMON
+
+    resp_with_output = {
+        "status": 200,
+        "headers": {},
+        "body": "ok",
+        "stdout": "captured output",
+        "stderr": "captured error",
+    }
+    norm = daemon._normalize_response(resp_with_output)
+    assert norm["stdout"] == "captured output"
+    assert norm["stderr"] == "captured error"
+
+    resp_without = {
+        "status": 200,
+        "headers": {},
+        "body": "ok",
+    }
+    norm2 = daemon._normalize_response(resp_without)
+    assert "stdout" not in norm2
+    assert "stderr" not in norm2
+
+
+def test_python_worker_event_session_passthrough():
+    """event.session should be accessible from handler."""
+    worker = PYTHON_WORKER
+
+    with tempfile.TemporaryDirectory() as tmp:
+        fn_path = Path(tmp) / "app.py"
+        fn_path.write_text(
+            "import json\n"
+            "def handler(event):\n"
+            "    session = event.get('session') or {}\n"
+            "    return {\n"
+            "        'status': 200,\n"
+            "        'headers': {'Content-Type': 'application/json'},\n"
+            "        'body': json.dumps({'sid': session.get('id'), 'cookies': session.get('cookies', {})})\n"
+            "    }\n",
+            encoding="utf-8",
+        )
+
+        worker._handler_cache.clear()
+        resp = worker._handle({
+            "handler_path": str(fn_path),
+            "handler_name": "handler",
+            "deps_dirs": [],
+            "event": {
+                "session": {
+                    "id": "abc123",
+                    "raw": "session_id=abc123; theme=dark",
+                    "cookies": {"session_id": "abc123", "theme": "dark"},
+                }
+            },
+        })
+        assert resp["status"] == 200
+        body = json.loads(resp["body"])
+        assert body["sid"] == "abc123"
+        assert body["cookies"]["theme"] == "dark"
+
+
+# ---------------------------------------------------------------------------
+# Direct route params injection tests
+# ---------------------------------------------------------------------------
+
+def test_python_rest_product_id_direct_param():
+    """[id] handler receives id as direct kwarg."""
+    handler = load_handler(ROOT / "examples/functions/rest-api-methods/products/[id]/get.py")
+    resp = handler({"params": {"id": "42"}}, id="42")
+    assert resp["status"] == 200
+    body = resp["body"] if isinstance(resp["body"], dict) else json.loads(resp["body"])
+    assert body["id"] == 42
+    assert body["name"] == "Widget"
+
+
+def test_python_rest_product_id_put_direct_param():
+    """[id] PUT handler receives id as direct kwarg."""
+    handler = load_handler(ROOT / "examples/functions/rest-api-methods/products/[id]/put.py")
+    event = {"params": {"id": "7"}, "body": '{"name":"Updated","price":19.99}'}
+    resp = handler(event, id="7")
+    assert resp["status"] == 200
+    body = resp["body"] if isinstance(resp["body"], dict) else json.loads(resp["body"])
+    assert body["id"] == 7
+
+
+def test_python_rest_product_id_delete_direct_param():
+    """[id] DELETE handler receives id as direct kwarg."""
+    handler = load_handler(ROOT / "examples/functions/rest-api-methods/products/[id]/delete.py")
+    resp = handler({"params": {"id": "99"}}, id="99")
+    assert resp["status"] == 200
+    body = resp["body"] if isinstance(resp["body"], dict) else json.loads(resp["body"])
+    assert body["deleted"] is True
+    assert body["id"] == 99
+
+
+def test_python_rest_slug_direct_param():
+    """[slug] handler receives slug as direct kwarg."""
+    handler = load_handler(ROOT / "examples/functions/rest-api-methods/posts/[slug]/get.py")
+    resp = handler({"params": {"slug": "hello-world"}}, slug="hello-world")
+    assert resp["status"] == 200
+    body = resp["body"] if isinstance(resp["body"], dict) else json.loads(resp["body"])
+    assert body["slug"] == "hello-world"
+    assert "hello-world" in body["title"]
+
+
+def test_python_rest_category_slug_multi_param():
+    """[category]/[slug] handler receives both params as direct kwargs."""
+    handler = load_handler(ROOT / "examples/functions/rest-api-methods/posts/[category]/[slug]/get.py")
+    resp = handler({"params": {"category": "tech", "slug": "ai-news"}}, category="tech", slug="ai-news")
+    assert resp["status"] == 200
+    body = resp["body"] if isinstance(resp["body"], dict) else json.loads(resp["body"])
+    assert body["category"] == "tech"
+    assert body["slug"] == "ai-news"
+
+
+def test_python_rest_wildcard_path_direct_param():
+    """[...path] handler receives path as direct kwarg."""
+    handler = load_handler(ROOT / "examples/functions/rest-api-methods/files/[...path]/get.py")
+    resp = handler({"params": {"path": "docs/2024/report.pdf"}}, path="docs/2024/report.pdf")
+    assert resp["status"] == 200
+    body = resp["body"] if isinstance(resp["body"], dict) else json.loads(resp["body"])
+    assert body["path"] == "docs/2024/report.pdf"
+    assert body["segments"] == ["docs", "2024", "report.pdf"]
+    assert body["depth"] == 3
+
+
+def test_python_rest_wildcard_empty_path():
+    """[...path] handler handles empty path gracefully."""
+    handler = load_handler(ROOT / "examples/functions/rest-api-methods/files/[...path]/get.py")
+    resp = handler({"params": {"path": ""}}, path="")
+    assert resp["status"] == 200
+    body = resp["body"] if isinstance(resp["body"], dict) else json.loads(resp["body"])
+    assert body["path"] == ""
+    assert body["segments"] == []
+    assert body["depth"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Worker _call_handler route_params injection tests
+# ---------------------------------------------------------------------------
+
+def test_worker_call_handler_injects_kwargs():
+    """_call_handler injects route_params as kwargs for handlers with named params."""
+    worker = PYTHON_WORKER
+
+    def handler_with_id(event, id):
+        return {"got_id": id, "event_keys": list(event.keys())}
+
+    result = worker._call_handler(handler_with_id, [{"method": "GET"}], route_params={"id": "42"})
+    assert result["got_id"] == "42"
+    assert "method" in result["event_keys"]
+
+
+def test_worker_call_handler_injects_multiple_kwargs():
+    """_call_handler injects multiple route_params."""
+    worker = PYTHON_WORKER
+
+    def handler_multi(event, category, slug):
+        return {"category": category, "slug": slug}
+
+    result = worker._call_handler(
+        handler_multi, [{}], route_params={"category": "tech", "slug": "hello"}
+    )
+    assert result["category"] == "tech"
+    assert result["slug"] == "hello"
+
+
+def test_worker_call_handler_var_keyword_receives_all():
+    """_call_handler passes all route_params via **kwargs."""
+    worker = PYTHON_WORKER
+
+    def handler_kwargs(event, **kwargs):
+        return {"kwargs": kwargs}
+
+    result = worker._call_handler(
+        handler_kwargs, [{}], route_params={"id": "1", "slug": "test"}
+    )
+    assert result["kwargs"]["id"] == "1"
+    assert result["kwargs"]["slug"] == "test"
+
+
+def test_worker_call_handler_no_params_ignores_route_params():
+    """_call_handler with handler(event) ignores route_params."""
+    worker = PYTHON_WORKER
+
+    def handler_event_only(event):
+        return {"ok": True}
+
+    result = worker._call_handler(
+        handler_event_only, [{}], route_params={"id": "42"}
+    )
+    assert result["ok"] is True
+
+
+def test_worker_call_handler_no_route_params_works():
+    """_call_handler without route_params still works normally."""
+    worker = PYTHON_WORKER
+
+    def handler_normal(event):
+        return {"method": event.get("method", "none")}
+
+    result = worker._call_handler(handler_normal, [{"method": "GET"}])
+    assert result["method"] == "GET"
+
+
+def test_worker_call_handler_extra_params_ignored():
+    """_call_handler ignores route_params not declared in handler signature."""
+    worker = PYTHON_WORKER
+
+    def handler_only_id(event, id):
+        return {"id": id}
+
+    result = worker._call_handler(
+        handler_only_id, [{}], route_params={"id": "5", "slug": "extra"}
+    )
+    assert result["id"] == "5"
+
+
+def test_worker_handle_passes_route_params_from_event():
+    """_handle extracts event.params and passes to handler as kwargs."""
+    worker = PYTHON_WORKER
+
+    with tempfile.TemporaryDirectory() as tmp:
+        fn_path = Path(tmp) / "app.py"
+        fn_path.write_text(
+            "def handler(event, id):\n"
+            "    return {\n"
+            "        'status': 200,\n"
+            "        'headers': {'Content-Type': 'application/json'},\n"
+            "        'body': '{\"id\": \"' + str(id) + '\"}'\n"
+            "    }\n",
+            encoding="utf-8",
+        )
+
+        worker._handler_cache.clear()
+        resp = worker._handle({
+            "handler_path": str(fn_path),
+            "handler_name": "handler",
+            "deps_dirs": [],
+            "event": {"params": {"id": "42"}},
+        })
+        assert resp["status"] == 200
+        body = json.loads(resp["body"])
+        assert body["id"] == "42"
+
+
+def test_worker_handle_multi_params_from_event():
+    """_handle injects multiple params from event.params."""
+    worker = PYTHON_WORKER
+
+    with tempfile.TemporaryDirectory() as tmp:
+        fn_path = Path(tmp) / "app.py"
+        fn_path.write_text(
+            "import json\n"
+            "def handler(event, category, slug):\n"
+            "    return {\n"
+            "        'status': 200,\n"
+            "        'headers': {'Content-Type': 'application/json'},\n"
+            "        'body': json.dumps({'category': category, 'slug': slug})\n"
+            "    }\n",
+            encoding="utf-8",
+        )
+
+        worker._handler_cache.clear()
+        resp = worker._handle({
+            "handler_path": str(fn_path),
+            "handler_name": "handler",
+            "deps_dirs": [],
+            "event": {"params": {"category": "tech", "slug": "hello-world"}},
+        })
+        assert resp["status"] == 200
+        body = json.loads(resp["body"])
+        assert body["category"] == "tech"
+        assert body["slug"] == "hello-world"
+
+
 def main():
     test_python_hello()
     test_python_hello_debug()
@@ -1214,6 +1572,28 @@ def main():
     test_python_subprocess_main_fallback_and_node_like_payload()
     test_python_subprocess_tuple_response()
     test_python_prefers_handler_over_main()
+    test_python_worker_captures_stdout()
+    test_python_worker_captures_stderr()
+    test_python_worker_no_stdout_when_silent()
+    test_python_daemon_preserves_stdout_stderr()
+    test_python_worker_event_session_passthrough()
+    # Direct params injection
+    test_python_rest_product_id_direct_param()
+    test_python_rest_product_id_put_direct_param()
+    test_python_rest_product_id_delete_direct_param()
+    test_python_rest_slug_direct_param()
+    test_python_rest_category_slug_multi_param()
+    test_python_rest_wildcard_path_direct_param()
+    test_python_rest_wildcard_empty_path()
+    # Worker _call_handler injection
+    test_worker_call_handler_injects_kwargs()
+    test_worker_call_handler_injects_multiple_kwargs()
+    test_worker_call_handler_var_keyword_receives_all()
+    test_worker_call_handler_no_params_ignores_route_params()
+    test_worker_call_handler_no_route_params_works()
+    test_worker_call_handler_extra_params_ignored()
+    test_worker_handle_passes_route_params_from_event()
+    test_worker_handle_multi_params_from_event()
     print("python unit tests passed")
 
 

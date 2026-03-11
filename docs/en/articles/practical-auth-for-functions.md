@@ -1,5 +1,8 @@
 # Practical Auth for Functions: API Keys, Signatures, Console Guard, and Safe Defaults
 
+
+> Verified status as of **March 10, 2026**.
+> Runtime note: FastFN auto-installs function-local dependencies from `requirements.txt` / `package.json`; host runtimes are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
 ## Why this article matters
 Security often gets added late, and then teams bolt on too much complexity.
 
@@ -145,3 +148,33 @@ Use this as your default for external-facing functions:
 - [Console and Admin Access](../how-to/console-admin-access.md)
 - [Operational Recipes](../how-to/operational-recipes.md)
 - [Security Model](../explanation/security-model.md)
+
+## Flow Diagram
+
+```mermaid
+flowchart LR
+  A["Client request"] --> B["Route discovery"]
+  B --> C["Policy and method validation"]
+  C --> D["Runtime handler execution"]
+  D --> E["HTTP response + OpenAPI parity"]
+```
+
+## Problem
+
+What operational or developer pain this topic solves.
+
+## Mental Model
+
+How to reason about this feature in production-like environments.
+
+## Design Decisions
+
+- Why this behavior exists
+- Tradeoffs accepted
+- When to choose alternatives
+
+## See also
+
+- [Function Specification](../reference/function-spec.md)
+- [HTTP API Reference](../reference/http-api.md)
+- [Run and Test Checklist](../how-to/run-and-test.md)

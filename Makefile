@@ -69,6 +69,8 @@ test-unit-lua:
 
 test-integration:
 	bash tests/integration/test-api.sh
+	bash tests/integration/test-auto-install-inference.sh
+	bash tests/integration/test-platform-equivalents.sh
 	bash tests/integration/test-openapi-system.sh
 	bash tests/integration/test-openapi-native.sh
 	bash tests/integration/test-openapi-demos.sh
