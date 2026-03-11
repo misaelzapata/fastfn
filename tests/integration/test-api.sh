@@ -322,7 +322,7 @@ assert_redirect_location() {
     exit 1
   fi
 
-  if ! grep -qi "^location: ${expected_location}\r\?$" "$headers_file"; then
+  if ! tr -d '\r' <"$headers_file" | grep -qi "^location: ${expected_location}$"; then
     echo "FAIL GET $path expected Location: $expected_location"
     cat "$headers_file" || true
     rm -f "$headers_file" "$body_file"
