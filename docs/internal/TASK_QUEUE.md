@@ -321,3 +321,11 @@ Architecture rule (locked):
     - verification checks
     - related links.
   - keep internal links consistent and navigable from MkDocs nav.
+
+36. FastAPI 2019 parity track (section-by-section docs plan)
+- Status: in_progress
+- Priority: high
+- Goal:
+  - use FastAPI's 2019 first-release-era docs sitemap as parity baseline.
+  - track each section/sub-section with explicit EN/ES target docs.
+  - execute phased backlog until core tutorial/dependencies/security/deployment coverage reaches comparable depth.
