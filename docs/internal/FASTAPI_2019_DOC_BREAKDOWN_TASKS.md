@@ -22,12 +22,12 @@ Global done criteria for each task:
 
 Progress:
 - Total tasks: 75
-- Completed: 6
-- Pending: 69
+- Completed: 7
+- Pending: 68
 
 ## A) Entry and Orientation (D001-D003)
 - [ ] D001 | Baseline: `/` | EN: `docs/en/index.md` | ES: `docs/es/index.md` | Validation: `V-CONCEPT` (5-minute path + links to tutorial, how-to, reference).
-- [ ] D002 | Baseline: `/features/` | EN: `docs/en/explanation/feature-matrix.md` | ES: `docs/es/explicacion/matriz-de-features.md` | Validation: `V-CONCEPT` (fit/non-fit matrix + capability table).
+- [x] D002 | Baseline: `/features/` | EN: `docs/en/explanation/feature-matrix.md` | ES: `docs/es/explicacion/matriz-de-features.md` | Validation: `V-CONCEPT` (fit/non-fit matrix + capability table).
 - [x] D003 | Baseline: `/python-types/` | EN: `docs/en/tutorial/typed-inputs-and-responses.md` | ES: `docs/es/tutorial/inputs-y-respuestas-tipadas.md` | Validation: `V-HTTP` (typed request/response examples in at least 2 runtimes).
 
 ## B) Tutorial - HTTP Fundamentals (D004-D034)
