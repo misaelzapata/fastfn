@@ -316,3 +316,45 @@ Clear scope, expected outcome, and who should use this page.
 - [Function Specification](../reference/function-spec.md)
 - [HTTP API Reference](../reference/http-api.md)
 - [Run and Test Checklist](run-and-test.md)
+
+## Simple token gate (minimum viable auth)
+
+A minimal gate should reject missing/invalid credentials early:
+
+```bash
+curl -i 'http://127.0.0.1:8080/private'
+curl -i 'http://127.0.0.1:8080/private' -H 'x-api-key: demo'
+```
+
+Expected:
+
+- missing/invalid token -> `401`
+- valid token -> `200`
+
+## OAuth2-like boundaries in FastFN
+
+FastFN does not mandate a single OAuth2 framework. Recommended split:
+
+1. token issuance in dedicated auth provider
+2. token verification in function helpers
+3. claims to permissions mapping in app domain logic
+
+## Scope and permission mapping
+
+Use stable scopes and deny by default:
+
+- `reports:read`
+- `reports:write`
+- `admin:config`
+
+Return `403` when authenticated identity lacks required scope.
+
+## Auth-specific validation and troubleshooting
+
+Validation quick checks:
+
+- missing token -> `401`
+- valid token without scope -> `403`
+- valid token with required scope -> `200`
+
+If scope checks fail unexpectedly, verify claim parsing format (`scope` space-separated vs comma-separated).

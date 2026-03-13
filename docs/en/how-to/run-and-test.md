@@ -202,3 +202,29 @@ Clear scope, expected outcome, and who should use this page.
 - [Function Specification](../reference/function-spec.md)
 - [HTTP API Reference](../reference/http-api.md)
 - [Architecture Overview](../explanation/architecture.md)
+
+## Unit and integration quick recipes
+
+```bash
+cd cli && go test ./...
+sh ./scripts/ci/test-pipeline.sh
+```
+
+Use unit tests for function logic and integration scripts for routing/runtime parity.
+
+## Testing seams and mocking strategy
+
+Prefer seams at:
+
+- external HTTP clients
+- database adapters
+- clock/time providers
+- process/signal boundaries in native mode
+
+## Debug checklist
+
+1. confirm route discovery output
+2. confirm `/_fn/health` status
+3. test endpoint with verbose curl (`-i -v`)
+4. inspect runtime logs by language
+5. isolate minimal repro function

@@ -95,3 +95,17 @@ Clear scope, expected outcome, and who should use this page.
 - [Function Specification](../reference/function-spec.md)
 - [HTTP API Reference](../reference/http-api.md)
 - [Run and Test Checklist](run-and-test.md)
+
+## HTTP Basic auth posture
+
+Support posture: `adjacent-stack`.
+
+Rationale:
+
+- HTTP Basic is valid for controlled environments, but it is not recommended as primary internet-facing auth.
+- Use only behind TLS, with network restrictions and credential rotation.
+
+Preferred alternatives:
+
+- bearer token/JWT for APIs
+- API key + scope mapping for service-to-service traffic

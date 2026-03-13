@@ -210,3 +210,29 @@ Alcance claro, resultado esperado y público al que aplica esta guía.
 - [Especificación de Funciones](../referencia/especificacion-funciones.md)
 - [Referencia API HTTP](../referencia/api-http.md)
 - [Arquitectura](../explicacion/arquitectura.md)
+
+## Recetas rapidas de unit e integracion
+
+```bash
+cd cli && go test ./...
+sh ./scripts/ci/test-pipeline.sh
+```
+
+Usa unit para logica de funcion e integracion para paridad routing/runtime.
+
+## Seams y estrategia de mocking
+
+Preferir seams en:
+
+- clientes HTTP externos
+- adaptadores de base de datos
+- proveedor de reloj/tiempo
+- limites de proceso/seniales en modo native
+
+## Checklist de debug
+
+1. confirmar salida de discovery
+2. confirmar estado en `/_fn/health`
+3. probar endpoint con curl verbose (`-i -v`)
+4. inspeccionar logs runtime por lenguaje
+5. aislar funcion minima reproducible

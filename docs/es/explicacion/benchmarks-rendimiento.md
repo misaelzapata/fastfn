@@ -96,3 +96,19 @@ Cómo razonar esta feature en entornos similares a producción.
 - [Especificación de Funciones](../referencia/especificacion-funciones.md)
 - [Referencia API HTTP](../referencia/api-http.md)
 - [Checklist Ejecutar y Probar](../como-hacer/ejecutar-y-probar.md)
+
+## Metodologia y reproducibilidad
+
+Siempre reportar:
+
+- hardware y OS
+- modo runtime (`docker` o `native`)
+- mezcla de requests y tamano de payload
+- duracion de warmup y cantidad de muestras
+- latencia p50/p95/p99 y error rate
+
+Guia de repro:
+
+- correr desde baseline limpio
+- versionar config y datasets
+- incluir comandos exactos en el reporte

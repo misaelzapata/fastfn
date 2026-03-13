@@ -97,6 +97,7 @@ nav:
       - Direct Params Injection: en/tutorial/direct-params.md
       - Typed Inputs and Responses: en/tutorial/typed-inputs-and-responses.md
       - Request Validation and Schemas: en/tutorial/request-validation-and-schemas.md
+      - Security for Functions: en/tutorial/security-for-functions.md
       - Authentication and Secrets: en/tutorial/auth-and-secrets.md
       - Versioning and Rollout: en/tutorial/versioning-and-rollout.md
       - Request Metadata and Files: en/tutorial/request-metadata-and-files.md
@@ -106,10 +107,14 @@ nav:
       - Artistic QRs: en/tutorial/artistic-qrs.md
     - How-To Guides:
       - Deploy to Production: en/how-to/deploy-to-production.md
+      - Project Generation: en/how-to/project-generation.md
       - FastAPI/Next.js Playbook: en/how-to/fastapi-nextjs-playbook.md
       - Authentication: en/how-to/authentication.md
       - Reuse Auth and Validation: en/how-to/reuse-auth-and-validation.md
       - Security Confidence: en/how-to/security-confidence.md
+      - Platform Runtime Plumbing: en/how-to/platform-runtime-plumbing.md
+      - Data Access Patterns: en/how-to/data-access-patterns.md
+      - Bigger App Structure: en/how-to/bigger-app-structure.md
       - Console Access: en/how-to/console-admin-access.md
       - Manage Functions: en/how-to/manage-functions.md
       - Run and Test: en/how-to/run-and-test.md
@@ -118,6 +123,7 @@ nav:
       - Telegram Bot (E2E): en/how-to/telegram-e2e.md
       - Contributing: en/how-to/contributing.md
       - Tools: en/how-to/tools.md
+      - Get Help: en/how-to/get-help.md
     - Advanced Articles:
       - Local Hot Reload: en/articles/local-serverless-hot-reload-openapi.md
       - Practical Auth: en/articles/practical-auth-for-functions.md
@@ -133,15 +139,19 @@ nav:
       - CLI Reference: en/reference/cli.md
       - HTTP API: en/reference/http-api.md
       - Runtime Contract: en/reference/runtime-contract.md
+      - External Links: en/reference/external-links.md
       - Builtin Functions: en/reference/builtin-functions.md
       - PHP Template: en/reference/php-template.md
       - Rust Template: en/reference/rust-template.md
     - Architecture & Explanation:
       - Architecture: en/explanation/architecture.md
       - Security Model: en/explanation/security-model.md
+      - Support Matrix (Advanced Protocols): en/explanation/support-matrix-advanced-protocols.md
       - Feature Matrix: en/explanation/feature-matrix.md
       - Shared Logic Patterns: en/explanation/shared-logic-patterns.md
       - Technical Comparison: en/explanation/comparison.md
+      - Concurrency and Async: en/explanation/concurrency-and-async.md
+      - History, Design, and Future: en/explanation/history-design-future.md
       - Scheduler vs Cron: en/explanation/scheduler-vs-cron.md
       - Next.js Style Routing: en/explanation/nextjs-style-routing-benefits.md
       - Invocation Lifecycle: en/explanation/invocation-flow.md
@@ -168,6 +178,7 @@ nav:
       - Inyección Directa de Params: es/tutorial/parametros-directos.md
       - Inputs y Respuestas Tipadas: es/tutorial/inputs-y-respuestas-tipadas.md
       - Validación y Schemas: es/tutorial/validacion-y-schemas.md
+      - Seguridad para Funciones: es/tutorial/seguridad-para-funciones.md
       - Auth y secretos: es/tutorial/auth-y-secretos.md
       - Versionado y rollout: es/tutorial/versionado-y-rollout.md
       - Metadata de Request y Archivos: es/tutorial/metadata-request-y-archivos.md
@@ -178,16 +189,22 @@ nav:
       - QRs Artísticos: es/tutorial/qrs-artisticos.md
     - Guías Cómo-Hacer:
       - Desplegar a Producción: es/como-hacer/desplegar-a-produccion.md
+      - Generación de Proyecto: es/como-hacer/generacion-proyecto.md
       - Playbook FastAPI/Next.js: es/como-hacer/playbook-fastapi-nextjs.md
+      - Autenticación: es/como-hacer/autenticacion.md
       - Reutilizar Auth y Validación: es/como-hacer/reutilizar-auth-y-validacion.md
+      - "Checklist de seguridad": es/como-hacer/checklist-seguridad-produccion.md
+      - Plomería Runtime-Plataforma: es/como-hacer/plomeria-runtime-plataforma.md
+      - Patrones de Acceso a Datos: es/como-hacer/patrones-de-acceso-a-datos.md
+      - Estructura App Grande: es/como-hacer/estructura-app-grande.md
       - Consola y Administración: es/como-hacer/consola-admin.md
       - Gestionar Funciones: es/como-hacer/gestionar-funciones.md
       - Recetas Operativas: es/como-hacer/recetas-operativas.md
       - "Receta: Digest Telegram (Cron)": es/como-hacer/telegram-digest.md
       - "Receta: Bot E2E": es/como-hacer/telegram-e2e.md
       - Ejecutar y Probar: es/como-hacer/ejecutar-y-probar.md
-      - "Checklist de seguridad": es/como-hacer/checklist-seguridad-produccion.md
       - Herramientas (Tools): es/como-hacer/herramientas.md
+      - Obtener Ayuda: es/como-hacer/obtener-ayuda.md
       - Contribuir: es/como-hacer/contribuir.md
     - Artículos Avanzados:
       - Hot Reload Local + OpenAPI: es/articulos/serverless-local-hot-reload-openapi.md
@@ -204,6 +221,7 @@ nav:
       - CLI Reference: es/referencia/cli-reference.md
       - API HTTP: es/referencia/api-http.md
       - Contrato Runtime: es/referencia/contrato-runtime.md
+      - Enlaces Externos: es/referencia/enlaces-externos.md
       - Funciones de Ejemplo: es/referencia/funciones-ejemplo.md
       - Plantilla PHP: es/referencia/plantilla-php.md
       - Plantilla Rust: es/referencia/plantilla-rust.md
@@ -211,8 +229,12 @@ nav:
       - Arquitectura: es/explicacion/arquitectura.md
       - Benchmarks de Rendimiento: es/explicacion/benchmarks-rendimiento.md
       - Flujos visuales: es/explicacion/flujos-visuales.md
+      - Matriz Soporte Protocolos Avanzados: es/explicacion/matriz-soporte-protocolos-avanzados.md
       - Matriz de Features: es/explicacion/matriz-de-features.md
       - Patrones de Lógica Compartida: es/explicacion/patrones-de-logica-compartida.md
+      - Concurrencia y Async: es/explicacion/concurrencia-y-async.md
+      - Comparación Técnica: es/explicacion/comparacion.md
+      - Historia, Diseño y Futuro: es/explicacion/historia-diseno-futuro.md
       - Ciclo de Invocación: es/explicacion/flujo-invocacion.md
       - Modelo de Seguridad: es/explicacion/modelo-seguridad.md
       - Scheduler vs Cron: es/explicacion/scheduler-vs-cron.md

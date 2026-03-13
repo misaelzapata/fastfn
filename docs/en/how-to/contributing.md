@@ -25,7 +25,8 @@ Workflow:
 4. Run full suite before PR:
 
 ```bash
-./scripts/test-all.sh
+sh ./scripts/ci/test-pipeline.sh
+mkdocs build --strict
 ```
 
 PR checklist:
@@ -71,3 +72,23 @@ Clear scope, expected outcome, and who should use this page.
 - [Function Specification](../reference/function-spec.md)
 - [HTTP API Reference](../reference/http-api.md)
 - [Run and Test Checklist](run-and-test.md)
+
+## Contribution workflow and review checklist
+
+1. create focused branch
+2. implement minimal coherent change
+3. run relevant tests and docs strict build
+4. open PR with validation evidence
+5. address review comments and keep CI green
+
+Review checklist:
+
+- contract changes include tests
+- EN/ES docs parity kept for user-facing docs changes
+- no internal runbook leakage into public docs
+
+## Release notes policy
+
+- every user-visible change must be captured in release notes/changelog
+- entries should include date, scope, and upgrade impact
+- docs-only updates still require a concise release note line when they change behavior expectations

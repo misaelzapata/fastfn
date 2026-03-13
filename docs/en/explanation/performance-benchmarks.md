@@ -96,3 +96,19 @@ How to reason about this feature in production-like environments.
 - [Function Specification](../reference/function-spec.md)
 - [HTTP API Reference](../reference/http-api.md)
 - [Run and Test Checklist](../how-to/run-and-test.md)
+
+## Methodology and reproducibility
+
+Always report:
+
+- hardware and OS
+- runtime mode (`docker` or `native`)
+- request mix and payload sizes
+- warmup duration and sample size
+- p50/p95/p99 latency and error rate
+
+Repro guidance:
+
+- run from clean baseline
+- keep config and datasets versioned
+- include exact command lines in report

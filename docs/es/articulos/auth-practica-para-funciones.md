@@ -176,3 +176,23 @@ Cómo razonar esta feature en entornos similares a producción.
 - [Especificación de Funciones](../referencia/especificacion-funciones.md)
 - [Referencia API HTTP](../referencia/api-http.md)
 - [Checklist Ejecutar y Probar](../como-hacer/ejecutar-y-probar.md)
+
+## Patron JWT: emision y verificacion
+
+Arquitectura recomendada:
+
+1. emitir JWT en servicio de auth dedicado
+2. verificar firma + expiracion en helper FastFN
+3. mapear claims (`sub`, `scope`, `aud`) a permisos locales
+
+Ejemplo rapido:
+
+```bash
+curl -i 'http://127.0.0.1:8080/private' -H 'authorization: Bearer <jwt>'
+```
+
+Esperado:
+
+- token invalido/expirado -> `401`
+- scope insuficiente -> `403`
+- token valido con scope -> `200`

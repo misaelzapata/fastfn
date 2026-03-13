@@ -135,3 +135,14 @@ Alcance claro, resultado esperado y público al que aplica esta guía.
 - [Especificación de Funciones](../../referencia/especificacion-funciones.md)
 - [Referencia API HTTP](../../referencia/api-http.md)
 - [Checklist Ejecutar y Probar](../../como-hacer/ejecutar-y-probar.md)
+
+## 3. Capas de configuracion y overrides
+
+Precedencia recomendada (menor a mayor):
+
+1. defaults de proyecto (`fastfn.json`)
+2. config por funcion (`fn.config.json`)
+3. env runtime (`fn.env.json`/secret manager)
+4. overrides al desplegar
+
+Dejar esto explicito evita sorpresas entre local y produccion.

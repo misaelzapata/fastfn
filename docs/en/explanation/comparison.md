@@ -93,3 +93,14 @@ How to reason about this feature in production-like environments.
 - [Function Specification](../reference/function-spec.md)
 - [HTTP API Reference](../reference/http-api.md)
 - [Run and Test Checklist](../how-to/run-and-test.md)
+
+## Decision guide and migration notes
+
+Use FastFN first for file-routed HTTP functions and polyglot teams.
+
+Migration sequence:
+
+1. start with stateless endpoints
+2. keep realtime/SSR in existing stack
+3. migrate shared auth/validation helpers
+4. enforce parity through tests and OpenAPI checks

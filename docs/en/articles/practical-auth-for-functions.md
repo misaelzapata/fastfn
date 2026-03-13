@@ -178,3 +178,23 @@ How to reason about this feature in production-like environments.
 - [Function Specification](../reference/function-spec.md)
 - [HTTP API Reference](../reference/http-api.md)
 - [Run and Test Checklist](../how-to/run-and-test.md)
+
+## JWT issuance and verification pattern
+
+Recommended architecture:
+
+1. issue JWT in a dedicated auth service
+2. verify signature + expiration in FastFN function helper
+3. map claims (`sub`, `scope`, `aud`) to local permissions
+
+Quick verification example:
+
+```bash
+curl -i 'http://127.0.0.1:8080/private' -H 'authorization: Bearer <jwt>'
+```
+
+Expected:
+
+- invalid/expired token -> `401`
+- missing scope -> `403`
+- valid token and scope -> `200`

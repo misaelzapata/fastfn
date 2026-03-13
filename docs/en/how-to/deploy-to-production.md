@@ -156,3 +156,17 @@ Clear scope, expected outcome, and who should use this page.
 - [Function Specification](../reference/function-spec.md)
 - [HTTP API Reference](../reference/http-api.md)
 - [Run and Test Checklist](run-and-test.md)
+
+## Runtime mode matrix and production preflight
+
+| Mode | Requirement | Recommended use |
+|---|---|---|
+| Docker mode (`fastfn dev`) | Docker daemon | local parity and onboarding |
+| Native mode (`fastfn dev --native`) | OpenResty + host runtimes | advanced local ops and debugging |
+
+Preflight before deploy:
+
+1. dependency check passes (`fastfn doctor`)
+2. health endpoint returns up
+3. OpenAPI and critical routes validated
+4. security defaults reviewed (`/_fn/*` exposure, admin token)

@@ -95,3 +95,17 @@ Alcance claro, resultado esperado y público al que aplica esta guía.
 - [Especificación de Funciones](../referencia/especificacion-funciones.md)
 - [Referencia API HTTP](../referencia/api-http.md)
 - [Checklist Ejecutar y Probar](ejecutar-y-probar.md)
+
+## Postura para HTTP Basic
+
+Postura de soporte: `adjacent-stack`.
+
+Rationale:
+
+- HTTP Basic puede servir en entornos controlados, pero no es recomendable como auth principal expuesta a internet.
+- Usarlo solo con TLS, restriccion de red y rotacion de credenciales.
+
+Alternativas preferidas:
+
+- bearer token/JWT para APIs
+- API key + scopes para trafico servicio-a-servicio

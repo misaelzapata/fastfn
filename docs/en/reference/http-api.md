@@ -262,3 +262,22 @@ Use the examples in this page as canonical templates for implementation and test
 - [Function Specification](function-spec.md)
 - [Run and Test Checklist](../how-to/run-and-test.md)
 - [Architecture Overview](../explanation/architecture.md)
+
+## Extending OpenAPI: points and limits
+
+Extension points:
+
+- route metadata inferred from file routing + method files
+- explicit examples in docs aligned with runtime behavior
+- tags/operation grouping through naming conventions
+
+Limits:
+
+- OpenAPI should reflect real runtime behavior; avoid documenting statuses not returned by handlers.
+- Advanced schema generation differs by runtime implementation details.
+
+Validation command:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/openapi.json' | jq '.paths | keys'
+```

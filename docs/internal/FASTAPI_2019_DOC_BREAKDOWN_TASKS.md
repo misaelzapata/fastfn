@@ -23,9 +23,9 @@ Global done criteria for each task:
 
 Progress:
 - Total tasks: 75
-- Completed: 39
-- Pending: 36
-- Path neutrality revalidation status: D001-D039 verified on 2026-03-13.
+- Completed: 75
+- Pending: 0
+- Path neutrality revalidation status: D001-D075 verified on 2026-03-13.
 
 ## A) Entry and Orientation (D001-D003)
 - [x] D001 | Baseline: `/` | EN: `docs/en/index.md` | ES: `docs/es/index.md` | Validation: `V-CONCEPT` (5-minute path + links to tutorial, how-to, reference).
@@ -73,46 +73,46 @@ Progress:
 - [x] D039 | Baseline: `/tutorial/dependencies/advanced-dependencies/` | EN: `docs/en/how-to/reuse-auth-and-validation.md` | ES: `docs/es/como-hacer/reutilizar-auth-y-validacion.md` | Validation: `V-OPS` (advanced shared middleware/helper flow).
 
 ## D) Security Sequence (D040-D046)
-- [ ] D040 | Baseline: `/tutorial/security/intro/` | EN: `docs/en/tutorial/security-for-functions.md` | ES: `docs/es/tutorial/seguridad-para-funciones.md` | Validation: `V-CONCEPT` (threat model + recommended defaults).
-- [ ] D041 | Baseline: `/tutorial/security/first-steps/` | EN: `docs/en/how-to/authentication.md` | ES: `docs/es/como-hacer/autenticacion.md` | Validation: `V-HTTP` (simple token gate).
-- [ ] D042 | Baseline: `/tutorial/security/get-current-user/` | EN: `docs/en/tutorial/security-for-functions.md` | ES: `docs/es/tutorial/seguridad-para-funciones.md` | Validation: `V-HTTP` (identity resolution pattern).
-- [ ] D043 | Baseline: `/tutorial/security/simple-oauth2/` | EN: `docs/en/how-to/authentication.md` | ES: `docs/es/como-hacer/autenticacion.md` | Validation: `V-CONCEPT` (OAuth2-like flow boundaries in FastFN).
-- [ ] D044 | Baseline: `/tutorial/security/oauth2-jwt/` | EN: `docs/en/articles/practical-auth-for-functions.md` | ES: `docs/es/articulos/auth-practica-para-funciones.md` | Validation: `V-HTTP` (JWT issuance/verification example).
-- [ ] D045 | Baseline: `/tutorial/security/oauth2-scopes/` | EN: `docs/en/how-to/authentication.md` | ES: `docs/es/como-hacer/autenticacion.md` | Validation: `V-CONCEPT` (scope/permission mapping strategy).
-- [ ] D046 | Baseline: `/tutorial/security/http-basic-auth/` | EN: `docs/en/how-to/security-confidence.md` | ES: `docs/es/como-hacer/checklist-seguridad-produccion.md` | Validation: `V-LIMIT` (if unsupported, explicit alternatives and rationale).
+- [x] D040 | Baseline: `/tutorial/security/intro/` | EN: `docs/en/tutorial/security-for-functions.md` | ES: `docs/es/tutorial/seguridad-para-funciones.md` | Validation: `V-CONCEPT` (threat model + recommended defaults).
+- [x] D041 | Baseline: `/tutorial/security/first-steps/` | EN: `docs/en/how-to/authentication.md` | ES: `docs/es/como-hacer/autenticacion.md` | Validation: `V-HTTP` (simple token gate).
+- [x] D042 | Baseline: `/tutorial/security/get-current-user/` | EN: `docs/en/tutorial/security-for-functions.md` | ES: `docs/es/tutorial/seguridad-para-funciones.md` | Validation: `V-HTTP` (identity resolution pattern).
+- [x] D043 | Baseline: `/tutorial/security/simple-oauth2/` | EN: `docs/en/how-to/authentication.md` | ES: `docs/es/como-hacer/autenticacion.md` | Validation: `V-CONCEPT` (OAuth2-like flow boundaries in FastFN).
+- [x] D044 | Baseline: `/tutorial/security/oauth2-jwt/` | EN: `docs/en/articles/practical-auth-for-functions.md` | ES: `docs/es/articulos/auth-practica-para-funciones.md` | Validation: `V-HTTP` (JWT issuance/verification example).
+- [x] D045 | Baseline: `/tutorial/security/oauth2-scopes/` | EN: `docs/en/how-to/authentication.md` | ES: `docs/es/como-hacer/autenticacion.md` | Validation: `V-CONCEPT` (scope/permission mapping strategy).
+- [x] D046 | Baseline: `/tutorial/security/http-basic-auth/` | EN: `docs/en/how-to/security-confidence.md` | ES: `docs/es/como-hacer/checklist-seguridad-produccion.md` | Validation: `V-LIMIT` (if unsupported, explicit alternatives and rationale).
 
 ## E) Platform, Architecture, and Runtime Concerns (D047-D065)
-- [ ] D047 | Baseline: `/tutorial/middleware/` | EN: `docs/en/how-to/platform-runtime-plumbing.md` | ES: `docs/es/como-hacer/plomeria-runtime-plataforma.md` | Validation: `V-CONCEPT` (request pipeline hooks and boundaries).
-- [ ] D048 | Baseline: `/tutorial/cors/` | EN: `docs/en/how-to/platform-runtime-plumbing.md` | ES: `docs/es/como-hacer/plomeria-runtime-plataforma.md` | Validation: `V-HTTP` (CORS matrix + sample config).
-- [ ] D049 | Baseline: `/tutorial/using-request-directly/` | EN: `docs/en/how-to/platform-runtime-plumbing.md` | ES: `docs/es/como-hacer/plomeria-runtime-plataforma.md` | Validation: `V-HTTP` (raw request access examples).
-- [ ] D050 | Baseline: `/tutorial/sql-databases/` | EN: `docs/en/how-to/data-access-patterns.md` | ES: `docs/es/como-hacer/patrones-de-acceso-a-datos.md` | Validation: `V-OPS` (SQL integration starter).
-- [ ] D051 | Baseline: `/tutorial/async-sql-databases/` | EN: `docs/en/how-to/data-access-patterns.md` | ES: `docs/es/como-hacer/patrones-de-acceso-a-datos.md` | Validation: `V-OPS` (async SQL pattern and caveats).
-- [ ] D052 | Baseline: `/tutorial/nosql-databases/` | EN: `docs/en/how-to/data-access-patterns.md` | ES: `docs/es/como-hacer/patrones-de-acceso-a-datos.md` | Validation: `V-OPS` (NoSQL adapter pattern).
-- [ ] D053 | Baseline: `/tutorial/bigger-applications/` | EN: `docs/en/how-to/bigger-app-structure.md` | ES: `docs/es/como-hacer/estructura-app-grande.md` | Validation: `V-CONCEPT` (repo layout and ownership boundaries).
-- [ ] D054 | Baseline: `/tutorial/background-tasks/` | EN: `docs/en/how-to/bigger-app-structure.md` | ES: `docs/es/como-hacer/estructura-app-grande.md` | Validation: `V-OPS` (background/scheduled execution pattern).
-- [ ] D055 | Baseline: `/tutorial/sub-applications-proxy/` | EN: `docs/en/explanation/support-matrix-advanced-protocols.md` | ES: `docs/es/explicacion/matriz-soporte-protocolos-avanzados.md` | Validation: `V-LIMIT` (proxy/sub-app support decision).
-- [ ] D056 | Baseline: `/tutorial/application-configuration/` | EN: `docs/en/tutorial/from-zero/3-config-and-secrets.md` | ES: `docs/es/tutorial/desde-cero/3-configuracion-y-secretos.md` | Validation: `V-OPS` (config layering and override examples).
-- [ ] D057 | Baseline: `/tutorial/static-files/` | EN: `docs/en/explanation/support-matrix-advanced-protocols.md` | ES: `docs/es/explicacion/matriz-soporte-protocolos-avanzados.md` | Validation: `V-LIMIT` (support posture + recommended setup).
-- [ ] D058 | Baseline: `/tutorial/templates/` | EN: `docs/en/explanation/support-matrix-advanced-protocols.md` | ES: `docs/es/explicacion/matriz-soporte-protocolos-avanzados.md` | Validation: `V-LIMIT` (support posture + alternative pattern).
-- [ ] D059 | Baseline: `/tutorial/graphql/` | EN: `docs/en/explanation/support-matrix-advanced-protocols.md` | ES: `docs/es/explicacion/matriz-soporte-protocolos-avanzados.md` | Validation: `V-LIMIT` (support posture + integration path).
-- [ ] D060 | Baseline: `/tutorial/websockets/` | EN: `docs/en/explanation/support-matrix-advanced-protocols.md` | ES: `docs/es/explicacion/matriz-soporte-protocolos-avanzados.md` | Validation: `V-LIMIT` (support posture + alternative architecture).
-- [ ] D061 | Baseline: `/tutorial/events/` | EN: `docs/en/how-to/platform-runtime-plumbing.md` | ES: `docs/es/como-hacer/plomeria-runtime-plataforma.md` | Validation: `V-CONCEPT` (lifecycle events and timing).
-- [ ] D062 | Baseline: `/tutorial/testing/` | EN: `docs/en/how-to/run-and-test.md` | ES: `docs/es/como-hacer/ejecutar-y-probar.md` | Validation: `V-OPS` (unit + integration quick recipes).
-- [ ] D063 | Baseline: `/tutorial/testing-dependencies/` | EN: `docs/en/how-to/run-and-test.md` | ES: `docs/es/como-hacer/ejecutar-y-probar.md` | Validation: `V-OPS` (FastFN-native seams/mocking guidance).
-- [ ] D064 | Baseline: `/tutorial/debugging/` | EN: `docs/en/how-to/run-and-test.md` | ES: `docs/es/como-hacer/ejecutar-y-probar.md` | Validation: `V-OPS` (debug checklist and common failures).
-- [ ] D065 | Baseline: `/tutorial/extending-openapi/` | EN: `docs/en/reference/http-api.md` | ES: `docs/es/referencia/api-http.md` | Validation: `V-CONCEPT` (OpenAPI extension points and limits).
+- [x] D047 | Baseline: `/tutorial/middleware/` | EN: `docs/en/how-to/platform-runtime-plumbing.md` | ES: `docs/es/como-hacer/plomeria-runtime-plataforma.md` | Validation: `V-CONCEPT` (request pipeline hooks and boundaries).
+- [x] D048 | Baseline: `/tutorial/cors/` | EN: `docs/en/how-to/platform-runtime-plumbing.md` | ES: `docs/es/como-hacer/plomeria-runtime-plataforma.md` | Validation: `V-HTTP` (CORS matrix + sample config).
+- [x] D049 | Baseline: `/tutorial/using-request-directly/` | EN: `docs/en/how-to/platform-runtime-plumbing.md` | ES: `docs/es/como-hacer/plomeria-runtime-plataforma.md` | Validation: `V-HTTP` (raw request access examples).
+- [x] D050 | Baseline: `/tutorial/sql-databases/` | EN: `docs/en/how-to/data-access-patterns.md` | ES: `docs/es/como-hacer/patrones-de-acceso-a-datos.md` | Validation: `V-OPS` (SQL integration starter).
+- [x] D051 | Baseline: `/tutorial/async-sql-databases/` | EN: `docs/en/how-to/data-access-patterns.md` | ES: `docs/es/como-hacer/patrones-de-acceso-a-datos.md` | Validation: `V-OPS` (async SQL pattern and caveats).
+- [x] D052 | Baseline: `/tutorial/nosql-databases/` | EN: `docs/en/how-to/data-access-patterns.md` | ES: `docs/es/como-hacer/patrones-de-acceso-a-datos.md` | Validation: `V-OPS` (NoSQL adapter pattern).
+- [x] D053 | Baseline: `/tutorial/bigger-applications/` | EN: `docs/en/how-to/bigger-app-structure.md` | ES: `docs/es/como-hacer/estructura-app-grande.md` | Validation: `V-CONCEPT` (repo layout and ownership boundaries).
+- [x] D054 | Baseline: `/tutorial/background-tasks/` | EN: `docs/en/how-to/bigger-app-structure.md` | ES: `docs/es/como-hacer/estructura-app-grande.md` | Validation: `V-OPS` (background/scheduled execution pattern).
+- [x] D055 | Baseline: `/tutorial/sub-applications-proxy/` | EN: `docs/en/explanation/support-matrix-advanced-protocols.md` | ES: `docs/es/explicacion/matriz-soporte-protocolos-avanzados.md` | Validation: `V-LIMIT` (proxy/sub-app support decision).
+- [x] D056 | Baseline: `/tutorial/application-configuration/` | EN: `docs/en/tutorial/from-zero/3-config-and-secrets.md` | ES: `docs/es/tutorial/desde-cero/3-configuracion-y-secretos.md` | Validation: `V-OPS` (config layering and override examples).
+- [x] D057 | Baseline: `/tutorial/static-files/` | EN: `docs/en/explanation/support-matrix-advanced-protocols.md` | ES: `docs/es/explicacion/matriz-soporte-protocolos-avanzados.md` | Validation: `V-LIMIT` (support posture + recommended setup).
+- [x] D058 | Baseline: `/tutorial/templates/` | EN: `docs/en/explanation/support-matrix-advanced-protocols.md` | ES: `docs/es/explicacion/matriz-soporte-protocolos-avanzados.md` | Validation: `V-LIMIT` (support posture + alternative pattern).
+- [x] D059 | Baseline: `/tutorial/graphql/` | EN: `docs/en/explanation/support-matrix-advanced-protocols.md` | ES: `docs/es/explicacion/matriz-soporte-protocolos-avanzados.md` | Validation: `V-LIMIT` (support posture + integration path).
+- [x] D060 | Baseline: `/tutorial/websockets/` | EN: `docs/en/explanation/support-matrix-advanced-protocols.md` | ES: `docs/es/explicacion/matriz-soporte-protocolos-avanzados.md` | Validation: `V-LIMIT` (support posture + alternative architecture).
+- [x] D061 | Baseline: `/tutorial/events/` | EN: `docs/en/how-to/platform-runtime-plumbing.md` | ES: `docs/es/como-hacer/plomeria-runtime-plataforma.md` | Validation: `V-CONCEPT` (lifecycle events and timing).
+- [x] D062 | Baseline: `/tutorial/testing/` | EN: `docs/en/how-to/run-and-test.md` | ES: `docs/es/como-hacer/ejecutar-y-probar.md` | Validation: `V-OPS` (unit + integration quick recipes).
+- [x] D063 | Baseline: `/tutorial/testing-dependencies/` | EN: `docs/en/how-to/run-and-test.md` | ES: `docs/es/como-hacer/ejecutar-y-probar.md` | Validation: `V-OPS` (FastFN-native seams/mocking guidance).
+- [x] D064 | Baseline: `/tutorial/debugging/` | EN: `docs/en/how-to/run-and-test.md` | ES: `docs/es/como-hacer/ejecutar-y-probar.md` | Validation: `V-OPS` (debug checklist and common failures).
+- [x] D065 | Baseline: `/tutorial/extending-openapi/` | EN: `docs/en/reference/http-api.md` | ES: `docs/es/referencia/api-http.md` | Validation: `V-CONCEPT` (OpenAPI extension points and limits).
 
 ## F) Advanced, Project, and Ecosystem Docs (D066-D075)
-- [ ] D066 | Baseline: `/async/` | EN: `docs/en/explanation/concurrency-and-async.md` | ES: `docs/es/explicacion/concurrencia-y-async.md` | Validation: `V-CONCEPT` (runtime concurrency model by language).
-- [ ] D067 | Baseline: `/deployment/` | EN: `docs/en/how-to/deploy-to-production.md` | ES: `docs/es/como-hacer/desplegar-a-produccion.md` | Validation: `V-OPS` (deployment matrix + preflight).
-- [ ] D068 | Baseline: `/project-generation/` | EN: `docs/en/how-to/project-generation.md` | ES: `docs/es/como-hacer/generacion-proyecto.md` | Validation: `V-OPS` (starter generation and next steps).
-- [ ] D069 | Baseline: `/alternatives/` | EN: `docs/en/explanation/comparison.md` | ES: `docs/es/explicacion/comparacion.md` | Validation: `V-CONCEPT` (decision guide and migration notes).
-- [ ] D070 | Baseline: `/history-design-future/` | EN: `docs/en/explanation/history-design-future.md` | ES: `docs/es/explicacion/historia-diseno-futuro.md` | Validation: `V-CONCEPT` (design rationale and roadmap framing).
-- [ ] D071 | Baseline: `/external-links/` | EN: `docs/en/reference/external-links.md` | ES: `docs/es/referencia/enlaces-externos.md` | Validation: `V-CONCEPT` (curated ecosystem index).
-- [ ] D072 | Baseline: `/benchmarks/` | EN: `docs/en/explanation/performance-benchmarks.md` | ES: `docs/es/explicacion/benchmarks-rendimiento.md` | Validation: `V-OPS` (methodology + reproducibility steps).
-- [ ] D073 | Baseline: `/help-fastapi/` | EN: `docs/en/how-to/get-help.md` | ES: `docs/es/como-hacer/obtener-ayuda.md` | Validation: `V-CONCEPT` (support channels and triage path).
-- [ ] D074 | Baseline: `/contributing/` | EN: `docs/en/how-to/contributing.md` | ES: `docs/es/como-hacer/contribuir.md` | Validation: `V-OPS` (contribution workflow, tests, review checklist).
-- [ ] D075 | Baseline: `/release-notes/` | EN: `CHANGELOG.md` + `docs/en/how-to/contributing.md` | ES: `docs/es/como-hacer/contribuir.md` | Validation: `V-OPS` (release-note policy and versioning discipline).
+- [x] D066 | Baseline: `/async/` | EN: `docs/en/explanation/concurrency-and-async.md` | ES: `docs/es/explicacion/concurrencia-y-async.md` | Validation: `V-CONCEPT` (runtime concurrency model by language).
+- [x] D067 | Baseline: `/deployment/` | EN: `docs/en/how-to/deploy-to-production.md` | ES: `docs/es/como-hacer/desplegar-a-produccion.md` | Validation: `V-OPS` (deployment matrix + preflight).
+- [x] D068 | Baseline: `/project-generation/` | EN: `docs/en/how-to/project-generation.md` | ES: `docs/es/como-hacer/generacion-proyecto.md` | Validation: `V-OPS` (starter generation and next steps).
+- [x] D069 | Baseline: `/alternatives/` | EN: `docs/en/explanation/comparison.md` | ES: `docs/es/explicacion/comparacion.md` | Validation: `V-CONCEPT` (decision guide and migration notes).
+- [x] D070 | Baseline: `/history-design-future/` | EN: `docs/en/explanation/history-design-future.md` | ES: `docs/es/explicacion/historia-diseno-futuro.md` | Validation: `V-CONCEPT` (design rationale and roadmap framing).
+- [x] D071 | Baseline: `/external-links/` | EN: `docs/en/reference/external-links.md` | ES: `docs/es/referencia/enlaces-externos.md` | Validation: `V-CONCEPT` (curated ecosystem index).
+- [x] D072 | Baseline: `/benchmarks/` | EN: `docs/en/explanation/performance-benchmarks.md` | ES: `docs/es/explicacion/benchmarks-rendimiento.md` | Validation: `V-OPS` (methodology + reproducibility steps).
+- [x] D073 | Baseline: `/help-fastapi/` | EN: `docs/en/how-to/get-help.md` | ES: `docs/es/como-hacer/obtener-ayuda.md` | Validation: `V-CONCEPT` (support channels and triage path).
+- [x] D074 | Baseline: `/contributing/` | EN: `docs/en/how-to/contributing.md` | ES: `docs/es/como-hacer/contribuir.md` | Validation: `V-OPS` (contribution workflow, tests, review checklist).
+- [x] D075 | Baseline: `/release-notes/` | EN: `CHANGELOG.md` + `docs/en/how-to/contributing.md` | ES: `docs/es/como-hacer/contribuir.md` | Validation: `V-OPS` (release-note policy and versioning discipline).
 
 ## Sequencing (blocked order)
 1. Phase A: D001-D003

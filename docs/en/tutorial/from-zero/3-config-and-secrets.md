@@ -121,3 +121,14 @@ Clear scope, expected outcome, and who should use this page.
 - [Function Specification](../../reference/function-spec.md)
 - [HTTP API Reference](../../reference/http-api.md)
 - [Run and Test Checklist](../../how-to/run-and-test.md)
+
+## 3. Config layering and overrides
+
+Recommended precedence (lowest to highest):
+
+1. project defaults (`fastfn.json`)
+2. function config (`fn.config.json`)
+3. runtime env (`fn.env.json`/secret manager)
+4. deployment-time overrides
+
+Keep this explicit so behavior is predictable across local and production.

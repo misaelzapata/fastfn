@@ -158,3 +158,17 @@ Alcance claro, resultado esperado y público al que aplica esta guía.
 - [Especificación de Funciones](../referencia/especificacion-funciones.md)
 - [Referencia API HTTP](../referencia/api-http.md)
 - [Checklist Ejecutar y Probar](ejecutar-y-probar.md)
+
+## Matriz de modos runtime y preflight de produccion
+
+| Modo | Requisito | Uso recomendado |
+|---|---|---|
+| Docker mode (`fastfn dev`) | Docker daemon | paridad local y onboarding |
+| Native mode (`fastfn dev --native`) | OpenResty + runtimes host | debug/ops avanzado |
+
+Preflight antes de desplegar:
+
+1. check de dependencias pasa (`fastfn doctor`)
+2. health endpoint responde up
+3. OpenAPI y rutas criticas validadas
+4. defaults de seguridad revisados (exposicion `/_fn/*`, admin token)

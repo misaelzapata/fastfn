@@ -262,3 +262,22 @@ Usa los ejemplos de esta página como plantillas canónicas para implementación
 - [Especificación de Funciones](especificacion-funciones.md)
 - [Checklist Ejecutar y Probar](../como-hacer/ejecutar-y-probar.md)
 - [Arquitectura](../explicacion/arquitectura.md)
+
+## Extender OpenAPI: puntos y limites
+
+Puntos de extension:
+
+- metadata de ruta inferida por file routing + archivos por metodo
+- ejemplos explicitos en docs alineados al runtime real
+- agrupacion por tags/operaciones via convenciones de nombres
+
+Limites:
+
+- OpenAPI debe reflejar comportamiento real; no documentar estados que handlers no devuelven.
+- La generacion avanzada de schemas cambia segun runtime.
+
+Comando de validacion:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/openapi.json' | jq '.paths | keys'
+```

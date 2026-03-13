@@ -17,7 +17,8 @@
 4. Ejecuta todo antes del PR:
 
 ```bash
-./scripts/test-all.sh
+sh ./scripts/ci/test-pipeline.sh
+mkdocs build --strict
 ```
 
 Checklist:
@@ -63,3 +64,23 @@ Alcance claro, resultado esperado y público al que aplica esta guía.
 - [Especificación de Funciones](../referencia/especificacion-funciones.md)
 - [Referencia API HTTP](../referencia/api-http.md)
 - [Checklist Ejecutar y Probar](ejecutar-y-probar.md)
+
+## Flujo de contribucion y checklist de review
+
+1. crear rama enfocada
+2. implementar cambio minimo coherente
+3. correr tests relevantes y build docs strict
+4. abrir PR con evidencia de validacion
+5. resolver comentarios y mantener CI en verde
+
+Checklist de review:
+
+- cambios de contrato incluyen tests
+- paridad EN/ES en docs publicas cuando aplica
+- no filtrar runbooks internos en docs publicas
+
+## Politica de release notes
+
+- todo cambio visible para usuario debe quedar en release notes/changelog
+- cada entrada incluye fecha, alcance e impacto de upgrade
+- cambios solo de docs tambien requieren nota breve si cambian expectativas de uso
