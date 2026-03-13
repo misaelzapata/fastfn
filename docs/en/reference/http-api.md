@@ -75,6 +75,21 @@ You can map additional public routes per function in `fn.config.json`:
 
 After reload/discovery, calling `/api/node-echo` invokes that function.
 
+## Path operation configuration (FastFN equivalents)
+
+FastFN does not use decorator-based path operation objects like FastAPI. Configuration is distributed between file routes and `fn.config.json`.
+
+| FastAPI-style concept | FastFN equivalent | Notes |
+|---|---|---|
+| operation method/path | filename + folder path | source of truth is filesystem or `fn.routes.json` |
+| allowed methods | `invoke.methods` | enforced at gateway, returns `405` + `Allow` |
+| summary | `invoke.summary` or handler hint `@summary` | reflected in OpenAPI summary text |
+| query/body examples | `invoke.query`, `invoke.body`, `invoke.content_type` | used for OpenAPI request examples |
+| operationId | generated automatically | format: `<method>_<runtime>_<name>_<version>` |
+| tags | generated (`functions` / `internal`) | no per-route custom tag mapping yet |
+
+Non-1:1 note: if you need deep OpenAPI customization per operation, keep FastFN as runtime router and place extended schema transformations in your delivery pipeline.
+
 ## Internal platform endpoints (`/_fn/*`)
 
 ### Health and discovery
@@ -182,6 +197,27 @@ Fields:
 - `GET /docs`
 
 OpenAPI is generated dynamically and reflects currently allowed methods per function/version.
+
+## Serialization and encoding edge cases
+
+FastFN normalizes runtime output into HTTP, but serialization behavior still depends on the `body` type and response headers.
+
+| Runtime return body | Header strategy | Client result |
+|---|---|---|
+| object/array | no explicit `Content-Type` | JSON serialization with `application/json` |
+| string | no explicit `Content-Type` | plain text output |
+| string JSON | `application/json` | sent as text; clients parse JSON manually if needed |
+| binary/base64 string | explicit content type + decoding at handler side | binary-safe delivery pattern |
+
+Recommended deterministic pattern:
+
+```json
+{
+  "status": 200,
+  "headers": { "Content-Type": "application/json; charset=utf-8" },
+  "body": { "ok": true }
+}
+```
 
 ## Error table
 

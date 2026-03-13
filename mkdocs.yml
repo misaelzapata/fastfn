@@ -93,7 +93,13 @@ nav:
       - 3. Config & Secrets: en/tutorial/from-zero/3-config-and-secrets.md
       - 4. Advanced Responses: en/tutorial/from-zero/4-advanced-responses.md
     - Tutorials & Examples:
+      - Your First Function: en/tutorial/your-first-function.md
       - Direct Params Injection: en/tutorial/direct-params.md
+      - Typed Inputs and Responses: en/tutorial/typed-inputs-and-responses.md
+      - Request Validation and Schemas: en/tutorial/request-validation-and-schemas.md
+      - Authentication and Secrets: en/tutorial/auth-and-secrets.md
+      - Versioning and Rollout: en/tutorial/versioning-and-rollout.md
+      - Request Metadata and Files: en/tutorial/request-metadata-and-files.md
       - Build a Complete API: en/tutorial/build-complete-api.md
       - QR Generator: en/tutorial/qr-in-python-node.md
       - WhatsApp Bot: en/tutorial/whatsapp-bot-demo.md
@@ -105,6 +111,8 @@ nav:
       - Security Confidence: en/how-to/security-confidence.md
       - Console Access: en/how-to/console-admin-access.md
       - Manage Functions: en/how-to/manage-functions.md
+      - Run and Test: en/how-to/run-and-test.md
+      - Operational Recipes: en/how-to/operational-recipes.md
       - Telegram Bot (Cron): en/how-to/telegram-digest.md
       - Telegram Bot (E2E): en/how-to/telegram-e2e.md
       - Contributing: en/how-to/contributing.md
@@ -130,6 +138,7 @@ nav:
     - Architecture & Explanation:
       - Architecture: en/explanation/architecture.md
       - Security Model: en/explanation/security-model.md
+      - Feature Matrix: en/explanation/feature-matrix.md
       - Technical Comparison: en/explanation/comparison.md
       - Scheduler vs Cron: en/explanation/scheduler-vs-cron.md
       - Next.js Style Routing: en/explanation/nextjs-style-routing-benefits.md
@@ -153,8 +162,15 @@ nav:
       - 3. Configuración y Secretos: es/tutorial/desde-cero/3-configuracion-y-secretos.md
       - 4. Respuestas Avanzadas: es/tutorial/desde-cero/4-respuestas-avanzadas.md
     - Tutoriales y Ejemplos:
+      - Tu primera función: es/tutorial/tu-primera-funcion.md
       - Inyección Directa de Params: es/tutorial/parametros-directos.md
+      - Inputs y Respuestas Tipadas: es/tutorial/inputs-y-respuestas-tipadas.md
+      - Validación y Schemas: es/tutorial/validacion-y-schemas.md
+      - Auth y secretos: es/tutorial/auth-y-secretos.md
+      - Versionado y rollout: es/tutorial/versionado-y-rollout.md
+      - Metadata de Request y Archivos: es/tutorial/metadata-request-y-archivos.md
       - Construir API Completa: es/tutorial/construir-api-completa.md
+      - Tutorial Políglota: es/tutorial/poliglota-paso-a-paso.md
       - QR (Python/Node): es/tutorial/qr-python-node.md
       - WhatsApp Bot: es/tutorial/demo-bot-whatsapp.md
       - QRs Artísticos: es/tutorial/qrs-artisticos.md
@@ -190,6 +206,9 @@ nav:
       - Plantilla Rust: es/referencia/plantilla-rust.md
     - Arquitectura y Explicación:
       - Arquitectura: es/explicacion/arquitectura.md
+      - Benchmarks de Rendimiento: es/explicacion/benchmarks-rendimiento.md
+      - Flujos visuales: es/explicacion/flujos-visuales.md
+      - Matriz de Features: es/explicacion/matriz-de-features.md
       - Ciclo de Invocación: es/explicacion/flujo-invocacion.md
       - Modelo de Seguridad: es/explicacion/modelo-seguridad.md
       - Scheduler vs Cron: es/explicacion/scheduler-vs-cron.md

@@ -1,116 +1,92 @@
 # Part 1: Setup and Your First Route
 
-
-> Verified status as of **March 10, 2026**.
+> Verified status as of **March 13, 2026**.
 > Runtime note: FastFN auto-installs function-local dependencies from `requirements.txt` / `package.json`; host runtimes are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
-Welcome to the FastFN course! In this first part, we'll set up our "Task Manager API" project and create an endpoint that returns a list of tasks.
 
-## 1. Create the Project
+## Quick View
 
-Let's start by creating a folder for our API and initializing our first function. Open your terminal and run:
+- Complexity: Beginner
+- Typical time: 15-20 minutes
+- Outcome: clean-room project with one `GET /tasks` endpoint and OpenAPI entry
+
+## 1. Clean-room setup
 
 ```bash
-mkdir task-manager-api
+mkdir -p task-manager-api
 cd task-manager-api
 fastfn init tasks --template node
 ```
 
-This creates a `tasks` folder with a `handler.js` file. In FastFN, your folder structure is your API. The `tasks` folder automatically becomes the `/tasks` endpoint.
+Resulting layout:
 
-## 2. Write the Code
+```text
+task-manager-api/
+  node/
+    tasks/
+      handler.js
+```
 
-Open `tasks/handler.js` (or `.py`, `.php`, `.rs` depending on your preferred language) and replace its contents with the following code:
+## 2. Implement the first route
 
-=== "Python"
-    ```python
-    def handler(event):
-        tasks = [
-            {"id": 1, "title": "Learn FastFN", "completed": False},
-            {"id": 2, "title": "Build an API", "completed": False}
-        ]
+Edit `node/tasks/handler.js`:
 
-        return {
-            "status": 200,
-            "body": tasks
-        }
-    ```
+```js
+exports.handler = async () => ({
+  status: 200,
+  body: [
+    { id: 1, title: "Learn FastFN", completed: false },
+    { id: 2, title: "Ship first endpoint", completed: false }
+  ]
+});
+```
 
-=== "Node.js"
-    ```javascript
-    exports.handler = async (event) => {
-        const tasks = [
-            { id: 1, title: "Learn FastFN", completed: false },
-            { id: 2, title: "Build an API", completed: false }
-        ];
-
-        return {
-            status: 200,
-            body: tasks
-        };
-    };
-    ```
-
-=== "PHP"
-    ```php
-    <?php
-    return function($event) {
-        $tasks = [
-            ["id" => 1, "title" => "Learn FastFN", "completed" => false],
-            ["id" => 2, "title" => "Build an API", "completed" => false]
-        ];
-
-        return [
-            "status" => 200,
-            "body" => $tasks
-        ];
-    };
-    ```
-
-### What this code means
-- **`handler`**: The entry function FastFN executes.
-- **`status: 200`**: The successful HTTP response code.
-- **`body`**: The payload. FastFN automatically serializes arrays and objects into JSON for you!
-
-## 3. Run the Server
-
-Start the FastFN development server from the root of your `task-manager-api` folder:
+## 3. Run locally
 
 ```bash
 fastfn dev .
 ```
 
-Open your browser and navigate to `http://127.0.0.1:8080/tasks`. You should see your list of tasks returned as JSON!
+## 4. Validate first request
+
+```bash
+curl -sS 'http://127.0.0.1:8080/tasks'
+```
+
+Expected body:
+
+```json
+[
+  { "id": 1, "title": "Learn FastFN", "completed": false },
+  { "id": 2, "title": "Ship first endpoint", "completed": false }
+]
+```
+
+## 5. Validate OpenAPI visibility
+
+```bash
+curl -sS 'http://127.0.0.1:8080/openapi.json' | jq '.paths | has("/tasks")'
+```
+
+Expected output:
+
+```text
+true
+```
 
 ![Browser showing JSON response at /tasks](../../../assets/screenshots/browser-json-tasks.png)
 
-## Next Steps
-
-You now have a working API endpoint. In the next part, we'll learn how to fetch a specific task using dynamic routing (`/tasks/1`) and how to add new tasks by reading the request body.
-
-[Go to Part 2: Routing and Data :arrow_right:](./2-routing-and-data.md)
-
-## Objective
-
-Clear scope, expected outcome, and who should use this page.
-
-## Prerequisites
-
-- FastFN CLI available
-- Runtime dependencies by mode verified (Docker for `fastfn dev`, OpenResty+runtimes for `fastfn dev --native`)
-
-## Validation Checklist
-
-- Command examples execute with expected status codes
-- Routes appear in OpenAPI where applicable
-- References at the end are reachable
-
 ## Troubleshooting
 
-- If runtime is down, verify host dependencies and health endpoint
-- If routes are missing, re-run discovery and check folder layout
+- `curl` returns `503`: inspect `/_fn/health` and missing runtime dependencies
+- route not found: confirm the function path is `node/tasks/handler.js`
+- path missing in OpenAPI: trigger reload with `curl -X POST http://127.0.0.1:8080/_fn/reload`
 
-## See also
+## Next step
 
-- [Function Specification](../../reference/function-spec.md)
-- [HTTP API Reference](../../reference/http-api.md)
-- [Run and Test Checklist](../../how-to/run-and-test.md)
+[Go to Part 2: Routing and Data](./2-routing-and-data.md)
+
+## Related links
+
+- [Request validation and schemas](../request-validation-and-schemas.md)
+- [HTTP API reference](../../reference/http-api.md)
+- [Run and test](../../how-to/run-and-test.md)

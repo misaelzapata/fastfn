@@ -22,39 +22,39 @@ Global done criteria for each task:
 
 Progress:
 - Total tasks: 75
-- Completed: 7
-- Pending: 68
+- Completed: 27
+- Pending: 48
 
 ## A) Entry and Orientation (D001-D003)
-- [ ] D001 | Baseline: `/` | EN: `docs/en/index.md` | ES: `docs/es/index.md` | Validation: `V-CONCEPT` (5-minute path + links to tutorial, how-to, reference).
+- [x] D001 | Baseline: `/` | EN: `docs/en/index.md` | ES: `docs/es/index.md` | Validation: `V-CONCEPT` (5-minute path + links to tutorial, how-to, reference).
 - [x] D002 | Baseline: `/features/` | EN: `docs/en/explanation/feature-matrix.md` | ES: `docs/es/explicacion/matriz-de-features.md` | Validation: `V-CONCEPT` (fit/non-fit matrix + capability table).
 - [x] D003 | Baseline: `/python-types/` | EN: `docs/en/tutorial/typed-inputs-and-responses.md` | ES: `docs/es/tutorial/inputs-y-respuestas-tipadas.md` | Validation: `V-HTTP` (typed request/response examples in at least 2 runtimes).
 
 ## B) Tutorial - HTTP Fundamentals (D004-D034)
-- [ ] D004 | Baseline: `/tutorial/intro/` | EN: `docs/en/tutorial/first-steps.md` | ES: `docs/es/tutorial/primeros-pasos.md` | Validation: `V-CONCEPT` (scope, prerequisites, expected outcome).
-- [ ] D005 | Baseline: `/tutorial/first-steps/` | EN: `docs/en/tutorial/from-zero/1-setup-and-first-route.md` | ES: `docs/es/tutorial/desde-cero/1-setup-y-primera-ruta.md` | Validation: `V-OPS` (clean-room setup + first request).
-- [ ] D006 | Baseline: `/tutorial/path-params/` | EN: `docs/en/tutorial/from-zero/2-routing-and-data.md` | ES: `docs/es/tutorial/desde-cero/2-enrutamiento-y-datos.md` | Validation: `V-HTTP` (path params, wildcard params, examples).
-- [ ] D007 | Baseline: `/tutorial/query-params/` | EN: `docs/en/tutorial/from-zero/2-routing-and-data.md` | ES: `docs/es/tutorial/desde-cero/2-enrutamiento-y-datos.md` | Validation: `V-HTTP` (query defaults, required vs optional).
-- [ ] D008 | Baseline: `/tutorial/body/` | EN: `docs/en/tutorial/from-zero/2-routing-and-data.md` | ES: `docs/es/tutorial/desde-cero/2-enrutamiento-y-datos.md` | Validation: `V-HTTP` (JSON body parsing + error cases).
-- [ ] D009 | Baseline: `/tutorial/query-params-str-validations/` | EN: `docs/en/tutorial/request-validation-and-schemas.md` | ES: `docs/es/tutorial/validacion-y-schemas.md` | Validation: `V-HTTP` (string constraints + invalid payload examples).
-- [ ] D010 | Baseline: `/tutorial/path-params-numeric-validations/` | EN: `docs/en/tutorial/request-validation-and-schemas.md` | ES: `docs/es/tutorial/validacion-y-schemas.md` | Validation: `V-HTTP` (numeric guards + boundary examples).
-- [ ] D011 | Baseline: `/tutorial/body-multiple-params/` | EN: `docs/en/tutorial/request-validation-and-schemas.md` | ES: `docs/es/tutorial/validacion-y-schemas.md` | Validation: `V-HTTP` (merged body + params contract table).
-- [ ] D012 | Baseline: `/tutorial/body-schema/` | EN: `docs/en/tutorial/request-validation-and-schemas.md` | ES: `docs/es/tutorial/validacion-y-schemas.md` | Validation: `V-HTTP` (schema-like shape and field requirements).
-- [ ] D013 | Baseline: `/tutorial/body-nested-models/` | EN: `docs/en/tutorial/request-validation-and-schemas.md` | ES: `docs/es/tutorial/validacion-y-schemas.md` | Validation: `V-HTTP` (nested objects and arrays).
-- [ ] D014 | Baseline: `/tutorial/extra-data-types/` | EN: `docs/en/tutorial/request-validation-and-schemas.md` | ES: `docs/es/tutorial/validacion-y-schemas.md` | Validation: `V-HTTP` (dates, booleans, numbers, nullability).
+- [x] D004 | Baseline: `/tutorial/intro/` | EN: `docs/en/tutorial/first-steps.md` | ES: `docs/es/tutorial/primeros-pasos.md` | Validation: `V-CONCEPT` (scope, prerequisites, expected outcome).
+- [x] D005 | Baseline: `/tutorial/first-steps/` | EN: `docs/en/tutorial/from-zero/1-setup-and-first-route.md` | ES: `docs/es/tutorial/desde-cero/1-setup-y-primera-ruta.md` | Validation: `V-OPS` (clean-room setup + first request).
+- [x] D006 | Baseline: `/tutorial/path-params/` | EN: `docs/en/tutorial/from-zero/2-routing-and-data.md` | ES: `docs/es/tutorial/desde-cero/2-enrutamiento-y-datos.md` | Validation: `V-HTTP` (path params, wildcard params, examples).
+- [x] D007 | Baseline: `/tutorial/query-params/` | EN: `docs/en/tutorial/from-zero/2-routing-and-data.md` | ES: `docs/es/tutorial/desde-cero/2-enrutamiento-y-datos.md` | Validation: `V-HTTP` (query defaults, required vs optional).
+- [x] D008 | Baseline: `/tutorial/body/` | EN: `docs/en/tutorial/from-zero/2-routing-and-data.md` | ES: `docs/es/tutorial/desde-cero/2-enrutamiento-y-datos.md` | Validation: `V-HTTP` (JSON body parsing + error cases).
+- [x] D009 | Baseline: `/tutorial/query-params-str-validations/` | EN: `docs/en/tutorial/request-validation-and-schemas.md` | ES: `docs/es/tutorial/validacion-y-schemas.md` | Validation: `V-HTTP` (string constraints + invalid payload examples).
+- [x] D010 | Baseline: `/tutorial/path-params-numeric-validations/` | EN: `docs/en/tutorial/request-validation-and-schemas.md` | ES: `docs/es/tutorial/validacion-y-schemas.md` | Validation: `V-HTTP` (numeric guards + boundary examples).
+- [x] D011 | Baseline: `/tutorial/body-multiple-params/` | EN: `docs/en/tutorial/request-validation-and-schemas.md` | ES: `docs/es/tutorial/validacion-y-schemas.md` | Validation: `V-HTTP` (merged body + params contract table).
+- [x] D012 | Baseline: `/tutorial/body-schema/` | EN: `docs/en/tutorial/request-validation-and-schemas.md` | ES: `docs/es/tutorial/validacion-y-schemas.md` | Validation: `V-HTTP` (schema-like shape and field requirements).
+- [x] D013 | Baseline: `/tutorial/body-nested-models/` | EN: `docs/en/tutorial/request-validation-and-schemas.md` | ES: `docs/es/tutorial/validacion-y-schemas.md` | Validation: `V-HTTP` (nested objects and arrays).
+- [x] D014 | Baseline: `/tutorial/extra-data-types/` | EN: `docs/en/tutorial/request-validation-and-schemas.md` | ES: `docs/es/tutorial/validacion-y-schemas.md` | Validation: `V-HTTP` (dates, booleans, numbers, nullability).
 - [x] D015 | Baseline: `/tutorial/cookie-params/` | EN: `docs/en/tutorial/request-metadata-and-files.md` | ES: `docs/es/tutorial/metadata-request-y-archivos.md` | Validation: `V-HTTP` (cookie extraction and fallback behavior).
 - [x] D016 | Baseline: `/tutorial/header-params/` | EN: `docs/en/tutorial/request-metadata-and-files.md` | ES: `docs/es/tutorial/metadata-request-y-archivos.md` | Validation: `V-HTTP` (case-insensitive headers + defaults).
-- [ ] D017 | Baseline: `/tutorial/response-model/` | EN: `docs/en/tutorial/from-zero/4-advanced-responses.md` | ES: `docs/es/tutorial/desde-cero/4-respuestas-avanzadas.md` | Validation: `V-HTTP` (response shape guarantees).
-- [ ] D018 | Baseline: `/tutorial/extra-models/` | EN: `docs/en/tutorial/from-zero/4-advanced-responses.md` | ES: `docs/es/tutorial/desde-cero/4-respuestas-avanzadas.md` | Validation: `V-HTTP` (alternate response shapes by route/state).
-- [ ] D019 | Baseline: `/tutorial/response-status-code/` | EN: `docs/en/tutorial/from-zero/4-advanced-responses.md` | ES: `docs/es/tutorial/desde-cero/4-respuestas-avanzadas.md` | Validation: `V-HTTP` (status strategy table).
+- [x] D017 | Baseline: `/tutorial/response-model/` | EN: `docs/en/tutorial/from-zero/4-advanced-responses.md` | ES: `docs/es/tutorial/desde-cero/4-respuestas-avanzadas.md` | Validation: `V-HTTP` (response shape guarantees).
+- [x] D018 | Baseline: `/tutorial/extra-models/` | EN: `docs/en/tutorial/from-zero/4-advanced-responses.md` | ES: `docs/es/tutorial/desde-cero/4-respuestas-avanzadas.md` | Validation: `V-HTTP` (alternate response shapes by route/state).
+- [x] D019 | Baseline: `/tutorial/response-status-code/` | EN: `docs/en/tutorial/from-zero/4-advanced-responses.md` | ES: `docs/es/tutorial/desde-cero/4-respuestas-avanzadas.md` | Validation: `V-HTTP` (status strategy table).
 - [x] D020 | Baseline: `/tutorial/request-forms/` | EN: `docs/en/tutorial/request-metadata-and-files.md` | ES: `docs/es/tutorial/metadata-request-y-archivos.md` | Validation: `V-HTTP` (form-urlencoded examples).
 - [x] D021 | Baseline: `/tutorial/request-files/` | EN: `docs/en/tutorial/request-metadata-and-files.md` | ES: `docs/es/tutorial/metadata-request-y-archivos.md` | Validation: `V-HTTP` (single/multi file upload).
 - [x] D022 | Baseline: `/tutorial/request-forms-and-files/` | EN: `docs/en/tutorial/request-metadata-and-files.md` | ES: `docs/es/tutorial/metadata-request-y-archivos.md` | Validation: `V-HTTP` (multipart mixed payload contract).
-- [ ] D023 | Baseline: `/tutorial/handling-errors/` | EN: `docs/en/tutorial/from-zero/4-advanced-responses.md` | ES: `docs/es/tutorial/desde-cero/4-respuestas-avanzadas.md` | Validation: `V-HTTP` (error envelope + operational hints).
-- [ ] D024 | Baseline: `/tutorial/path-operation-configuration/` | EN: `docs/en/reference/http-api.md` | ES: `docs/es/referencia/api-http.md` | Validation: `V-CONCEPT` (FastFN metadata equivalents, non-1:1 note).
-- [ ] D025 | Baseline: `/tutorial/path-operation-advanced-configuration/` | EN: `docs/en/how-to/zero-config-routing.md` | ES: `docs/es/como-hacer/zero-config-routing.md` | Validation: `V-CONCEPT` (route naming/tags/operation ids in file-based model).
-- [ ] D026 | Baseline: `/tutorial/additional-status-codes/` | EN: `docs/en/tutorial/from-zero/4-advanced-responses.md` | ES: `docs/es/tutorial/desde-cero/4-respuestas-avanzadas.md` | Validation: `V-HTTP` (multi-status examples).
-- [ ] D027 | Baseline: `/tutorial/encoder/` | EN: `docs/en/reference/http-api.md` | ES: `docs/es/referencia/api-http.md` | Validation: `V-HTTP` (serialization edge cases).
+- [x] D023 | Baseline: `/tutorial/handling-errors/` | EN: `docs/en/tutorial/from-zero/4-advanced-responses.md` | ES: `docs/es/tutorial/desde-cero/4-respuestas-avanzadas.md` | Validation: `V-HTTP` (error envelope + operational hints).
+- [x] D024 | Baseline: `/tutorial/path-operation-configuration/` | EN: `docs/en/reference/http-api.md` | ES: `docs/es/referencia/api-http.md` | Validation: `V-CONCEPT` (FastFN metadata equivalents, non-1:1 note).
+- [x] D025 | Baseline: `/tutorial/path-operation-advanced-configuration/` | EN: `docs/en/how-to/zero-config-routing.md` | ES: `docs/es/como-hacer/zero-config-routing.md` | Validation: `V-CONCEPT` (route naming/tags/operation ids in file-based model).
+- [x] D026 | Baseline: `/tutorial/additional-status-codes/` | EN: `docs/en/tutorial/from-zero/4-advanced-responses.md` | ES: `docs/es/tutorial/desde-cero/4-respuestas-avanzadas.md` | Validation: `V-HTTP` (multi-status examples).
+- [x] D027 | Baseline: `/tutorial/encoder/` | EN: `docs/en/reference/http-api.md` | ES: `docs/es/referencia/api-http.md` | Validation: `V-HTTP` (serialization edge cases).
 - [ ] D028 | Baseline: `/tutorial/body-updates/` | EN: `docs/en/tutorial/from-zero/4-advanced-responses.md` | ES: `docs/es/tutorial/desde-cero/4-respuestas-avanzadas.md` | Validation: `V-HTTP` (PATCH/PUT merge behavior).
 - [ ] D029 | Baseline: `/tutorial/response-directly/` | EN: `docs/en/tutorial/from-zero/4-advanced-responses.md` | ES: `docs/es/tutorial/desde-cero/4-respuestas-avanzadas.md` | Validation: `V-HTTP` (raw response control examples).
 - [ ] D030 | Baseline: `/tutorial/custom-response/` | EN: `docs/en/tutorial/from-zero/4-advanced-responses.md` | ES: `docs/es/tutorial/desde-cero/4-respuestas-avanzadas.md` | Validation: `V-HTTP` (custom headers/content-type).

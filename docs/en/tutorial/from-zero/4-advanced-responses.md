@@ -1,133 +1,129 @@
 # Part 4: Advanced Responses
 
-
-> Verified status as of **March 10, 2026**.
+> Verified status as of **March 13, 2026**.
 > Runtime note: FastFN auto-installs function-local dependencies from `requirements.txt` / `package.json`; host runtimes are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
-So far, our Task Manager API has only returned JSON. But FastFN is a full web framework. You can return HTML, CSVs, images, and set custom HTTP headers.
 
-## 1. Returning HTML
+## Quick View
 
-Let's create a simple web page to view our tasks. Create a new folder called `view` and add a `handler.js` (or `.py`, `.php`) inside it.
+- Complexity: Intermediate
+- Typical time: 30-40 minutes
+- Outcome: consistent response contracts with explicit multi-status behavior
 
-```text
-task-manager-api/
-├── tasks/
-│   └── ...
-└── view/
-    └── handler.js     # -> GET /view
+## 1. Response shape guarantees
+
+Use an explicit envelope in every branch:
+
+```js
+exports.handler = async () => ({
+  status: 200,
+  headers: { "Content-Type": "application/json; charset=utf-8" },
+  body: { items: [], total: 0 }
+});
 ```
 
-To return HTML, you just need to set the `Content-Type` header and pass a string as the body:
+Recommended stable shape for JSON APIs:
 
-=== "Python"
-    ```python hl_lines="4 5"
-    def handler(event):
-        html = "<h1>My Tasks</h1><ul><li>Learn FastFN</li></ul>"
-        return {
-            "status": 200,
-            "headers": {"Content-Type": "text/html; charset=utf-8"},
-            "body": html
-        }
-    ```
+```json
+{
+  "data": {},
+  "error": null,
+  "meta": {}
+}
+```
 
-=== "Node.js"
-    ```javascript hl_lines="4 5"
-    exports.handler = async (event) => {
-        const html = `<h1>My Tasks</h1><ul><li>Learn FastFN</li></ul>`;
-        return {
-            status: 200,
-            headers: { "Content-Type": "text/html; charset=utf-8" },
-            body: html
-        };
-    };
-    ```
+## 2. Alternate response models by state
 
-=== "PHP"
-    ```php hl_lines="4 5"
-    <?php
-    return function($event) {
-        $html = "<h1>My Tasks</h1><ul><li>Learn FastFN</li></ul>";
-        return [
-            "status" => 200,
-            "headers" => ["Content-Type" => "text/html; charset=utf-8"],
-            "body" => $html
-        ];
-    };
-    ```
+`node/tasks/[id]/get.js`:
 
-Open `http://127.0.0.1:8080/view` in your browser, and you'll see a rendered HTML page!
+```js
+exports.handler = async (_event, { id }) => {
+  if (id === "404") {
+    return { status: 404, body: { error: { code: "TASK_NOT_FOUND", message: "task not found" } } };
+  }
+  return { status: 200, body: { data: { id, title: "Write docs" }, error: null } };
+};
+```
+
+Validate:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/tasks/1'
+curl -sS 'http://127.0.0.1:8080/tasks/404'
+```
+
+## 3. Status code strategy
+
+| Status | When to use | Body contract |
+|---|---|---|
+| `200` | read/update success | `data` present, `error: null` |
+| `201` | resource created | `data` with created id |
+| `202` | accepted async work | `job_id` + polling URL |
+| `400` | malformed request | error with client-fix message |
+| `404` | missing route/resource | error code + message |
+| `409` | conflict | deterministic conflict details |
+| `422` | semantic validation fail | field-level validation message |
+
+## 4. Additional status codes in one endpoint
+
+`node/tasks/post.js`:
+
+```js
+exports.handler = async (event) => {
+  const body = JSON.parse(event.body || "{}");
+  if (!body.title) return { status: 422, body: { error: "title required" } };
+  if (body.async === true) return { status: 202, body: { job_id: "job-123", status_url: "/_fn/jobs/job-123" } };
+  return { status: 201, body: { id: 99, title: body.title } };
+};
+```
+
+Validate:
+
+```bash
+curl -sS -X POST 'http://127.0.0.1:8080/tasks' -H 'Content-Type: application/json' -d '{}'
+curl -sS -X POST 'http://127.0.0.1:8080/tasks' -H 'Content-Type: application/json' -d '{"title":"Docs","async":true}'
+curl -sS -X POST 'http://127.0.0.1:8080/tasks' -H 'Content-Type: application/json' -d '{"title":"Docs"}'
+```
+
+Expected statuses:
+
+- `422` validation error
+- `202` accepted
+- `201` created
+
+## 5. Error handling envelope and operational hints
+
+Use a stable error object to keep client handling simple:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "title required",
+    "hint": "send title as non-empty string"
+  }
+}
+```
+
+Operational hints:
+
+- include `trace_id` in `meta` when available
+- do not leak raw stack traces
+- keep `code` stable across versions
 
 ![Browser rendering HTML response at /view](../../../assets/screenshots/browser-html-view.png)
 
-## 2. Custom Headers and Redirects
+## Flow diagram
 
-You can use the `headers` object to control browser behavior, like setting cookies or performing redirects.
+```mermaid
+flowchart LR
+  A["Incoming request"] --> B["Validate input"]
+  B --> C{"Valid?"}
+  C -- "no" --> D["4xx envelope"]
+  C -- "yes" --> E["2xx envelope"]
+```
 
-Let's say we want to redirect users from `/old-tasks` to our new `/tasks` endpoint. Create `old-tasks/handler.js`:
+## Related links
 
-=== "Python"
-    ```python
-    def handler(event):
-        return {
-            "status": 301,
-            "headers": {"Location": "/tasks"}
-        }
-    ```
-
-=== "Node.js"
-    ```javascript
-    exports.handler = async (event) => {
-        return {
-            status: 301, // Permanent Redirect
-            headers: { "Location": "/tasks" }
-        };
-    };
-    ```
-
-=== "PHP"
-    ```php
-    <?php
-    return function($event) {
-        return [
-            "status" => 301,
-            "headers" => ["Location" => "/tasks"]
-        ];
-    };
-    ```
-
-## Congratulations! 🎉
-
-You've completed the "From Zero" course! You've built a Task Manager API that handles dynamic routing, reads request bodies, manages secrets, enforces HTTP methods, and returns rich HTML responses.
-
-You now have all the core skills needed to build production-ready applications with FastFN.
-
-### Where to go next?
-- Check out the [FastAPI/Next.js Playbook](../../how-to/fastapi-nextjs-playbook.md) to migrate existing apps.
-- Learn how to [Deploy to Production](../../how-to/deploy-to-production.md).
-- Explore the [HTTP API Reference](../../reference/http-api.md) for advanced details.
-
-## Objective
-
-Clear scope, expected outcome, and who should use this page.
-
-## Prerequisites
-
-- FastFN CLI available
-- Runtime dependencies by mode verified (Docker for `fastfn dev`, OpenResty+runtimes for `fastfn dev --native`)
-
-## Validation Checklist
-
-- Command examples execute with expected status codes
-- Routes appear in OpenAPI where applicable
-- References at the end are reachable
-
-## Troubleshooting
-
-- If runtime is down, verify host dependencies and health endpoint
-- If routes are missing, re-run discovery and check folder layout
-
-## See also
-
-- [Function Specification](../../reference/function-spec.md)
-- [HTTP API Reference](../../reference/http-api.md)
-- [Run and Test Checklist](../../how-to/run-and-test.md)
+- [Request validation and schemas](../request-validation-and-schemas.md)
+- [HTTP API reference](../../reference/http-api.md)
+- [Deploy to production](../../how-to/deploy-to-production.md)

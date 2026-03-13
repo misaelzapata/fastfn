@@ -272,7 +272,37 @@ Para un racional más profundo y resultados validados, consulta:
 
 - `docs/es/articulos/apis-poliglotas-next-style.md`
 
-## 10. Sanity Check de Swagger/OpenAPI
+## 10. Nombre de operación, summary y IDs OpenAPI
+
+En routing por archivos, el nombre de operación se deriva; no se define por decorador.
+
+Mapeo práctico:
+
+- Nombre de path: se deriva de carpeta/archivo (`users/[id].js` -> `/users/{id}`)
+- Método HTTP: se deriva del prefijo (`get.`, `post.`...) o política de métodos permitidos
+- Summary: se puede ajustar con `invoke.summary` en `fn.config.json` o hint `@summary`
+- `operationId`: se genera como `<method>_<runtime>_<name>_<version>`
+- Tags: las genera el gateway (`functions` para rutas públicas)
+
+Ejemplo de summary en `fn.config.json`:
+
+```json
+{
+  "invoke": {
+    "methods": ["GET"],
+    "summary": "Obtener perfil de cliente"
+  }
+}
+```
+
+Ejemplo de hint en handler:
+
+```js
+// @summary Obtener suscripciones activas
+exports.handler = async () => ({ status: 200, body: [] });
+```
+
+## 11. Sanity Check de Swagger/OpenAPI
 
 Con `fastfn dev examples/functions/next-style` corriendo:
 

@@ -75,6 +75,21 @@ Endpoints mapeados opcionales por funcion desde `fn.config.json`:
 
 Despues de recargar/discovery, llamar `/api/node-echo` invoca esa funcion.
 
+## Configuración de operaciones (equivalencias en FastFN)
+
+FastFN no usa objetos de operación por decoradores como FastAPI. La configuración vive entre rutas por archivo y `fn.config.json`.
+
+| Concepto estilo FastAPI | Equivalente en FastFN | Notas |
+|---|---|---|
+| método/path de operación | nombre de archivo + carpeta | la fuente de verdad es filesystem o `fn.routes.json` |
+| métodos permitidos | `invoke.methods` | gateway aplica regla y devuelve `405` + `Allow` |
+| summary | `invoke.summary` o hint `@summary` | se refleja en OpenAPI |
+| ejemplos query/body | `invoke.query`, `invoke.body`, `invoke.content_type` | usados en ejemplos de request OpenAPI |
+| operationId | generado automáticamente | formato: `<method>_<runtime>_<name>_<version>` |
+| tags | generadas (`functions` / `internal`) | sin mapeo custom por ruta por ahora |
+
+Nota no-1:1: si necesitas customización OpenAPI profunda por operación, usa FastFN como router runtime y aplica transformaciones de schema en tu pipeline de entrega.
+
 ## Endpoints internos de plataforma (`/_fn/*`)
 
 ### Salud y discovery
@@ -182,6 +197,27 @@ Campos:
 - `GET /docs`
 
 OpenAPI es dinamico y refleja metodos permitidos por funcion/version en tiempo real.
+
+## Casos límite de serialización y encoding
+
+FastFN normaliza salida de runtime a HTTP, pero el comportamiento de serialización depende del tipo de `body` y headers.
+
+| Body devuelto por runtime | Estrategia de headers | Resultado en cliente |
+|---|---|---|
+| objeto/array | sin `Content-Type` explícito | serialización JSON con `application/json` |
+| string | sin `Content-Type` explícito | salida como texto plano |
+| string con JSON | `application/json` | se envía como texto; cliente parsea si necesita |
+| string binario/base64 | content type explícito + decode en handler | patrón seguro para binarios |
+
+Patrón recomendado para comportamiento determinista:
+
+```json
+{
+  "status": 200,
+  "headers": { "Content-Type": "application/json; charset=utf-8" },
+  "body": { "ok": true }
+}
+```
 
 ## Tabla de errores
 

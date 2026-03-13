@@ -1,183 +1,147 @@
 # Part 2: Routing and Data
 
-
-> Verified status as of **March 10, 2026**.
+> Verified status as of **March 13, 2026**.
 > Runtime note: FastFN auto-installs function-local dependencies from `requirements.txt` / `package.json`; host runtimes are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
-In Part 1, we created a static list of tasks at `/tasks`. Now, let's make our API dynamic. We want to fetch a specific task by its ID (e.g., `/tasks/1`) and add new tasks using a `POST` request.
 
-## 1. Dynamic Routing (Fetching a single task)
+## Quick View
 
-FastFN uses brackets `[]` in file names to create dynamic path parameters. 
+- Complexity: Intermediate
+- Typical time: 25-35 minutes
+- Outcome: dynamic path/query/body handling with explicit validation errors
 
-Inside your `tasks` folder, create a new file named `[id].js` (or `.py`, `.php`).
+## 1. Path parameters: single and catch-all
+
+Create files:
 
 ```text
-task-manager-api/
-└── tasks/
-    ├── handler.js     # -> GET /tasks
-    └── [id].js        # -> GET /tasks/:id
+node/
+  tasks/
+    [id].js
+  reports/
+    [...slug].js
 ```
 
-Add the following code to `tasks/[id].js`:
+`node/tasks/[id].js`:
 
-=== "Python"
-    ```python
-    def handler(event, id):
-        # 'id' is injected directly from the URL path
-        return {
-            "status": 200,
-            "body": {"message": f"Fetching details for task {id}"}
-        }
-    ```
+```js
+exports.handler = async (_event, { id }) => ({
+  status: 200,
+  body: { task_id: id }
+});
+```
 
-=== "Node.js"
-    ```javascript
-    exports.handler = async (event, { id }) => {
-        // 'id' is destructured from the route params object
-        return {
-            status: 200,
-            body: { message: `Fetching details for task ${id}` }
-        };
-    };
-    ```
+`node/reports/[...slug].js`:
 
-=== "PHP"
-    ```php
-    <?php
-    return function($event, $params) {
-        // $params contains the route parameters
-        $taskId = $params['id'] ?? null;
+```js
+exports.handler = async (_event, { slug }) => ({
+  status: 200,
+  body: { path: slug }
+});
+```
 
-        return [
-            "status" => 200,
-            "body" => ["message" => "Fetching details for task $taskId"]
-        ];
-    };
-    ```
-
-!!! tip "Direct Parameter Injection"
-    FastFN inspects your handler's signature and injects matching route parameters
-    directly. In Python, `def handler(event, id)` receives the `:id` value as the
-    second argument. In Node.js, you can destructure: `async (event, { id }) =>`.
-    Parameters are also always available in `event.params` if you prefer.
-
-Test it by opening `http://127.0.0.1:8080/tasks/42` in your browser. You should see `{"message": "Fetching details for task 42"}`.
-
-## 2. Reading the Request Body (Adding a task)
-
-By default, FastFN routes handle `GET` requests. To handle a `POST` request to `/tasks`, we can inspect the HTTP method inside our main `tasks/handler.js` file.
-
-Update your `tasks/handler.js` to handle both `GET` and `POST`:
-
-=== "Python"
-    ```python
-    def handler(event):
-        if event.get("method") == "POST":
-            # Read the parsed JSON body
-            new_task = event.get("body")
-            return {
-                "status": 201,
-                "body": {"message": "Task created!", "task": new_task}
-            }
-
-        # Default GET behavior
-        return {
-            "status": 200,
-            "body": [{"id": 1, "title": "Learn FastFN"}]
-        }
-    ```
-
-=== "Node.js"
-    ```javascript
-    exports.handler = async (event) => {
-        if (event.method === "POST") {
-            // Read the parsed JSON body
-            const newTask = event.body;
-            return {
-                status: 201,
-                body: { message: "Task created!", task: newTask }
-            };
-        }
-
-        // Default GET behavior
-        return {
-            status: 200,
-            body: [{ id: 1, title: "Learn FastFN" }]
-        };
-    };
-    ```
-
-=== "PHP"
-    ```php
-    <?php
-    return function($event) {
-        if (($event['method'] ?? 'GET') === 'POST') {
-            $newTask = $event['body'] ?? [];
-            return [
-                "status" => 201,
-                "body" => ["message" => "Task created!", "task" => $newTask]
-            ];
-        }
-
-        return [
-            "status" => 200,
-            "body" => [["id" => 1, "title" => "Learn FastFN"]]
-        ];
-    };
-    ```
-
-!!! tip "Alternative: Method-Specific Files"
-    Instead of handling both GET and POST in one file, you could create separate files:
-    `tasks/get.js` for GET and `tasks/post.js` for POST.
-    FastFN infers the HTTP method from the filename prefix.
-    See [Routing](../routing.md) for details.
-
-Test your new `POST` endpoint using `curl` or the Swagger UI (`http://127.0.0.1:8080/docs`):
+Validate:
 
 ```bash
-curl -X POST http://127.0.0.1:8080/tasks \
-     -H "Content-Type: application/json" \
-     -d '{"title": "Write documentation"}'
+curl -sS 'http://127.0.0.1:8080/tasks/42'
+curl -sS 'http://127.0.0.1:8080/reports/2026/03/daily'
 ```
 
-## Next Steps
+Expected:
 
-Our API is taking shape! But what if we want to connect to a real database using a secret token? In the next part, we'll learn how to securely manage environment variables and configure our function's behavior.
+```json
+{"task_id":"42"}
+{"path":"2026/03/daily"}
+```
 
-[Go to Part 3: Configuration and Secrets :arrow_right:](./3-config-and-secrets.md)
+## 2. Query params: required vs optional and defaults
 
-## Flow Diagram
+`node/tasks/search.js`:
+
+```js
+exports.handler = async (event) => {
+  const q = event.query?.q;
+  const page = Number(event.query?.page || "1");
+
+  if (!q) {
+    return { status: 400, body: { error: "q is required" } };
+  }
+
+  return { status: 200, body: { q, page } };
+};
+```
+
+Validate:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/tasks/search?page=2'
+curl -sS 'http://127.0.0.1:8080/tasks/search?q=fastfn'
+```
+
+Expected:
+
+```json
+{"error":"q is required"}
+{"q":"fastfn","page":1}
+```
+
+## 3. JSON body parsing and error cases
+
+`node/tasks/post.js`:
+
+```js
+exports.handler = async (event) => {
+  let payload;
+  try {
+    payload = JSON.parse(event.body || "{}");
+  } catch (_err) {
+    return { status: 400, body: { error: "invalid JSON body" } };
+  }
+
+  if (!payload.title || typeof payload.title !== "string") {
+    return { status: 422, body: { error: "title must be a non-empty string" } };
+  }
+
+  return { status: 201, body: { id: 3, title: payload.title } };
+};
+```
+
+Validate:
+
+```bash
+curl -sS -X POST 'http://127.0.0.1:8080/tasks' -H 'Content-Type: application/json' -d '{bad'
+curl -sS -X POST 'http://127.0.0.1:8080/tasks' -H 'Content-Type: application/json' -d '{}'
+curl -sS -X POST 'http://127.0.0.1:8080/tasks' -H 'Content-Type: application/json' -d '{"title":"Write docs"}'
+```
+
+Expected statuses/bodies:
+
+- `400` with `{"error":"invalid JSON body"}`
+- `422` with `{"error":"title must be a non-empty string"}`
+- `201` with created task payload
+
+## Flow diagram
 
 ```mermaid
 flowchart LR
-  A["Client request"] --> B["Route discovery"]
-  B --> C["Policy and method validation"]
-  C --> D["Runtime handler execution"]
-  D --> E["HTTP response + OpenAPI parity"]
+  A["Route path"] --> B["Path params"]
+  B --> C["Query parsing"]
+  C --> D["Body parsing"]
+  D --> E["Validation result"]
+  E --> F["HTTP response"]
 ```
-
-## Objective
-
-Clear scope, expected outcome, and who should use this page.
-
-## Prerequisites
-
-- FastFN CLI available
-- Runtime dependencies by mode verified (Docker for `fastfn dev`, OpenResty+runtimes for `fastfn dev --native`)
-
-## Validation Checklist
-
-- Command examples execute with expected status codes
-- Routes appear in OpenAPI where applicable
-- References at the end are reachable
 
 ## Troubleshooting
 
-- If runtime is down, verify host dependencies and health endpoint
-- If routes are missing, re-run discovery and check folder layout
+- wrong handler not invoked: verify filename prefixes and folder names
+- params missing: check if route uses `[id]` or `[...slug]` pattern correctly
+- body parse errors: confirm `Content-Type: application/json` and valid JSON syntax
 
-## See also
+## Next step
 
-- [Function Specification](../../reference/function-spec.md)
-- [HTTP API Reference](../../reference/http-api.md)
-- [Run and Test Checklist](../../how-to/run-and-test.md)
+[Go to Part 3: Configuration and Secrets](./3-config-and-secrets.md)
+
+## Related links
+
+- [Request validation and schemas](../request-validation-and-schemas.md)
+- [Request metadata and files](../request-metadata-and-files.md)
+- [HTTP API reference](../../reference/http-api.md)

@@ -33,9 +33,6 @@ hide:
 <p><strong>Source Code</strong>: <a href="https://github.com/misaelzapata/fastfn" target="_blank">https://github.com/misaelzapata/fastfn</a></p>
 <hr />
 
-> Verified status as of **March 10, 2026**.
-> Runtime note: FastFN auto-installs function-local dependencies from `requirements.txt` / `package.json`; host runtimes are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
-
 <p>FastFN is a modern, fast (high-performance), serverless framework for building APIs with multiple languages based on file-system routing.</p>
 
 <p>The key features are:</p>
@@ -44,6 +41,19 @@ hide:
 <li><strong>Automatic Docs</strong>: Interactive API documentation (Swagger UI) generated automatically from your code.</li>
 <li><strong>Polyglot Power</strong>: Use the best tool for the job. AI in Python, IO in Node, glue logic in Lua, performance in Rust.</li>
 </ul>
+
+## What you get in the first 5 minutes
+
+- Create one function file and serve it locally.
+- Call the route immediately with `curl`.
+- Open automatic docs at `http://127.0.0.1:8080/docs`.
+- Keep scaling the same API with Python, Node, PHP, Lua, and Rust under one URL tree.
+
+## 5-minute path (recommended order)
+
+1. Tutorial: [Quick Start](./tutorial/first-steps.md)
+2. How-to: [Zero-Config Routing](./how-to/zero-config-routing.md)
+3. Reference: [HTTP API definition](./reference/http-api.md)
 
 ## Start in 60 seconds
 
@@ -54,53 +64,22 @@ Create a file named `hello.js` (or `.py`, `.php`, `.rs`):
 === "Node.js"
     ```js
     // hello.js
-    exports.handler = async () => "Hello World";
+    exports.handler = async (event) => ({
+      message: 'Hello from FastFN!',
+      query: event.query || {},
+      runtime: 'node',
+    });
     ```
 
 === "Python"
     ```python
     # hello.py
     def handler(event):
-        return {"hello": "world"}
-    ```
-
-=== "PHP"
-    ```php
-    <?php
-    function handler($event) {
-        return "Hello World";
-    }
-    ```
-
-=== "Lua"
-    ```lua
-    function handler(event)
-      return { hello = "world" }
-    end
-    ```
-
-=== "Go"
-    ```go
-    package main
-
-    func handler(event map[string]interface{}) map[string]interface{} {
-        return map[string]interface{}{
+        name = event.get("query", {}).get("name", "World")
+        return {
             "status": 200,
-            "body": "Hello World",
+            "body": {"hello": name, "runtime": "python"}
         }
-    }
-    ```
-
-=== "Rust"
-    ```rust
-    use serde_json::{json, Value};
-
-    pub fn handler(_event: Value) -> Value {
-        json!({
-            "status": 200,
-            "body": "Hello World"
-        })
-    }
     ```
 
 ### 2. Run the server
@@ -111,15 +90,39 @@ fastfn dev
 
 ### 3. Call your API
 
-<p align="center">
-  <img src="../assets/screenshots/browser-hello-world.png" alt="FastFN full browser view for /hello" width="100%">
-</p>
+```bash
+curl "http://127.0.0.1:8080/hello?name=Misael"
+```
+
+Expected response:
+
+```json
+{
+    "message": "Hello from FastFN!",
+    "query": {
+        "name": "Misael"
+    },
+    "runtime": "node"
+}
+```
 
 <p align="center">
   <img src="../demo.gif" alt="FastFN Terminal Demo" width="100%">
 </p>
 
 No `serverless.yml`. No framework boilerplate. File routes are discovered automatically.
+
+### 4. Open the generated docs
+
+- Swagger UI: `http://127.0.0.1:8080/docs`
+- OpenAPI JSON: `http://127.0.0.1:8080/openapi.json`
+
+If you want the shortest path from zero to production-like usage, go in this order:
+
+1. [Quick Start](./tutorial/first-steps.md)
+2. [From Zero](./tutorial/from-zero/index.md)
+3. [HTTP API definition](./reference/http-api.md)
+4. [Deploy to Production](./how-to/deploy-to-production.md)
 
 ## Documentation
 
@@ -138,6 +141,12 @@ This documentation is structured to help you learn FastFN step-by-step, from you
     Understand how file-system routing and configuration work.
     
     [File-System Routing](./tutorial/routing.md)
+
+-   **Feature Matrix**
+    
+    See what FastFN gives you out of the box and where it fits best.
+    
+    [Explore Features](./explanation/feature-matrix.md)
 
 -   **Learn (The Course)**
     
@@ -165,7 +174,9 @@ This documentation is structured to help you learn FastFN step-by-step, from you
 
 *   [HTTP API definition](./reference/http-api.md)
 *   [Runtime Contract](./reference/runtime-contract.md)
+*   [Typed Inputs and Responses](./tutorial/typed-inputs-and-responses.md)
 *   [Built-in Functions](./reference/builtin-functions.md)
+*   [Feature Matrix](./explanation/feature-matrix.md)
 *   [Operational Recipes](./how-to/operational-recipes.md)
 *   [Security Confidence Checklist](./how-to/security-confidence.md)
 
@@ -179,9 +190,3 @@ This documentation is structured to help you learn FastFN step-by-step, from you
 ## Visual Guides
 
 *   [Visual flows](./explanation/visual-flows.md)
-
-## See also
-
-- [Function Specification](reference/function-spec.md)
-- [HTTP API Reference](reference/http-api.md)
-- [Run and Test Checklist](how-to/run-and-test.md)

@@ -1,183 +1,147 @@
 # Parte 2: Enrutamiento y Datos
 
-
-> Estado verificado al **10 de marzo de 2026**.
+> Estado verificado al **13 de marzo de 2026**.
 > Nota de runtime: FastFN auto-instala dependencias locales por función desde `requirements.txt` / `package.json`; en `fastfn dev --native` necesitas runtimes instalados en host, mientras que `fastfn dev` depende de Docker daemon activo.
-En la Parte 1, creamos una lista estática de tareas en `/tasks`. Ahora, hagamos nuestra API dinámica. Queremos obtener una tarea específica por su ID (ej. `/tasks/1`) y añadir nuevas tareas usando una petición `POST`.
 
-## 1. Enrutamiento Dinámico (Obtener una sola tarea)
+## Vista rápida
 
-FastFN usa corchetes `[]` en los nombres de archivo para crear parámetros de ruta dinámicos.
+- Complejidad: Intermedio
+- Tiempo típico: 25-35 minutos
+- Resultado: manejo de path/query/body dinámico con errores de validación explícitos
 
-Dentro de tu carpeta `tasks`, crea un nuevo archivo llamado `[id].js` (o `.py`, `.php`).
+## 1. Path params: simple y catch-all
+
+Crea estos archivos:
 
 ```text
-task-manager-api/
-└── tasks/
-    ├── handler.js     # -> GET /tasks
-    └── [id].js        # -> GET /tasks/:id
+node/
+  tasks/
+    [id].js
+  reports/
+    [...slug].js
 ```
 
-Añade el siguiente código a `tasks/[id].js`:
+`node/tasks/[id].js`:
 
-=== "Python"
-    ```python
-    def handler(event, id):
-        # 'id' se inyecta directamente desde la ruta URL
-        return {
-            "status": 200,
-            "body": {"message": f"Obteniendo detalles para la tarea {id}"}
-        }
-    ```
+```js
+exports.handler = async (_event, { id }) => ({
+  status: 200,
+  body: { task_id: id }
+});
+```
 
-=== "Node.js"
-    ```javascript
-    exports.handler = async (event, { id }) => {
-        // 'id' se desestructura del objeto de parámetros de ruta
-        return {
-            status: 200,
-            body: { message: `Obteniendo detalles para la tarea ${id}` }
-        };
-    };
-    ```
+`node/reports/[...slug].js`:
 
-=== "PHP"
-    ```php
-    <?php
-    return function($event, $params) {
-        // $params contiene los parámetros de ruta
-        $taskId = $params['id'] ?? null;
+```js
+exports.handler = async (_event, { slug }) => ({
+  status: 200,
+  body: { path: slug }
+});
+```
 
-        return [
-            "status" => 200,
-            "body" => ["message" => "Obteniendo detalles para la tarea $taskId"]
-        ];
-    };
-    ```
-
-!!! tip "Inyección Directa de Parámetros"
-    FastFN inspecciona la firma de tu handler e inyecta los parámetros de ruta
-    directamente. En Python, `def handler(event, id)` recibe el valor `:id` como
-    segundo argumento. En Node.js, puedes desestructurar: `async (event, { id }) =>`.
-    Los parámetros también están siempre disponibles en `event.params` si lo prefieres.
-
-Pruébalo abriendo `http://127.0.0.1:8080/tasks/42` en tu navegador. Deberías ver `{"message": "Obteniendo detalles para la tarea 42"}`.
-
-## 2. Leer el Cuerpo de la Petición (Añadir una tarea)
-
-Por defecto, las rutas de FastFN manejan peticiones `GET`. Para manejar una petición `POST` a `/tasks`, podemos inspeccionar el método HTTP dentro de nuestro archivo principal `tasks/handler.js`.
-
-Actualiza tu `tasks/handler.js` para manejar tanto `GET` como `POST`:
-
-=== "Python"
-    ```python
-    def handler(event):
-        if event.get("method") == "POST":
-            # Leer el cuerpo JSON parseado
-            new_task = event.get("body")
-            return {
-                "status": 201,
-                "body": {"message": "¡Tarea creada!", "task": new_task}
-            }
-
-        # Comportamiento GET por defecto
-        return {
-            "status": 200,
-            "body": [{"id": 1, "title": "Aprender FastFN"}]
-        }
-    ```
-
-=== "Node.js"
-    ```javascript
-    exports.handler = async (event) => {
-        if (event.method === "POST") {
-            // Leer el cuerpo JSON parseado
-            const newTask = event.body;
-            return {
-                status: 201,
-                body: { message: "¡Tarea creada!", task: newTask }
-            };
-        }
-
-        // Comportamiento GET por defecto
-        return {
-            status: 200,
-            body: [{ id: 1, title: "Aprender FastFN" }]
-        };
-    };
-    ```
-
-=== "PHP"
-    ```php
-    <?php
-    return function($event) {
-        if (($event['method'] ?? 'GET') === 'POST') {
-            $newTask = $event['body'] ?? [];
-            return [
-                "status" => 201,
-                "body" => ["message" => "¡Tarea creada!", "task" => $newTask]
-            ];
-        }
-
-        return [
-            "status" => 200,
-            "body" => [["id" => 1, "title" => "Aprender FastFN"]]
-        ];
-    };
-    ```
-
-!!! tip "Alternativa: Archivos por Método"
-    En lugar de manejar GET y POST en un solo archivo, puedes crear archivos separados:
-    `tasks/get.js` para GET y `tasks/post.js` para POST.
-    FastFN infiere el método HTTP del prefijo del nombre de archivo.
-    Consulta [Enrutamiento](../routing.md) para más detalles.
-
-Prueba tu nuevo endpoint `POST` usando `curl` o el Swagger UI (`http://127.0.0.1:8080/docs`):
+Validación:
 
 ```bash
-curl -X POST http://127.0.0.1:8080/tasks \
-     -H "Content-Type: application/json" \
-     -d '{"title": "Escribir documentación"}'
+curl -sS 'http://127.0.0.1:8080/tasks/42'
+curl -sS 'http://127.0.0.1:8080/reports/2026/03/daily'
 ```
 
-## Siguientes Pasos
+Esperado:
 
-¡Nuestra API está tomando forma! Pero, ¿qué pasa si queremos conectarnos a una base de datos real usando un token secreto? En la siguiente parte, aprenderemos cómo gestionar de forma segura las variables de entorno y configurar el comportamiento de nuestra función.
+```json
+{"task_id":"42"}
+{"path":"2026/03/daily"}
+```
 
-[Ir a la Parte 3: Configuración y Secretos :arrow_right:](./3-configuracion-y-secretos.md)
+## 2. Query params: requeridos, opcionales y defaults
 
-## Diagrama de Flujo
+`node/tasks/search.js`:
+
+```js
+exports.handler = async (event) => {
+  const q = event.query?.q;
+  const page = Number(event.query?.page || "1");
+
+  if (!q) {
+    return { status: 400, body: { error: "q es requerido" } };
+  }
+
+  return { status: 200, body: { q, page } };
+};
+```
+
+Validación:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/tasks/search?page=2'
+curl -sS 'http://127.0.0.1:8080/tasks/search?q=fastfn'
+```
+
+Esperado:
+
+```json
+{"error":"q es requerido"}
+{"q":"fastfn","page":1}
+```
+
+## 3. Parseo de body JSON y casos de error
+
+`node/tasks/post.js`:
+
+```js
+exports.handler = async (event) => {
+  let payload;
+  try {
+    payload = JSON.parse(event.body || "{}");
+  } catch (_err) {
+    return { status: 400, body: { error: "JSON body inválido" } };
+  }
+
+  if (!payload.title || typeof payload.title !== "string") {
+    return { status: 422, body: { error: "title debe ser string no vacío" } };
+  }
+
+  return { status: 201, body: { id: 3, title: payload.title } };
+};
+```
+
+Validación:
+
+```bash
+curl -sS -X POST 'http://127.0.0.1:8080/tasks' -H 'Content-Type: application/json' -d '{bad'
+curl -sS -X POST 'http://127.0.0.1:8080/tasks' -H 'Content-Type: application/json' -d '{}'
+curl -sS -X POST 'http://127.0.0.1:8080/tasks' -H 'Content-Type: application/json' -d '{"title":"Escribir docs"}'
+```
+
+Estados/bodies esperados:
+
+- `400` con `{"error":"JSON body inválido"}`
+- `422` con `{"error":"title debe ser string no vacío"}`
+- `201` con payload de tarea creada
+
+## Diagrama de flujo
 
 ```mermaid
 flowchart LR
-  A["Request del cliente"] --> B["Discovery de rutas"]
-  B --> C["Validación de políticas y método"]
-  C --> D["Ejecución del handler runtime"]
-  D --> E["Respuesta HTTP + paridad OpenAPI"]
+  A["Path"] --> B["Extracción de params"]
+  B --> C["Parseo query"]
+  C --> D["Parseo body"]
+  D --> E["Validación"]
+  E --> F["Respuesta HTTP"]
 ```
 
-## Objetivo
+## Solución de problemas
 
-Alcance claro, resultado esperado y público al que aplica esta guía.
+- se invoca handler incorrecto: revisa prefijos de método y nombre de carpeta
+- params vacíos: confirma patrón `[id]` o `[...slug]`
+- parseo de body falla: revisa `Content-Type: application/json` y JSON válido
 
-## Prerrequisitos
+## Próximo paso
 
-- CLI de FastFN disponible
-- Dependencias por modo verificadas (Docker para `fastfn dev`, OpenResty+runtimes para `fastfn dev --native`)
+[Ir a la Parte 3: Configuración y Secretos](./3-configuracion-y-secretos.md)
 
-## Checklist de Validación
+## Enlaces relacionados
 
-- Los comandos de ejemplo devuelven estados esperados
-- Las rutas aparecen en OpenAPI cuando aplica
-- Las referencias del final son navegables
-
-## Solución de Problemas
-
-- Si un runtime cae, valida dependencias de host y endpoint de health
-- Si faltan rutas, vuelve a ejecutar discovery y revisa layout de carpetas
-
-## Ver también
-
-- [Especificación de Funciones](../../referencia/especificacion-funciones.md)
+- [Validación y schemas](../validacion-y-schemas.md)
+- [Metadata de request y archivos](../metadata-request-y-archivos.md)
 - [Referencia API HTTP](../../referencia/api-http.md)
-- [Checklist Ejecutar y Probar](../../como-hacer/ejecutar-y-probar.md)
