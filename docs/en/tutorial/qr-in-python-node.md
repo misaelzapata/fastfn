@@ -10,8 +10,8 @@ This tutorial builds the same function in two runtimes:
 
 The goal is to verify runtime-local dependency installation:
 
-- Python installs to `functions/python/qr/.deps`
-- Node installs to `functions/node/qr/v2/node_modules`
+- Python installs to `functions/qr/.deps`
+- Node installs to `functions/qr/v2/node_modules`
 
 ## Prerequisites and scope
 
@@ -19,13 +19,13 @@ The goal is to verify runtime-local dependency installation:
 - Native mode (`fastfn dev --native`): OpenResty in `PATH` + host runtimes installed for languages you use.
 - This tutorial validates dependency auto-install only (`requirements.txt` / `package.json` per function).
 - It does not install host `python`/`node` runtimes.
-- The `functions/python/...` and `functions/node/...` layout used here is compatibility-friendly; in zero-config file routing, runtime is inferred from file extension.
+- The neutral `functions/...` layout used here is compatibility-friendly. If you prefer runtime-specific examples, keep them inside dedicated language tabs.
 
 ## 1) Create function folders
 
 ```bash
-mkdir -p functions/python/qr
-mkdir -p functions/node/qr/v2
+mkdir -p functions/qr
+mkdir -p functions/qr/v2
 ```
 
 ## 2) Add per-runtime dependency files
@@ -33,7 +33,7 @@ mkdir -p functions/node/qr/v2
 Python requirements:
 
 ```bash
-cat > functions/python/qr/requirements.txt <<'EOF'
+cat > functions/qr/requirements.txt <<'EOF'
 qrcode>=7.4
 EOF
 ```
@@ -41,7 +41,7 @@ EOF
 Node package:
 
 ```bash
-cat > functions/node/qr/v2/package.json <<'EOF'
+cat > functions/qr/v2/package.json <<'EOF'
 {
   "name": "fn-node-qr-v2",
   "version": "1.0.0",
@@ -55,7 +55,7 @@ EOF
 
 ## 3) Add function code
 
-Python `functions/python/qr/app.py`:
+Python `functions/qr/app.py`:
 
 ```python
 import io
@@ -91,7 +91,7 @@ def handler(event):
     }
 ```
 
-Node `functions/node/qr/v2/app.js`:
+Node `functions/qr/v2/app.js`:
 
 ```javascript
 const QRCode = require('qrcode');
@@ -123,7 +123,7 @@ exports.handler = async (event) => {
 
 ## 4) Add per-function policy
 
-Python `functions/python/qr/fn.config.json`:
+Python `functions/qr/fn.config.json`:
 
 ```json
 {
@@ -139,7 +139,7 @@ Python `functions/python/qr/fn.config.json`:
 }
 ```
 
-Node `functions/node/qr/v2/fn.config.json`:
+Node `functions/qr/v2/fn.config.json`:
 
 ```json
 {
@@ -160,7 +160,7 @@ Node `functions/node/qr/v2/fn.config.json`:
 You can reset local dependency folders:
 
 ```bash
-rm -rf functions/python/qr/.deps functions/node/qr/v2/node_modules
+rm -rf functions/qr/.deps functions/qr/v2/node_modules
 ```
 
 Call both routes:
@@ -180,8 +180,8 @@ file /tmp/qr-node.png
 Validate runtime-local dependency directories:
 
 ```bash
-test -d functions/python/qr/.deps/qrcode && echo python-ok
-test -d functions/node/qr/v2/node_modules/qrcode && echo node-ok
+test -d functions/qr/.deps/qrcode && echo python-ok
+test -d functions/qr/v2/node_modules/qrcode && echo node-ok
 ```
 
 ## 6) What this proves

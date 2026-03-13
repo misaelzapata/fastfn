@@ -33,7 +33,7 @@ Edit the function env (Console UI):
 
 The file on disk is:
 
-`<FN_FUNCTIONS_ROOT>/node/telegram-send/fn.env.json`
+`<FN_FUNCTIONS_ROOT>/telegram-send/fn.env.json`
 
 In this repository (when running `fastfn dev examples/functions`), that path is:
 
@@ -149,12 +149,12 @@ To force single-shot reply, use `mode=reply`.
 Notes:
 - `force_clear_webhook=true` clears an existing webhook to avoid `getUpdates` conflicts (HTTP 409).
 - If you already poll Telegram elsewhere, leave `force_clear_webhook=false` and stop the other poller.
-- Conversation memory is per chat and stored at `<FN_FUNCTIONS_ROOT>/node/telegram-ai-reply/.memory.json`.
-- Loop offset is persisted at `<FN_FUNCTIONS_ROOT>/node/telegram-ai-reply/.loop_state.json`.
+- Conversation memory is per chat and stored at `<FN_FUNCTIONS_ROOT>/telegram-ai-reply/.memory.json`.
+- Loop offset is persisted at `<FN_FUNCTIONS_ROOT>/telegram-ai-reply/.loop_state.json`.
 - If memory is present, the prompt instructs the model not to claim it cannot remember prior messages in the same chat.
 
 !!! tip "Timeouts"
-    `telegram-ai-reply` performs real outbound network calls (OpenAI + Telegram). Ensure it has a larger timeout in `<FN_FUNCTIONS_ROOT>/node/telegram-ai-reply/fn.config.json`, for example:
+    `telegram-ai-reply` performs real outbound network calls (OpenAI + Telegram). Ensure it has a larger timeout in `<FN_FUNCTIONS_ROOT>/telegram-ai-reply/fn.config.json`, for example:
 
     ```json
     { "timeout_ms": 20000 }
@@ -170,7 +170,7 @@ Notes:
 After the E2E check, remove secrets from the function env:
 
 - Console: set the value to empty (or delete the key) and save.
-- Or edit `<FN_FUNCTIONS_ROOT>/node/telegram-send/fn.env.json` and remove the entry.
+- Or edit `<FN_FUNCTIONS_ROOT>/telegram-send/fn.env.json` and remove the entry.
 
 ## 6) Python variant (Telegram AI reply with tools)
 
@@ -201,8 +201,8 @@ curl -sS "http://127.0.0.1:8080/telegram-ai-reply-py?mode=loop&dry_run=true&wait
 
 Files (created at runtime):
 
-- `<FN_FUNCTIONS_ROOT>/python/telegram-ai-reply-py/.memory.json`
-- `<FN_FUNCTIONS_ROOT>/python/telegram-ai-reply-py/.loop_state.json`
+- `<FN_FUNCTIONS_ROOT>/telegram-ai-reply-py/.memory.json`
+- `<FN_FUNCTIONS_ROOT>/telegram-ai-reply-py/.loop_state.json`
 
 ## Flow Diagram
 

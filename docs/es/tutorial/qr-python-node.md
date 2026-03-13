@@ -10,8 +10,8 @@ En este tutorial armamos la misma funcion en dos runtimes:
 
 La idea es validar instalacion de dependencias por funcion (sin contaminar el sistema):
 
-- Python instala en `functions/python/qr/.deps`
-- Node instala en `functions/node/qr/v2/node_modules`
+- Python instala en `functions/qr/.deps`
+- Node instala en `functions/qr/v2/node_modules`
 
 ## Requisitos y alcance
 
@@ -19,13 +19,13 @@ La idea es validar instalacion de dependencias por funcion (sin contaminar el si
 - Modo nativo (`fastfn dev --native`): OpenResty en `PATH` + runtimes instalados en el host para los lenguajes que uses.
 - Este tutorial valida solo auto-instalacion de dependencias (`requirements.txt` / `package.json` por funcion).
 - No instala los runtimes del host (`python`/`node`).
-- El layout `functions/python/...` y `functions/node/...` de este tutorial es compatible con flujos versionados; en zero-config por archivos, el runtime se infiere por extension.
+- El layout neutral `functions/...` de este tutorial es compatible con flujos versionados. Si quieres mostrar rutas runtime-specific, hazlo dentro de tabs por lenguaje.
 
 ## 1) Crear carpetas
 
 ```bash
-mkdir -p functions/python/qr
-mkdir -p functions/node/qr/v2
+mkdir -p functions/qr
+mkdir -p functions/qr/v2
 ```
 
 ## 2) Agregar archivos de dependencias
@@ -33,7 +33,7 @@ mkdir -p functions/node/qr/v2
 Python:
 
 ```bash
-cat > functions/python/qr/requirements.txt <<'EOF'
+cat > functions/qr/requirements.txt <<'EOF'
 qrcode>=7.4
 EOF
 ```
@@ -41,7 +41,7 @@ EOF
 Node:
 
 ```bash
-cat > functions/node/qr/v2/package.json <<'EOF'
+cat > functions/qr/v2/package.json <<'EOF'
 {
   "name": "fn-node-qr-v2",
   "version": "1.0.0",
@@ -55,7 +55,7 @@ EOF
 
 ## 3) Codigo de funcion
 
-Python `functions/python/qr/app.py`:
+Python `functions/qr/app.py`:
 
 ```python
 import io
@@ -91,7 +91,7 @@ def handler(event):
     }
 ```
 
-Node `functions/node/qr/v2/app.js`:
+Node `functions/qr/v2/app.js`:
 
 ```javascript
 const QRCode = require('qrcode');
@@ -123,7 +123,7 @@ exports.handler = async (event) => {
 
 ## 4) Politica por funcion
 
-Python `functions/python/qr/fn.config.json`:
+Python `functions/qr/fn.config.json`:
 
 ```json
 {
@@ -139,7 +139,7 @@ Python `functions/python/qr/fn.config.json`:
 }
 ```
 
-Node `functions/node/qr/v2/fn.config.json`:
+Node `functions/qr/v2/fn.config.json`:
 
 ```json
 {
@@ -160,7 +160,7 @@ Node `functions/node/qr/v2/fn.config.json`:
 Podes resetear dependencias:
 
 ```bash
-rm -rf functions/python/qr/.deps functions/node/qr/v2/node_modules
+rm -rf functions/qr/.deps functions/qr/v2/node_modules
 ```
 
 Llamar ambos endpoints:
@@ -180,8 +180,8 @@ file /tmp/qr-node.png
 Validar que quedaron instaladas por funcion:
 
 ```bash
-test -d functions/python/qr/.deps/qrcode && echo python-ok
-test -d functions/node/qr/v2/node_modules/qrcode && echo node-ok
+test -d functions/qr/.deps/qrcode && echo python-ok
+test -d functions/qr/v2/node_modules/qrcode && echo node-ok
 ```
 
 ## Diagrama de Flujo

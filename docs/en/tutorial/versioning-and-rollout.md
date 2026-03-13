@@ -20,7 +20,7 @@ functions/
 
 ## 2) Example code
 
-Default version (`functions/node/hello/app.js`):
+Default version (`functions/hello/app.js`):
 
 ```js
 exports.handler = async (event) => {
@@ -29,7 +29,7 @@ exports.handler = async (event) => {
 };
 ```
 
-Version `v2` (`functions/node/hello/v2/app.js`):
+Version `v2` (`functions/hello/v2/app.js`):
 
 ```js
 exports.handler = async (event) => {

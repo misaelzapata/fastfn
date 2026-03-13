@@ -183,7 +183,7 @@ Ver: [Herramientas (Función-a-Función + HTTP Limitado)](../como-hacer/herramie
 
 Con memoria habilitada (default `memory=true`), guarda un historial por chat en:
 
-- `<FN_FUNCTIONS_ROOT>/node/telegram-ai-reply/.memory.json`
+- `<FN_FUNCTIONS_ROOT>/telegram-ai-reply/.memory.json`
 
 Comportamiento:
 

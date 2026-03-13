@@ -18,11 +18,11 @@ This function sends a periodic digest to your Telegram chat using free sources (
 - Function: `telegram-ai-digest`
 - Route: `/telegram-ai-digest`
 - Methods: `GET`, `POST`
-- Schedule: defined per function in `<FN_FUNCTIONS_ROOT>/node/telegram-ai-digest/fn.config.json`
+- Schedule: defined per function in `<FN_FUNCTIONS_ROOT>/telegram-ai-digest/fn.config.json`
 
 ## Configure secrets
 
-Edit `<FN_FUNCTIONS_ROOT>/node/telegram-ai-digest/fn.env.json`:
+Edit `<FN_FUNCTIONS_ROOT>/telegram-ai-digest/fn.env.json`:
 
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`

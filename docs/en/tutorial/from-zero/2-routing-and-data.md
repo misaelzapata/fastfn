@@ -9,115 +9,245 @@
 - Typical time: 25-35 minutes
 - Outcome: dynamic path/query/body handling with explicit validation errors
 
-## 1. Path parameters: single and catch-all
+## 1. Path params and catch-all
 
-Create files:
+Create dynamic route files under `functions/`.
 
-```text
-node/
-  tasks/
-    [id].js
-  reports/
-    [...slug].js
-```
+=== "Node.js"
+    File: `functions/tasks/[id].js`
 
-`node/tasks/[id].js`:
+    ```js
+    exports.handler = async (_event, { id }) => ({ status: 200, body: { task_id: id } });
+    ```
 
-```js
-exports.handler = async (_event, { id }) => ({
-  status: 200,
-  body: { task_id: id }
-});
-```
+    File: `functions/reports/[...slug].js`
 
-`node/reports/[...slug].js`:
+    ```js
+    exports.handler = async (_event, { slug }) => ({ status: 200, body: { path: slug } });
+    ```
 
-```js
-exports.handler = async (_event, { slug }) => ({
-  status: 200,
-  body: { path: slug }
-});
-```
+=== "Python"
+    File: `functions/tasks/[id].py`
 
-Validate:
+    ```python
+    def handler(_event, params):
+        return {"status": 200, "body": {"task_id": params.get("id")}}
+    ```
+
+    File: `functions/reports/[...slug].py`
+
+    ```python
+    def handler(_event, params):
+        return {"status": 200, "body": {"path": params.get("slug")}}
+    ```
+
+=== "Rust"
+    File: `functions/tasks/[id].rs`
+
+    ```rust
+    use serde_json::{json, Value};
+
+    pub fn handler(_event: Value, params: Value) -> Value {
+        json!({"status": 200, "body": {"task_id": params.get("id").and_then(|v| v.as_str()).unwrap_or("")}})
+    }
+    ```
+
+=== "PHP"
+    File: `functions/tasks/[id].php`
+
+    ```php
+    <?php
+    function handler(array $event, array $params): array {
+        return ['status' => 200, 'body' => ['task_id' => $params['id'] ?? '']];
+    }
+    ```
+
+Validation curls (same for all runtimes):
 
 ```bash
 curl -sS 'http://127.0.0.1:8080/tasks/42'
 curl -sS 'http://127.0.0.1:8080/reports/2026/03/daily'
 ```
 
-Expected:
+## 2. Query params with defaults
 
-```json
-{"task_id":"42"}
-{"path":"2026/03/daily"}
-```
+=== "Node.js"
+    File: `functions/tasks/search.js`
 
-## 2. Query params: required vs optional and defaults
+    ```js
+    exports.handler = async (event) => {
+      const q = event.query?.q;
+      const page = Number(event.query?.page || "1");
+      if (!q) return { status: 400, body: { error: "q is required" } };
+      return { status: 200, body: { q, page } };
+    };
+    ```
 
-`node/tasks/search.js`:
+=== "Python"
+    File: `functions/tasks/search.py`
 
-```js
-exports.handler = async (event) => {
-  const q = event.query?.q;
-  const page = Number(event.query?.page || "1");
+    ```python
+    def handler(event):
+        query = event.get("query") or {}
+        q = query.get("q")
+        page = int(query.get("page", "1"))
+        if not q:
+            return {"status": 400, "body": {"error": "q is required"}}
+        return {"status": 200, "body": {"q": q, "page": page}}
+    ```
 
-  if (!q) {
-    return { status: 400, body: { error: "q is required" } };
-  }
+=== "Rust"
+    File: `functions/tasks/search.rs`
 
-  return { status: 200, body: { q, page } };
-};
-```
+    ```rust
+    use serde_json::{json, Value};
 
-Validate:
+    pub fn handler(event: Value) -> Value {
+        let q = event.get("query").and_then(|x| x.get("q")).and_then(|x| x.as_str());
+        if q.is_none() {
+            return json!({"status": 400, "body": {"error": "q is required"}});
+        }
+        json!({"status": 200, "body": {"q": q.unwrap(), "page": 1}})
+    }
+    ```
 
-```bash
-curl -sS 'http://127.0.0.1:8080/tasks/search?page=2'
-curl -sS 'http://127.0.0.1:8080/tasks/search?q=fastfn'
-```
+=== "PHP"
+    File: `functions/tasks/search.php`
 
-Expected:
+    ```php
+    <?php
+    function handler(array $event): array {
+        $query = $event['query'] ?? [];
+        $q = $query['q'] ?? null;
+        $page = intval($query['page'] ?? '1');
+        if (!$q) return ['status' => 400, 'body' => ['error' => 'q is required']];
+        return ['status' => 200, 'body' => ['q' => $q, 'page' => $page]];
+    }
+    ```
 
-```json
-{"error":"q is required"}
-{"q":"fastfn","page":1}
-```
+Runtime curls:
 
-## 3. JSON body parsing and error cases
+=== "Node.js"
+    ```bash
+    curl -sS 'http://127.0.0.1:8080/tasks/search?page=2'
+    curl -sS 'http://127.0.0.1:8080/tasks/search?q=fastfn'
+    ```
 
-`node/tasks/post.js`:
+=== "Python"
+    ```bash
+    curl -sS 'http://127.0.0.1:8080/tasks/search?page=2'
+    curl -sS 'http://127.0.0.1:8080/tasks/search?q=fastfn'
+    ```
 
-```js
-exports.handler = async (event) => {
-  let payload;
-  try {
-    payload = JSON.parse(event.body || "{}");
-  } catch (_err) {
-    return { status: 400, body: { error: "invalid JSON body" } };
-  }
+=== "Rust"
+    ```bash
+    curl -sS 'http://127.0.0.1:8080/tasks/search?page=2'
+    curl -sS 'http://127.0.0.1:8080/tasks/search?q=fastfn'
+    ```
 
-  if (!payload.title || typeof payload.title !== "string") {
-    return { status: 422, body: { error: "title must be a non-empty string" } };
-  }
+=== "PHP"
+    ```bash
+    curl -sS 'http://127.0.0.1:8080/tasks/search?page=2'
+    curl -sS 'http://127.0.0.1:8080/tasks/search?q=fastfn'
+    ```
 
-  return { status: 201, body: { id: 3, title: payload.title } };
-};
-```
+## 3. JSON body parsing and validation
 
-Validate:
+=== "Node.js"
+    File: `functions/tasks/post.js`
 
-```bash
-curl -sS -X POST 'http://127.0.0.1:8080/tasks' -H 'Content-Type: application/json' -d '{bad'
-curl -sS -X POST 'http://127.0.0.1:8080/tasks' -H 'Content-Type: application/json' -d '{}'
-curl -sS -X POST 'http://127.0.0.1:8080/tasks' -H 'Content-Type: application/json' -d '{"title":"Write docs"}'
-```
+    ```js
+    exports.handler = async (event) => {
+      let payload;
+      try { payload = JSON.parse(event.body || "{}"); }
+      catch { return { status: 400, body: { error: "invalid JSON body" } }; }
+      if (!payload.title || typeof payload.title !== "string") {
+        return { status: 422, body: { error: "title must be a non-empty string" } };
+      }
+      return { status: 201, body: { id: 3, title: payload.title } };
+    };
+    ```
 
-Expected statuses/bodies:
+=== "Python"
+    File: `functions/tasks/post.py`
 
-- `400` with `{"error":"invalid JSON body"}`
-- `422` with `{"error":"title must be a non-empty string"}`
-- `201` with created task payload
+    ```python
+    import json
+
+    def handler(event):
+        try:
+            payload = json.loads(event.get("body") or "{}")
+        except Exception:
+            return {"status": 400, "body": {"error": "invalid JSON body"}}
+        if not payload.get("title"):
+            return {"status": 422, "body": {"error": "title must be a non-empty string"}}
+        return {"status": 201, "body": {"id": 3, "title": payload["title"]}}
+    ```
+
+=== "Rust"
+    File: `functions/tasks/post.rs`
+
+    ```rust
+    use serde_json::{json, Value};
+
+    pub fn handler(event: Value) -> Value {
+        let payload = event.get("body").and_then(|b| b.as_str()).unwrap_or("{}");
+        let parsed: Value = serde_json::from_str(payload).unwrap_or(json!({"_error": "invalid"}));
+        if parsed.get("_error").is_some() {
+            return json!({"status": 400, "body": {"error": "invalid JSON body"}});
+        }
+        if parsed.get("title").and_then(|x| x.as_str()).unwrap_or("").is_empty() {
+            return json!({"status": 422, "body": {"error": "title must be a non-empty string"}});
+        }
+        json!({"status": 201, "body": {"id": 3, "title": parsed["title"]}})
+    }
+    ```
+
+=== "PHP"
+    File: `functions/tasks/post.php`
+
+    ```php
+    <?php
+    function handler(array $event): array {
+        $raw = $event['body'] ?? '{}';
+        $payload = json_decode($raw, true);
+        if (!is_array($payload)) return ['status' => 400, 'body' => ['error' => 'invalid JSON body']];
+        if (empty($payload['title']) || !is_string($payload['title'])) {
+            return ['status' => 422, 'body' => ['error' => 'title must be a non-empty string']];
+        }
+        return ['status' => 201, 'body' => ['id' => 3, 'title' => $payload['title']]];
+    }
+    ```
+
+Runtime curls:
+
+=== "Node.js"
+    ```bash
+    curl -sS -X POST 'http://127.0.0.1:8080/tasks' -H 'Content-Type: application/json' -d '{bad'
+    curl -sS -X POST 'http://127.0.0.1:8080/tasks' -H 'Content-Type: application/json' -d '{}'
+    curl -sS -X POST 'http://127.0.0.1:8080/tasks' -H 'Content-Type: application/json' -d '{"title":"Write docs"}'
+    ```
+
+=== "Python"
+    ```bash
+    curl -sS -X POST 'http://127.0.0.1:8080/tasks' -H 'Content-Type: application/json' -d '{bad'
+    curl -sS -X POST 'http://127.0.0.1:8080/tasks' -H 'Content-Type: application/json' -d '{}'
+    curl -sS -X POST 'http://127.0.0.1:8080/tasks' -H 'Content-Type: application/json' -d '{"title":"Write docs"}'
+    ```
+
+=== "Rust"
+    ```bash
+    curl -sS -X POST 'http://127.0.0.1:8080/tasks' -H 'Content-Type: application/json' -d '{bad'
+    curl -sS -X POST 'http://127.0.0.1:8080/tasks' -H 'Content-Type: application/json' -d '{}'
+    curl -sS -X POST 'http://127.0.0.1:8080/tasks' -H 'Content-Type: application/json' -d '{"title":"Write docs"}'
+    ```
+
+=== "PHP"
+    ```bash
+    curl -sS -X POST 'http://127.0.0.1:8080/tasks' -H 'Content-Type: application/json' -d '{bad'
+    curl -sS -X POST 'http://127.0.0.1:8080/tasks' -H 'Content-Type: application/json' -d '{}'
+    curl -sS -X POST 'http://127.0.0.1:8080/tasks' -H 'Content-Type: application/json' -d '{"title":"Write docs"}'
+    ```
 
 ## Flow diagram
 
@@ -133,7 +263,7 @@ flowchart LR
 ## Troubleshooting
 
 - wrong handler not invoked: verify filename prefixes and folder names
-- params missing: check if route uses `[id]` or `[...slug]` pattern correctly
+- params missing: verify `[id]` or `[...slug]` pattern
 - body parse errors: confirm `Content-Type: application/json` and valid JSON syntax
 
 ## Next step

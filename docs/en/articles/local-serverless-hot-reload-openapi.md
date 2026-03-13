@@ -30,7 +30,7 @@ No global `routes.json` is required.
 The gateway discovers functions automatically and applies policy from `fn.config.json`.
 
 ## Step 1: Create a tiny function
-Create `functions/python/my-profile/app.py`:
+Create `functions/my-profile/app.py`:
 
 ```python
 import json
@@ -45,7 +45,7 @@ def handler(event):
     }
 ```
 
-Create `functions/python/my-profile/fn.config.json`:
+Create `functions/my-profile/fn.config.json`:
 
 ```json
 {
@@ -107,8 +107,8 @@ curl -sS 'http://127.0.0.1:8080/public/whoami?name=Misael'
 
 ## Step 6: Add versioning with zero confusion
 Create a second version:
-- `functions/python/my-profile/v2/app.py`
-- `functions/python/my-profile/v2/fn.config.json`
+- `functions/my-profile/v2/app.py`
+- `functions/my-profile/v2/fn.config.json`
 
 Invoke both:
 

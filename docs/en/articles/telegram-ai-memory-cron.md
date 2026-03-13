@@ -64,7 +64,7 @@ Expected:
 - `node` and `python` runtimes reported as up.
 
 ## Step 2: Configure function secrets and runtime options
-Edit `<FN_FUNCTIONS_ROOT>/node/telegram-ai-reply/fn.env.json`:
+Edit `<FN_FUNCTIONS_ROOT>/telegram-ai-reply/fn.env.json`:
 
 ```json
 {
@@ -80,7 +80,7 @@ Notes:
 - Function env values are exposed at runtime as `event.env`.
 
 ## Step 3: Enable scheduler loop in function config
-Edit `<FN_FUNCTIONS_ROOT>/node/telegram-ai-reply/fn.config.json`:
+Edit `<FN_FUNCTIONS_ROOT>/telegram-ai-reply/fn.config.json`:
 
 ```json
 {
@@ -150,10 +150,10 @@ Memory settings (query params):
 - `memory_ttl_secs` (default 3600)
 
 Offset persistence:
-- `<FN_FUNCTIONS_ROOT>/node/telegram-ai-reply/.loop_state.json`
+- `<FN_FUNCTIONS_ROOT>/telegram-ai-reply/.loop_state.json`
 
 Memory file:
-- `<FN_FUNCTIONS_ROOT>/node/telegram-ai-reply/.memory.json`
+- `<FN_FUNCTIONS_ROOT>/telegram-ai-reply/.memory.json`
 
 This combination is what makes cron mode stable after restarts.
 

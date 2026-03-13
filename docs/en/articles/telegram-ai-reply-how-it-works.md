@@ -188,7 +188,7 @@ See: [Tools (Function-to-Function + Limited HTTP)](../how-to/tools.md)
 
 When memory is enabled (default `memory=true`), the function stores a small per-chat history in:
 
-- `<FN_FUNCTIONS_ROOT>/node/telegram-ai-reply/.memory.json`
+- `<FN_FUNCTIONS_ROOT>/telegram-ai-reply/.memory.json`
 
 Behavior:
 

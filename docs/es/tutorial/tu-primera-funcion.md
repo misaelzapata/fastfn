@@ -33,7 +33,7 @@ fastfn init mi-perfil -t python
 cd ..
 ```
 
-Esto crea una carpeta como `functions/python/mi-perfil/` con un `fn.config.json` y un entrypoint.
+Esto crea una carpeta como `functions/mi-perfil/` con un `fn.config.json` y un entrypoint.
 
 !!! note "Layouts disponibles"
     `fastfn init` genera por defecto carpetas agrupadas por runtime (`python/`, `node/`, etc.).
@@ -69,9 +69,9 @@ curl -sS 'http://127.0.0.1:8080/mi-perfil?name=Ada&role=admin' \
 
 ## 5) Ajustar política (`fn.config.json`)
 
-Edita `functions/python/mi-perfil/fn.config.json` para cambiar métodos, timeout, límites y ejemplos:
+Edita `functions/mi-perfil/fn.config.json` para cambiar métodos, timeout, límites y ejemplos:
 
-```json title="functions/python/mi-perfil/fn.config.json"
+```json title="functions/mi-perfil/fn.config.json"
 {
   "timeout_ms": 1500,
   "max_concurrency": 5,

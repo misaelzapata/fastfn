@@ -258,7 +258,7 @@ Notas:
 - Conflictos de rutas devuelven `409`.
 - Por defecto, FastFN no sobrescribe silenciosamente un mapeo de URL existente.
 - Usa `invoke.force-url: true` solo cuando realmente quieres que esta función se quede con una ruta (por ejemplo, durante una migración).
-- Los configs por versión (por ejemplo `node/mi-fn/v2/fn.config.json`) no pueden "tomar" una URL existente por sí solos; usa `FN_FORCE_URL=1` si necesitas que una ruta versionada gane.
+- Los configs por versión (por ejemplo `mi-fn/v2/fn.config.json`) no pueden \"tomar\" una URL existente por sí solos; usa `FN_FORCE_URL=1` si necesitas que una ruta versionada gane.
 - Override global: setea `FN_FORCE_URL=1` (o `fastfn dev --force-url`) para tratar todas las rutas config/policy como forced.
 
 ### `invoke.adapter` (Beta)

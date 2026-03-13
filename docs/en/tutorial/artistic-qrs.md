@@ -16,7 +16,7 @@ Prerequisite: complete the basic QR tutorial first:
 We will create a new version `v3` so `/qr@v3` is a distinct endpoint.
 
 ```bash
-mkdir -p functions/python/qr/v3
+mkdir -p functions/qr/v3
 ```
 
 ## 2) Optional dependency upgrade (PIL styling)
@@ -27,10 +27,10 @@ If you want PIL styling, use:
 qrcode[pil]>=7.4
 ```
 
-Put it in `functions/python/qr/v3/requirements.txt`:
+Put it in `functions/qr/v3/requirements.txt`:
 
 ```bash
-cat > functions/python/qr/v3/requirements.txt <<'EOF'
+cat > functions/qr/v3/requirements.txt <<'EOF'
 qrcode[pil]>=7.4
 EOF
 ```
@@ -39,7 +39,7 @@ EOF
 
 When returning PNG from a handler, use base64 payload (`is_base64=true`).
 
-Create `functions/python/qr/v3/app.py`:
+Create `functions/qr/v3/app.py`:
 
 ```python
 import base64
@@ -92,7 +92,7 @@ def handler(event):
 
 ## 4) Add function policy (optional, but recommended)
 
-Create `functions/python/qr/v3/fn.config.json`:
+Create `functions/qr/v3/fn.config.json`:
 
 ```json
 {

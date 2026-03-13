@@ -63,7 +63,7 @@ curl -sS 'http://127.0.0.1:8080/whatsapp?action=outbox' | jq .
 
 Set API key in function env file:
 
-`<FN_FUNCTIONS_ROOT>/node/whatsapp/fn.env.json`
+`<FN_FUNCTIONS_ROOT>/whatsapp/fn.env.json`
 
 ```json
 {
@@ -84,7 +84,7 @@ curl -sS -X POST 'http://127.0.0.1:8080/whatsapp?action=chat' \
 
 See also: [Tools (Function-to-Function + Limited HTTP)](../how-to/tools.md)
 
-Add optional tool env values in `<FN_FUNCTIONS_ROOT>/node/whatsapp/fn.env.json`:
+Add optional tool env values in `<FN_FUNCTIONS_ROOT>/whatsapp/fn.env.json`:
 
 ```json
 {

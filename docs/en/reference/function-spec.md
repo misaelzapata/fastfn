@@ -345,7 +345,7 @@ Notes:
 - In file-routes layout, folder overlays can define `home.route` to alias folder root (for example `/portal`) to another discovered route in that folder (for example `/portal/dashboard`).
 - Root-level `fn.config.json` can define `home.route`/`home.redirect` to override `/` without editing Nginx.
 - Use `invoke.force-url: true` only when you intentionally want this function to take a route from another function (for example during a migration).
-- Version-scoped configs (for example `node/my-fn/v2/fn.config.json`) never take over an existing URL by themselves; use `FN_FORCE_URL=1` if you need a version route to win.
+- Version-scoped configs (for example `my-fn/v2/fn.config.json`) never take over an existing URL by themselves; use `FN_FORCE_URL=1` if you need a version route to win.
 - Global override: set `FN_FORCE_URL=1` (or `fastfn dev --force-url`) to treat all config/policy routes as forced.
 
 Example with advanced fields:

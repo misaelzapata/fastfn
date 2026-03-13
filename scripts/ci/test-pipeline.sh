@@ -72,6 +72,7 @@ fi
 
 if [ "$USE_BASH" = "1" ]; then
   run_stage "repo layout" "$ROOT_DIR/scripts/ci/check-repo-layout.sh"
+  run_stage "docs path neutrality" python3 "$ROOT_DIR/scripts/docs/check_path_neutrality.py"
   run_stage "cli build" "$ROOT_DIR/cli/build.sh"
   run_stage "native deps preflight" check_native_prereqs
   run_stage "core suite (unit + integration)" "$ROOT_DIR/cli/test-all.sh"
@@ -83,6 +84,7 @@ if [ "$USE_BASH" = "1" ]; then
 else
   log "bash not found: running no-bash CI subset"
   run_stage "repo layout" "$ROOT_DIR/scripts/ci/check-repo-layout.sh"
+  run_stage "docs path neutrality" python3 "$ROOT_DIR/scripts/docs/check_path_neutrality.py"
   run_stage "go tests (cmd + process + embed)" sh -c "cd \"$ROOT_DIR/cli\" && go test ./cmd/... ./internal/process/... ./embed/runtime/..."
   run_stage "build fastfn binary" sh -c "cd \"$ROOT_DIR/cli\" && go build -o ../bin/fastfn"
   run_stage "python unit" python3 "$ROOT_DIR/tests/unit/test-python-handlers.py"

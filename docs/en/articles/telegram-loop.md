@@ -74,8 +74,8 @@ The endpoint uses:
 
 These can be provided in `fn.env.json` for `telegram-ai-reply`, or via container environment.
 
-Memory is stored locally in `<FN_FUNCTIONS_ROOT>/node/telegram-ai-reply/.memory.json`.
-Loop offset state is stored in `<FN_FUNCTIONS_ROOT>/node/telegram-ai-reply/.loop_state.json`.
+Memory is stored locally in `<FN_FUNCTIONS_ROOT>/telegram-ai-reply/.memory.json`.
+Loop offset state is stored in `<FN_FUNCTIONS_ROOT>/telegram-ai-reply/.loop_state.json`.
 
 ## Flow Diagram
 

@@ -389,8 +389,8 @@ curl -sS \
 
 Memory/loop state files (created at runtime):
 
-- `<FN_FUNCTIONS_ROOT>/python/telegram-ai-reply-py/.memory.json`
-- `<FN_FUNCTIONS_ROOT>/python/telegram-ai-reply-py/.loop_state.json`
+- `<FN_FUNCTIONS_ROOT>/telegram-ai-reply-py/.memory.json`
+- `<FN_FUNCTIONS_ROOT>/telegram-ai-reply-py/.loop_state.json`
 
 ### `hello`
 
@@ -914,8 +914,8 @@ Manual tool directives inside user message:
 
 Memory behavior:
 
-- Per-chat memory file: `<FN_FUNCTIONS_ROOT>/node/telegram-ai-reply/.memory.json`
-- Loop offset file: `<FN_FUNCTIONS_ROOT>/node/telegram-ai-reply/.loop_state.json`
+- Per-chat memory file: `<FN_FUNCTIONS_ROOT>/telegram-ai-reply/.memory.json`
+- Loop offset file: `<FN_FUNCTIONS_ROOT>/telegram-ai-reply/.loop_state.json`
 - The system prompt explicitly instructs the model not to claim "I can't remember" when history exists.
 
 ### `whatsapp`

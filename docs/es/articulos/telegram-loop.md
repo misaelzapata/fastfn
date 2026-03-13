@@ -74,8 +74,8 @@ El endpoint usa:
 
 Se pueden cargar via `fn.env.json` de `telegram-ai-reply` o por variables de entorno del contenedor.
 
-La memoria se guarda localmente en `<FN_FUNCTIONS_ROOT>/node/telegram-ai-reply/.memory.json`.
-El estado de offset del loop se guarda en `<FN_FUNCTIONS_ROOT>/node/telegram-ai-reply/.loop_state.json`.
+La memoria se guarda localmente en `<FN_FUNCTIONS_ROOT>/telegram-ai-reply/.memory.json`.
+El estado de offset del loop se guarda en `<FN_FUNCTIONS_ROOT>/telegram-ai-reply/.loop_state.json`.
 
 ## Diagrama de Flujo
 

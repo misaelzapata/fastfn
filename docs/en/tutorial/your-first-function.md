@@ -49,7 +49,7 @@ fastfn init my-profile --template php
 fastfn init my-profile --template rust
 ```
 
-`fastfn init` creates a runtime-scoped folder (for example `node/my-profile/`) with `fn.config.json` and a handler file.
+`fastfn init` creates a function folder (for example `functions/my-profile/`) with `fn.config.json` and a handler file.
 
 !!! note "Layout options"
     `fastfn init` uses `node/` and `python/` folders by default. In zero-config file routing, runtime can also be inferred from extension (`.js`, `.py`, etc.) without a runtime prefix in the path.
@@ -63,8 +63,10 @@ The `event` object contains:
 - `path`
 - `query` (URL parameters)
 - `headers`
-- `body` (JSON parsed or string)
+- `body` (raw request body string)
 - `context` (Request ID, user info, debug flags)
+
+If the client sends JSON, parse `event.body` explicitly inside the handler.
 
 ### Edit the Code
 
@@ -125,7 +127,7 @@ def handler(event: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "status": 200,
         "headers": {"Content-Type": "application/json"},
-        "body": profile  # Auto-serialized to JSON
+        "body": profile  # Python convenience shorthand, normalized to JSON
     }
 ```
 

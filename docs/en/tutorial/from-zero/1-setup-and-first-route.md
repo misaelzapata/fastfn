@@ -7,57 +7,112 @@
 
 - Complexity: Beginner
 - Typical time: 15-20 minutes
-- Outcome: clean-room project with one `GET /tasks` endpoint and OpenAPI entry
+- Outcome: clean project with one `GET /tasks` endpoint and OpenAPI entry
 
 ## 1. Clean-room setup
 
 ```bash
-mkdir -p task-manager-api
+mkdir -p task-manager-api/functions/tasks
 cd task-manager-api
-fastfn init tasks --template node
 ```
 
-Resulting layout:
+## 2. Implement the first route (choose one runtime)
 
-```text
-task-manager-api/
-  node/
-    tasks/
-      handler.js
-```
+=== "Node.js"
+    File: `functions/tasks/handler.js`
 
-## 2. Implement the first route
+    ```js
+    exports.handler = async () => ({
+      status: 200,
+      body: [
+        { id: 1, title: "Learn FastFN", completed: false },
+        { id: 2, title: "Ship first endpoint", completed: false }
+      ]
+    });
+    ```
 
-Edit `node/tasks/handler.js`:
+=== "Python"
+    File: `functions/tasks/main.py`
 
-```js
-exports.handler = async () => ({
-  status: 200,
-  body: [
-    { id: 1, title: "Learn FastFN", completed: false },
-    { id: 2, title: "Ship first endpoint", completed: false }
-  ]
-});
-```
+    ```python
+    def handler(_event):
+        return {
+            "status": 200,
+            "body": [
+                {"id": 1, "title": "Learn FastFN", "completed": False},
+                {"id": 2, "title": "Ship first endpoint", "completed": False},
+            ],
+        }
+    ```
+
+=== "Rust"
+    File: `functions/tasks/handler.rs`
+
+    ```rust
+    use serde_json::json;
+
+    pub fn handler(_event: serde_json::Value) -> serde_json::Value {
+        json!({
+            "status": 200,
+            "body": [
+                { "id": 1, "title": "Learn FastFN", "completed": false },
+                { "id": 2, "title": "Ship first endpoint", "completed": false }
+            ]
+        })
+    }
+    ```
+
+=== "PHP"
+    File: `functions/tasks/handler.php`
+
+    ```php
+    <?php
+
+    function handler(array $event): array {
+        return [
+            'status' => 200,
+            'body' => [
+                ['id' => 1, 'title' => 'Learn FastFN', 'completed' => false],
+                ['id' => 2, 'title' => 'Ship first endpoint', 'completed' => false],
+            ],
+        ];
+    }
+    ```
 
 ## 3. Run locally
 
 ```bash
-fastfn dev .
+fastfn dev functions
 ```
 
-## 4. Validate first request
+## 4. Validate first request (per runtime)
 
-```bash
-curl -sS 'http://127.0.0.1:8080/tasks'
-```
+=== "Node.js"
+    ```bash
+    curl -sS 'http://127.0.0.1:8080/tasks'
+    ```
 
-Expected body:
+=== "Python"
+    ```bash
+    curl -sS 'http://127.0.0.1:8080/tasks'
+    ```
+
+=== "Rust"
+    ```bash
+    curl -sS 'http://127.0.0.1:8080/tasks'
+    ```
+
+=== "PHP"
+    ```bash
+    curl -sS 'http://127.0.0.1:8080/tasks'
+    ```
+
+Expected body shape:
 
 ```json
 [
-  { "id": 1, "title": "Learn FastFN", "completed": false },
-  { "id": 2, "title": "Ship first endpoint", "completed": false }
+  { "id": 1, "title": "...", "completed": false },
+  { "id": 2, "title": "...", "completed": false }
 ]
 ```
 
@@ -77,9 +132,9 @@ true
 
 ## Troubleshooting
 
-- `curl` returns `503`: inspect `/_fn/health` and missing runtime dependencies
-- route not found: confirm the function path is `node/tasks/handler.js`
-- path missing in OpenAPI: trigger reload with `curl -X POST http://127.0.0.1:8080/_fn/reload`
+- `503`: check `/_fn/health` and runtime dependencies
+- route not found: confirm handler path under `functions/tasks/`
+- OpenAPI missing path: run `curl -X POST http://127.0.0.1:8080/_fn/reload`
 
 ## Next step
 

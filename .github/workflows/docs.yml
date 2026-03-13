@@ -40,6 +40,12 @@ jobs:
       - name: Install dependencies
         run: pip install mkdocs-material
 
+      - name: Check path neutrality policy
+        run: python3 scripts/docs/check_path_neutrality.py
+
+      - name: Verify visual evidence manifest
+        run: python3 scripts/docs/visual_manifest.py verify
+
       - name: Build static docs site
         run: mkdocs build --strict
 

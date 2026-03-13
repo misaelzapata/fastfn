@@ -12,7 +12,7 @@ In FastFN, security is handled **in code**. You have full access to headers, env
 Never hardcode API keys or database passwords in your `app.py` or `index.js`.
 Instead, use a `fn.env.json` file in the function's folder.
 
-**File:** `functions/python/secure-api/fn.env.json`
+**File:** `functions/secure-api/fn.env.json`
 ```json
 {
   "API_SECRET": {"value": "my-super-secret-key-123", "is_secret": true},
@@ -28,7 +28,7 @@ The platform automatically injects these into `event['env']` (Python) or `event.
 
 This is the most common pattern for server-to-server communication.
 
-**File:** `functions/python/secure-api/app.py`
+**File:** `functions/secure-api/app.py`
 
 ```python
 import json
@@ -76,7 +76,7 @@ curl -i 'http://127.0.0.1:8080/secure-api' \
 
 Handling standard `Authorization: Basic <base64>` header.
 
-**File:** `functions/node/basic-auth/index.js`
+**File:** `functions/basic-auth/index.js`
 
 ```javascript
 exports.handler = async (event) => {

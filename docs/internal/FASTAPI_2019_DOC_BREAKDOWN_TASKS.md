@@ -17,6 +17,7 @@ Validation profiles:
 
 Global done criteria for each task:
 - EN and ES pages updated.
+- Path neutrality policy satisfied (no runtime-prefixed function paths unless explicitly runtime-specific example sections).
 - Navigation and internal links resolve.
 - `mkdocs build --strict` passes.
 
@@ -24,6 +25,7 @@ Progress:
 - Total tasks: 75
 - Completed: 27
 - Pending: 48
+- Path neutrality revalidation status: D001-D027 verified on 2026-03-13.
 
 ## A) Entry and Orientation (D001-D003)
 - [x] D001 | Baseline: `/` | EN: `docs/en/index.md` | ES: `docs/es/index.md` | Validation: `V-CONCEPT` (5-minute path + links to tutorial, how-to, reference).
@@ -122,6 +124,7 @@ Progress:
 ## PR acceptance checklist (for every docs PR)
 - `[ ]` All touched tasks updated from `[ ]` to `[x]`.
 - `[ ]` EN/ES parity confirmed.
+- `[ ]` Path neutrality policy verified (runtime-prefixed function paths only in explicit runtime-specific examples).
 - `[ ]` Internal links checked.
 - `[ ]` `mkdocs build --strict` output attached.
 - `[ ]` If a support limit was documented, `V-LIMIT` posture included.

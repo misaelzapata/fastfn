@@ -167,8 +167,8 @@ curl -sS \
 
 Archivos de memoria/offset (se crean en runtime):
 
-- `<FN_FUNCTIONS_ROOT>/python/telegram-ai-reply-py/.memory.json`
-- `<FN_FUNCTIONS_ROOT>/python/telegram-ai-reply-py/.loop_state.json`
+- `<FN_FUNCTIONS_ROOT>/telegram-ai-reply-py/.memory.json`
+- `<FN_FUNCTIONS_ROOT>/telegram-ai-reply-py/.loop_state.json`
 
 ### `hello`
 
@@ -502,8 +502,8 @@ Directivas manuales dentro del mensaje del usuario:
 
 Memoria:
 
-- Archivo de memoria por chat: `<FN_FUNCTIONS_ROOT>/node/telegram-ai-reply/.memory.json`
-- Archivo de offset del loop: `<FN_FUNCTIONS_ROOT>/node/telegram-ai-reply/.loop_state.json`
+- Archivo de memoria por chat: `<FN_FUNCTIONS_ROOT>/telegram-ai-reply/.memory.json`
+- Archivo de offset del loop: `<FN_FUNCTIONS_ROOT>/telegram-ai-reply/.loop_state.json`
 - El prompt de sistema evita respuestas falsas del tipo "no recuerdo" cuando existe historial.
 
 ### `whatsapp`

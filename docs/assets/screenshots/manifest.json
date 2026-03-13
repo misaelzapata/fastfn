@@ -30,20 +30,6 @@
       ]
     },
     {
-      "id": "assets-screenshots-browser-html-view-png",
-      "path": "assets/screenshots/browser-html-view.png",
-      "sha256": "4277aa8a99bd27d3d94137ae85ccce0aebe18cddf32c2f7ebd2978c8fc3af056",
-      "source": {
-        "kind": "playwright",
-        "script": "scripts/docs/capture-ui.mjs",
-        "command": "node scripts/docs/capture-ui.mjs"
-      },
-      "used_by": [
-        "en/tutorial/from-zero/4-advanced-responses.md",
-        "es/tutorial/desde-cero/4-respuestas-avanzadas.md"
-      ]
-    },
-    {
       "id": "assets-screenshots-browser-json-tasks-png",
       "path": "assets/screenshots/browser-json-tasks.png",
       "sha256": "b6a6ac87b5866fae7e67cdfda4c99f6fec393c96c7e2905f927a49a04cb4a20d",

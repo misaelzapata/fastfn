@@ -15,34 +15,112 @@
 - FastFN CLI installed and available in `PATH`
 - One execution mode ready:
   - Portable mode: Docker daemon running
-  - Native mode: `openresty` and runtime binaries (`node`, `python`, etc.) available
+  - Native mode: `openresty` and runtime binaries available
 
-## 1. Create your first function
+## 1. Create your first function (neutral path)
 
 ```bash
-fastfn init hello --template node
+mkdir -p functions/hello
 ```
 
-This generates `node/hello/handler.js`.
+Choose one runtime implementation inside `functions/hello/`:
+
+=== "Node.js"
+    File: `functions/hello/handler.js`
+
+    ```js
+    exports.handler = async (event) => ({
+      status: 200,
+      body: { hello: event.query?.name || "World", runtime: "node" }
+    });
+    ```
+
+=== "Python"
+    File: `functions/hello/main.py`
+
+    ```python
+    def handler(event):
+        name = (event.get("query") or {}).get("name", "World")
+        return {"status": 200, "body": {"hello": name, "runtime": "python"}}
+    ```
+
+=== "Rust"
+    File: `functions/hello/handler.rs`
+
+    ```rust
+    use serde_json::{json, Value};
+
+    pub fn handler(event: Value) -> Value {
+        let name = event
+            .get("query")
+            .and_then(|q| q.get("name"))
+            .and_then(|n| n.as_str())
+            .unwrap_or("World");
+
+        json!({
+            "status": 200,
+            "body": {
+                "hello": name,
+                "runtime": "rust"
+            }
+        })
+    }
+    ```
+
+=== "PHP"
+    File: `functions/hello/handler.php`
+
+    ```php
+    <?php
+
+    function handler(array $event): array {
+        $query = $event['query'] ?? [];
+        $name = $query['name'] ?? 'World';
+
+        return [
+            'status' => 200,
+            'body' => [
+                'hello' => $name,
+                'runtime' => 'php',
+            ],
+        ];
+    }
+    ```
 
 ## 2. Start the local server
 
 ```bash
-fastfn dev .
+fastfn dev functions
 ```
 
-## 3. Make the first request
+## 3. Validate with curl (per runtime)
 
-```bash
-curl -sS 'http://127.0.0.1:8080/hello?name=World'
-```
+=== "Node.js"
+    ```bash
+    curl -sS 'http://127.0.0.1:8080/hello?name=World'
+    ```
 
-Expected response:
+=== "Python"
+    ```bash
+    curl -sS 'http://127.0.0.1:8080/hello?name=World'
+    ```
+
+=== "Rust"
+    ```bash
+    curl -sS 'http://127.0.0.1:8080/hello?name=World'
+    ```
+
+=== "PHP"
+    ```bash
+    curl -sS 'http://127.0.0.1:8080/hello?name=World'
+    ```
+
+Expected response shape:
 
 ```json
 {
-  "status": 200,
-  "body": "Hello World"
+  "hello": "World",
+  "runtime": "<selected-runtime>"
 }
 ```
 
@@ -63,16 +141,6 @@ true
 
 ![Swagger UI showing FastFN routes](../../assets/screenshots/swagger-ui.png)
 
-## How requests flow
-
-```mermaid
-flowchart LR
-  A["Client request"] --> B["OpenResty route match"]
-  B --> C["Method/policy checks"]
-  C --> D["Runtime invoke via unix socket"]
-  D --> E["HTTP response"]
-```
-
 ## Validation checklist
 
 - `GET /hello` returns HTTP `200`
@@ -83,7 +151,7 @@ flowchart LR
 
 - Runtime down or `503`: check `/_fn/health` and missing host dependencies
 - Route missing: confirm folder layout and rerun discovery (`/_fn/reload`)
-- `/docs` empty: verify `openapi-include-internal`/docs toggles were not disabled unexpectedly
+- `/docs` empty: verify docs/OpenAPI toggles were not disabled
 
 ## Next links
 

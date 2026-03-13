@@ -7,57 +7,112 @@
 
 - Complejidad: Principiante
 - Tiempo típico: 15-20 minutos
-- Resultado: proyecto limpio con endpoint `GET /tasks` y entrada visible en OpenAPI
+- Resultado: proyecto limpio con endpoint `GET /tasks` y entrada en OpenAPI
 
 ## 1. Setup limpio
 
 ```bash
-mkdir -p task-manager-api
+mkdir -p task-manager-api/functions/tasks
 cd task-manager-api
-fastfn init tasks --template node
 ```
 
-Layout esperado:
+## 2. Implementa la primera ruta (elige runtime)
 
-```text
-task-manager-api/
-  node/
-    tasks/
-      handler.js
-```
+=== "Node.js"
+    Archivo: `functions/tasks/handler.js`
 
-## 2. Implementa la primera ruta
+    ```js
+    exports.handler = async () => ({
+      status: 200,
+      body: [
+        { id: 1, title: "Aprender FastFN", completed: false },
+        { id: 2, title: "Publicar primer endpoint", completed: false }
+      ]
+    });
+    ```
 
-Edita `node/tasks/handler.js`:
+=== "Python"
+    Archivo: `functions/tasks/main.py`
 
-```js
-exports.handler = async () => ({
-  status: 200,
-  body: [
-    { id: 1, title: "Aprender FastFN", completed: false },
-    { id: 2, title: "Publicar primer endpoint", completed: false }
-  ]
-});
-```
+    ```python
+    def handler(_event):
+        return {
+            "status": 200,
+            "body": [
+                {"id": 1, "title": "Aprender FastFN", "completed": False},
+                {"id": 2, "title": "Publicar primer endpoint", "completed": False},
+            ],
+        }
+    ```
+
+=== "Rust"
+    Archivo: `functions/tasks/handler.rs`
+
+    ```rust
+    use serde_json::json;
+
+    pub fn handler(_event: serde_json::Value) -> serde_json::Value {
+        json!({
+            "status": 200,
+            "body": [
+                { "id": 1, "title": "Aprender FastFN", "completed": false },
+                { "id": 2, "title": "Publicar primer endpoint", "completed": false }
+            ]
+        })
+    }
+    ```
+
+=== "PHP"
+    Archivo: `functions/tasks/handler.php`
+
+    ```php
+    <?php
+
+    function handler(array $event): array {
+        return [
+            'status' => 200,
+            'body' => [
+                ['id' => 1, 'title' => 'Aprender FastFN', 'completed' => false],
+                ['id' => 2, 'title' => 'Publicar primer endpoint', 'completed' => false],
+            ],
+        ];
+    }
+    ```
 
 ## 3. Ejecuta local
 
 ```bash
-fastfn dev .
+fastfn dev functions
 ```
 
-## 4. Valida primera request
+## 4. Valida primera request (por runtime)
 
-```bash
-curl -sS 'http://127.0.0.1:8080/tasks'
-```
+=== "Node.js"
+    ```bash
+    curl -sS 'http://127.0.0.1:8080/tasks'
+    ```
 
-Body esperado:
+=== "Python"
+    ```bash
+    curl -sS 'http://127.0.0.1:8080/tasks'
+    ```
+
+=== "Rust"
+    ```bash
+    curl -sS 'http://127.0.0.1:8080/tasks'
+    ```
+
+=== "PHP"
+    ```bash
+    curl -sS 'http://127.0.0.1:8080/tasks'
+    ```
+
+Forma esperada:
 
 ```json
 [
-  { "id": 1, "title": "Aprender FastFN", "completed": false },
-  { "id": 2, "title": "Publicar primer endpoint", "completed": false }
+  { "id": 1, "title": "...", "completed": false },
+  { "id": 2, "title": "...", "completed": false }
 ]
 ```
 
@@ -77,9 +132,9 @@ true
 
 ## Solución de problemas
 
-- `curl` devuelve `503`: revisa `/_fn/health` y dependencias runtime faltantes
-- ruta no encontrada: confirma que el archivo esté en `node/tasks/handler.js`
-- path ausente en OpenAPI: recarga con `curl -X POST http://127.0.0.1:8080/_fn/reload`
+- `503`: revisa `/_fn/health` y dependencias runtime
+- ruta no encontrada: confirma handler en `functions/tasks/`
+- OpenAPI sin path: ejecuta `curl -X POST http://127.0.0.1:8080/_fn/reload`
 
 ## Próximo paso
 

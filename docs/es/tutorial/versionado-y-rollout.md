@@ -20,7 +20,7 @@ functions/
 
 ## 2) Ejemplo de codigo
 
-Default (`functions/python/hello/app.py`):
+Default (`functions/hello/app.py`):
 
 ```python
 def main(req):
@@ -28,7 +28,7 @@ def main(req):
     return {"message": f"Hola desde V1, {name}"}
 ```
 
-Version `v2` (`functions/python/hello/v2/app.py`):
+Version `v2` (`functions/hello/v2/app.py`):
 
 ```python
 def main(req):
