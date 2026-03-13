@@ -23,9 +23,9 @@ Global done criteria for each task:
 
 Progress:
 - Total tasks: 75
-- Completed: 27
-- Pending: 48
-- Path neutrality revalidation status: D001-D027 verified on 2026-03-13.
+- Completed: 39
+- Pending: 36
+- Path neutrality revalidation status: D001-D039 verified on 2026-03-13.
 
 ## A) Entry and Orientation (D001-D003)
 - [x] D001 | Baseline: `/` | EN: `docs/en/index.md` | ES: `docs/es/index.md` | Validation: `V-CONCEPT` (5-minute path + links to tutorial, how-to, reference).
@@ -57,20 +57,20 @@ Progress:
 - [x] D025 | Baseline: `/tutorial/path-operation-advanced-configuration/` | EN: `docs/en/how-to/zero-config-routing.md` | ES: `docs/es/como-hacer/zero-config-routing.md` | Validation: `V-CONCEPT` (route naming/tags/operation ids in file-based model).
 - [x] D026 | Baseline: `/tutorial/additional-status-codes/` | EN: `docs/en/tutorial/from-zero/4-advanced-responses.md` | ES: `docs/es/tutorial/desde-cero/4-respuestas-avanzadas.md` | Validation: `V-HTTP` (multi-status examples).
 - [x] D027 | Baseline: `/tutorial/encoder/` | EN: `docs/en/reference/http-api.md` | ES: `docs/es/referencia/api-http.md` | Validation: `V-HTTP` (serialization edge cases).
-- [ ] D028 | Baseline: `/tutorial/body-updates/` | EN: `docs/en/tutorial/from-zero/4-advanced-responses.md` | ES: `docs/es/tutorial/desde-cero/4-respuestas-avanzadas.md` | Validation: `V-HTTP` (PATCH/PUT merge behavior).
-- [ ] D029 | Baseline: `/tutorial/response-directly/` | EN: `docs/en/tutorial/from-zero/4-advanced-responses.md` | ES: `docs/es/tutorial/desde-cero/4-respuestas-avanzadas.md` | Validation: `V-HTTP` (raw response control examples).
-- [ ] D030 | Baseline: `/tutorial/custom-response/` | EN: `docs/en/tutorial/from-zero/4-advanced-responses.md` | ES: `docs/es/tutorial/desde-cero/4-respuestas-avanzadas.md` | Validation: `V-HTTP` (custom headers/content-type).
-- [ ] D031 | Baseline: `/tutorial/additional-responses/` | EN: `docs/en/tutorial/from-zero/4-advanced-responses.md` | ES: `docs/es/tutorial/desde-cero/4-respuestas-avanzadas.md` | Validation: `V-HTTP` (explicit alternate responses in docs/OpenAPI).
-- [ ] D032 | Baseline: `/tutorial/response-cookies/` | EN: `docs/en/tutorial/from-zero/4-advanced-responses.md` | ES: `docs/es/tutorial/desde-cero/4-respuestas-avanzadas.md` | Validation: `V-HTTP` (set/clear cookie patterns).
-- [ ] D033 | Baseline: `/tutorial/response-headers/` | EN: `docs/en/tutorial/from-zero/4-advanced-responses.md` | ES: `docs/es/tutorial/desde-cero/4-respuestas-avanzadas.md` | Validation: `V-HTTP` (cache, trace, custom headers).
-- [ ] D034 | Baseline: `/tutorial/response-change-status-code/` | EN: `docs/en/tutorial/from-zero/4-advanced-responses.md` | ES: `docs/es/tutorial/desde-cero/4-respuestas-avanzadas.md` | Validation: `V-HTTP` (dynamic status transitions documented).
+- [x] D028 | Baseline: `/tutorial/body-updates/` | EN: `docs/en/tutorial/from-zero/4-advanced-responses.md` | ES: `docs/es/tutorial/desde-cero/4-respuestas-avanzadas.md` | Validation: `V-HTTP` (PATCH/PUT merge behavior).
+- [x] D029 | Baseline: `/tutorial/response-directly/` | EN: `docs/en/tutorial/from-zero/4-advanced-responses.md` | ES: `docs/es/tutorial/desde-cero/4-respuestas-avanzadas.md` | Validation: `V-HTTP` (raw response control examples).
+- [x] D030 | Baseline: `/tutorial/custom-response/` | EN: `docs/en/tutorial/from-zero/4-advanced-responses.md` | ES: `docs/es/tutorial/desde-cero/4-respuestas-avanzadas.md` | Validation: `V-HTTP` (custom headers/content-type).
+- [x] D031 | Baseline: `/tutorial/additional-responses/` | EN: `docs/en/tutorial/from-zero/4-advanced-responses.md` | ES: `docs/es/tutorial/desde-cero/4-respuestas-avanzadas.md` | Validation: `V-HTTP` (explicit alternate responses in docs/OpenAPI).
+- [x] D032 | Baseline: `/tutorial/response-cookies/` | EN: `docs/en/tutorial/from-zero/4-advanced-responses.md` | ES: `docs/es/tutorial/desde-cero/4-respuestas-avanzadas.md` | Validation: `V-HTTP` (set/clear cookie patterns).
+- [x] D033 | Baseline: `/tutorial/response-headers/` | EN: `docs/en/tutorial/from-zero/4-advanced-responses.md` | ES: `docs/es/tutorial/desde-cero/4-respuestas-avanzadas.md` | Validation: `V-HTTP` (cache, trace, custom headers).
+- [x] D034 | Baseline: `/tutorial/response-change-status-code/` | EN: `docs/en/tutorial/from-zero/4-advanced-responses.md` | ES: `docs/es/tutorial/desde-cero/4-respuestas-avanzadas.md` | Validation: `V-HTTP` (dynamic status transitions documented).
 
 ## C) Dependencies Equivalents (D035-D039)
-- [ ] D035 | Baseline: `/tutorial/dependencies/first-steps/` | EN: `docs/en/explanation/shared-logic-patterns.md` | ES: `docs/es/explicacion/patrones-de-logica-compartida.md` | Validation: `V-CONCEPT` (FastFN-native dependency equivalent intro).
-- [ ] D036 | Baseline: `/tutorial/dependencies/classes-as-dependencies/` | EN: `docs/en/explanation/shared-logic-patterns.md` | ES: `docs/es/explicacion/patrones-de-logica-compartida.md` | Validation: `V-CONCEPT` (class/module reuse pattern by runtime).
-- [ ] D037 | Baseline: `/tutorial/dependencies/sub-dependencies/` | EN: `docs/en/explanation/shared-logic-patterns.md` | ES: `docs/es/explicacion/patrones-de-logica-compartida.md` | Validation: `V-CONCEPT` (composable helper chain examples).
-- [ ] D038 | Baseline: `/tutorial/dependencies/dependencies-in-path-operation-decorators/` | EN: `docs/en/how-to/reuse-auth-and-validation.md` | ES: `docs/es/como-hacer/reutilizar-auth-y-validacion.md` | Validation: `V-CONCEPT` (non-1:1 decorator note + equivalent patterns).
-- [ ] D039 | Baseline: `/tutorial/dependencies/advanced-dependencies/` | EN: `docs/en/how-to/reuse-auth-and-validation.md` | ES: `docs/es/como-hacer/reutilizar-auth-y-validacion.md` | Validation: `V-OPS` (advanced shared middleware/helper flow).
+- [x] D035 | Baseline: `/tutorial/dependencies/first-steps/` | EN: `docs/en/explanation/shared-logic-patterns.md` | ES: `docs/es/explicacion/patrones-de-logica-compartida.md` | Validation: `V-CONCEPT` (FastFN-native dependency equivalent intro).
+- [x] D036 | Baseline: `/tutorial/dependencies/classes-as-dependencies/` | EN: `docs/en/explanation/shared-logic-patterns.md` | ES: `docs/es/explicacion/patrones-de-logica-compartida.md` | Validation: `V-CONCEPT` (class/module reuse pattern by runtime).
+- [x] D037 | Baseline: `/tutorial/dependencies/sub-dependencies/` | EN: `docs/en/explanation/shared-logic-patterns.md` | ES: `docs/es/explicacion/patrones-de-logica-compartida.md` | Validation: `V-CONCEPT` (composable helper chain examples).
+- [x] D038 | Baseline: `/tutorial/dependencies/dependencies-in-path-operation-decorators/` | EN: `docs/en/how-to/reuse-auth-and-validation.md` | ES: `docs/es/como-hacer/reutilizar-auth-y-validacion.md` | Validation: `V-CONCEPT` (non-1:1 decorator note + equivalent patterns).
+- [x] D039 | Baseline: `/tutorial/dependencies/advanced-dependencies/` | EN: `docs/en/how-to/reuse-auth-and-validation.md` | ES: `docs/es/como-hacer/reutilizar-auth-y-validacion.md` | Validation: `V-OPS` (advanced shared middleware/helper flow).
 
 ## D) Security Sequence (D040-D046)
 - [ ] D040 | Baseline: `/tutorial/security/intro/` | EN: `docs/en/tutorial/security-for-functions.md` | ES: `docs/es/tutorial/seguridad-para-funciones.md` | Validation: `V-CONCEPT` (threat model + recommended defaults).

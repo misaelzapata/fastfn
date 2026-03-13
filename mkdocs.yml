@@ -108,6 +108,7 @@ nav:
       - Deploy to Production: en/how-to/deploy-to-production.md
       - FastAPI/Next.js Playbook: en/how-to/fastapi-nextjs-playbook.md
       - Authentication: en/how-to/authentication.md
+      - Reuse Auth and Validation: en/how-to/reuse-auth-and-validation.md
       - Security Confidence: en/how-to/security-confidence.md
       - Console Access: en/how-to/console-admin-access.md
       - Manage Functions: en/how-to/manage-functions.md
@@ -139,6 +140,7 @@ nav:
       - Architecture: en/explanation/architecture.md
       - Security Model: en/explanation/security-model.md
       - Feature Matrix: en/explanation/feature-matrix.md
+      - Shared Logic Patterns: en/explanation/shared-logic-patterns.md
       - Technical Comparison: en/explanation/comparison.md
       - Scheduler vs Cron: en/explanation/scheduler-vs-cron.md
       - Next.js Style Routing: en/explanation/nextjs-style-routing-benefits.md
@@ -177,6 +179,7 @@ nav:
     - Guías Cómo-Hacer:
       - Desplegar a Producción: es/como-hacer/desplegar-a-produccion.md
       - Playbook FastAPI/Next.js: es/como-hacer/playbook-fastapi-nextjs.md
+      - Reutilizar Auth y Validación: es/como-hacer/reutilizar-auth-y-validacion.md
       - Consola y Administración: es/como-hacer/consola-admin.md
       - Gestionar Funciones: es/como-hacer/gestionar-funciones.md
       - Recetas Operativas: es/como-hacer/recetas-operativas.md
@@ -209,6 +212,7 @@ nav:
       - Benchmarks de Rendimiento: es/explicacion/benchmarks-rendimiento.md
       - Flujos visuales: es/explicacion/flujos-visuales.md
       - Matriz de Features: es/explicacion/matriz-de-features.md
+      - Patrones de Lógica Compartida: es/explicacion/patrones-de-logica-compartida.md
       - Ciclo de Invocación: es/explicacion/flujo-invocacion.md
       - Modelo de Seguridad: es/explicacion/modelo-seguridad.md
       - Scheduler vs Cron: es/explicacion/scheduler-vs-cron.md
