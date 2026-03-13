@@ -360,12 +360,12 @@ curl -i 'http://127.0.0.1:8080/tasks/1'
 
 El estado puede variar según resultado real:
 
-- `200` si actualizó
-- `201` si creó
+- `200` si `PUT /tasks/:id` actualizó un registro existente
+- `201` si `PUT /tasks/:id` creó un registro nuevo
 - `202` si encoló async
 
 ```bash
-curl -i -X POST 'http://127.0.0.1:8080/tasks/upsert' -H 'Content-Type: application/json' -d '{"id":"1","title":"a"}'
+curl -i -X PUT 'http://127.0.0.1:8080/tasks/1' -H 'Content-Type: application/json' -d '{"title":"a"}'
 ```
 
 ## Validación

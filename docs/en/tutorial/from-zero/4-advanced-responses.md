@@ -360,12 +360,12 @@ curl -i 'http://127.0.0.1:8080/tasks/1'
 
 Return status based on runtime state, not only route:
 
-- `200` when upsert updated an existing record
-- `201` when upsert created a new record
+- `200` when `PUT /tasks/:id` updated an existing record
+- `201` when `PUT /tasks/:id` created a new record
 - `202` when operation queued async
 
 ```bash
-curl -i -X POST 'http://127.0.0.1:8080/tasks/upsert' -H 'Content-Type: application/json' -d '{"id":"1","title":"a"}'
+curl -i -X PUT 'http://127.0.0.1:8080/tasks/1' -H 'Content-Type: application/json' -d '{"title":"a"}'
 ```
 
 ## Validation
