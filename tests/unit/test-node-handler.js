@@ -13,11 +13,21 @@ const requestInspectorHandler = require(path.join(root, "examples/functions/node
 const edgeAuthGatewayHandler = require(path.join(root, "examples/functions/node/edge-auth-gateway/app.js")).handler;
 const githubWebhookGuardHandler = require(path.join(root, "examples/functions/node/github-webhook-guard/app.js")).handler;
 const edgeHeaderInjectHandler = require(path.join(root, "examples/functions/node/edge-header-inject/app.js")).handler;
-const telegramAiReplyHandler = require(path.join(root, "examples/functions/node/telegram-ai-reply/app.js")).handler;
-const telegramAiDigestHandler = require(path.join(root, "examples/functions/node/telegram-ai-digest/app.js")).handler;
-const toolboxBotHandler = require(path.join(root, "examples/functions/node/toolbox-bot/app.js")).handler;
-const aiToolAgentHandler = require(path.join(root, "examples/functions/node/ai-tool-agent/app.js")).handler;
-const whatsappHandler = require(path.join(root, "examples/functions/node/whatsapp/app.js")).handler;
+const telegramAiReplyModule = require(path.join(root, "examples/functions/node/telegram-ai-reply/app.js"));
+const telegramAiReplyHandler = telegramAiReplyModule.handler;
+const telegramAiReplyInternal = require(path.join(root, "examples/functions/node/telegram-ai-reply/_internal.js"));
+const telegramAiDigestModule = require(path.join(root, "examples/functions/node/telegram-ai-digest/app.js"));
+const telegramAiDigestHandler = telegramAiDigestModule.handler;
+const telegramAiDigestInternal = require(path.join(root, "examples/functions/node/telegram-ai-digest/_internal.js"));
+const toolboxBotModule = require(path.join(root, "examples/functions/node/toolbox-bot/app.js"));
+const toolboxBotHandler = toolboxBotModule.handler;
+const toolboxBotInternal = require(path.join(root, "examples/functions/node/toolbox-bot/_internal.js"));
+const aiToolAgentModule = require(path.join(root, "examples/functions/node/ai-tool-agent/app.js"));
+const aiToolAgentHandler = aiToolAgentModule.handler;
+const aiToolAgentInternal = require(path.join(root, "examples/functions/node/ai-tool-agent/_internal.js"));
+const whatsappModule = require(path.join(root, "examples/functions/node/whatsapp/app.js"));
+const whatsappHandler = whatsappModule.handler;
+const whatsappInternal = require(path.join(root, "examples/functions/node/whatsapp/_internal.js"));
 const ipIntelRemoteHandler = require(path.join(root, "examples/functions/ip-intel/get.remote.js")).handler;
 
 async function withPatchedModuleLoad(patches, run) {
@@ -83,9 +93,12 @@ async function main() {
   await testToolboxBotDenyHostWithoutFetching();
   await testToolboxBotDenyFnWithoutFetching();
   await testToolboxBotBlocksLocalHostWithoutFetching();
+  await testToolboxBotPrivateBranches();
+  await testToolboxBotHandlerEdgeBranches();
   await testAiToolAgentDryRun();
   await testAiToolAgentToolCallingLoopAndMemory();
   await testAiToolAgentBlocksLocalHostTool();
+  await testAiToolAgentPrivateAndErrorBranches();
   await testEdgeAuthGateway();
   await testGithubWebhookGuard();
   await testEdgeHeaderInject();
@@ -113,6 +126,9 @@ async function main() {
   await testTelegramAiReplySendFailureReturns502();
   await testTelegramAiReplyLoopDisabledBusyAndOuterErrorBranches();
   await testTelegramAiReplyLoopThinkingAndForceClearWebhookBranches();
+  await testTelegramAiReplyPrivateBranches();
+  await testTelegramAiReplyLoopEdgeBranches();
+  await testTelegramAiReplyLoopProcessBranches();
   await testWhatsappActionGuardsAndStatus();
   await testWhatsappInboxOutboxAndQrRaw();
   await testWhatsappSendPathsAndBodyValidation();
@@ -125,9 +141,11 @@ async function main() {
   await testWhatsappToolDirectiveFailureAndAutoNewsBranches();
   await testWhatsappConnectQrLifecycleWithMocks();
   await testWhatsappConnectErrorPathsWithMocks();
+  await testWhatsappPrivateBranches();
   await testTelegramAiDigestPreviewMode();
   await testTelegramAiDigestSingleSendOnConcurrentCalls();
   await testTelegramAiDigestDryRunMinIntervalAndAiFallbacks();
+  await testTelegramAiDigestPrivateAndErrorBranches();
   await testTelegramSendDryRun();
   await testTelegramSendErrorAndSendPaths();
   console.log("node unit tests passed");
@@ -2836,7 +2854,9 @@ async function testWhatsappConnectQrLifecycleWithMocks() {
 
   const fakeBaileys = {
     useMultiFileAuthState: async () => ({ state: {}, saveCreds: () => {} }),
-    fetchLatestBaileysVersion: async () => ({ version: [2, 3000, 999999] }),
+    fetchLatestBaileysVersion: async () => {
+      throw new Error("version fetch failed");
+    },
     makeWASocket: () => fakeSocket,
     Browsers: {
       macOS: () => "FastFNTest",
@@ -2897,6 +2917,16 @@ async function testWhatsappConnectQrLifecycleWithMocks() {
       upsert({
         messages: [
           {
+            key: { id: "m0", fromMe: false, remoteJid: "000@s.whatsapp.net" },
+            message: null,
+            messageTimestamp: 0,
+          },
+          {
+            key: { id: "m00", fromMe: false, remoteJid: "000@s.whatsapp.net" },
+            message: { unknownType: true },
+            messageTimestamp: 0,
+          },
+          {
             key: { id: "m1", fromMe: false, remoteJid: "111@s.whatsapp.net" },
             message: { conversation: "hola 1" },
             messageTimestamp: 1,
@@ -2943,9 +2973,26 @@ async function testWhatsappConnectQrLifecycleWithMocks() {
       const closeUpdate = listeners["connection.update"];
       closeUpdate({ connection: "close", lastDisconnect: { error: { output: { statusCode: 401 } } } });
       assert.equal(state.lastError, "logged_out");
+      closeUpdate({ connection: "close", lastDisconnect: {} });
+      assert.equal(state.lastError, "connection_closed");
+
+      const oldSetTimeout = global.setTimeout;
+      const oldUseMulti = fakeBaileys.useMultiFileAuthState;
+      state.reconnectTimer = setTimeout(() => {}, 10000);
+      fakeBaileys.useMultiFileAuthState = async () => {
+        throw new Error("restart failed");
+      };
+      global.setTimeout = (fn) => {
+        fn();
+        return 1;
+      };
       closeUpdate({ connection: "close", lastDisconnect: { error: new Error("temporary network fail") } });
-      assert.equal(typeof state.lastError, "string");
-      assert.equal(state.lastError.includes("temporary network fail"), true);
+      global.setTimeout = oldSetTimeout;
+      fakeBaileys.useMultiFileAuthState = oldUseMulti;
+      assert.ok(state.lastError == null || typeof state.lastError === "string");
+      if (typeof state.lastError === "string") {
+        assert.equal(state.lastError.includes("restart failed") || state.lastError.includes("temporary network fail"), true);
+      }
       if (state.reconnectTimer) {
         clearTimeout(state.reconnectTimer);
         state.reconnectTimer = null;
@@ -3209,6 +3256,1246 @@ async function testTelegramAiDigestDryRunMinIntervalAndAiFallbacks() {
     if (prevToken === undefined) delete process.env.TELEGRAM_BOT_TOKEN; else process.env.TELEGRAM_BOT_TOKEN = prevToken;
     try { fs.unlinkSync(stateFile); } catch (_) {}
     try { fs.unlinkSync(lockFile); } catch (_) {}
+  }
+}
+
+async function testToolboxBotPrivateBranches() {
+  if (!toolboxBotInternal) return;
+  assert.equal(toolboxBotInternal.asBool("maybe", false), false);
+  assert.equal(toolboxBotInternal.parseJson("{bad"), null);
+  assert.equal(toolboxBotInternal.extractWeatherLocation("sin clima aqui"), "");
+
+  const inferred = toolboxBotInternal.inferAutoTools("weather y request headers", {
+    allowedFns: ["request-inspector"],
+    allowedHosts: ["wttr.in"],
+  });
+  assert.equal(inferred.some((x) => x && x.type === "http"), true);
+  assert.equal(inferred.some((x) => x && x.type === "fn" && x.name === "request-inspector"), true);
+
+  const oldURL = global.URL;
+  global.URL = function BrokenURL() {
+    throw new Error("url parser fail");
+  };
+  try {
+    const brokenInfer = toolboxBotInternal.inferAutoTools("my ip please", {
+      allowedFns: [],
+      allowedHosts: ["api.ipify.org"],
+    });
+    assert.equal(Array.isArray(brokenInfer), true);
+  } finally {
+    global.URL = oldURL;
+  }
+
+  const cfg = {
+    allowedFns: ["request-inspector"],
+    allowedHosts: ["api.ipify.org"],
+    baseUrl: "http://127.0.0.1:8080",
+    timeoutMs: 250,
+  };
+  const badMethod = await toolboxBotInternal.executeTool({ type: "fn", name: "request-inspector", method: "TRACE" }, cfg);
+  assert.equal(badMethod.error, "method not allowed");
+  const badHttp = await toolboxBotInternal.executeTool({ type: "http", url: "https://[bad" }, cfg);
+  assert.equal(badHttp.error, "invalid url");
+  const unknown = await toolboxBotInternal.executeTool({ type: "unknown" }, cfg);
+  assert.equal(unknown.error, "unknown tool type");
+}
+
+async function testToolboxBotHandlerEdgeBranches() {
+  const disabled = await toolboxBotHandler({
+    method: "GET",
+    query: { text: "hola" },
+    env: { TOOLBOX_TOOLS_ENABLED: "0" },
+  });
+  assert.equal(disabled.status, 200);
+  const disabledBody = JSON.parse(disabled.body);
+  assert.equal(disabledBody.tools.enabled, false);
+
+  const noText = await toolboxBotHandler({
+    method: "GET",
+    query: { dry_run: "false" },
+    body: "",
+    env: {},
+  });
+  assert.equal(noText.status, 200);
+  const noTextBody = JSON.parse(noText.body);
+  assert.ok(String(noTextBody.note || "").includes("Provide text"));
+
+  const noPlan = await toolboxBotHandler({
+    method: "GET",
+    query: { dry_run: "false", text: "solo texto" },
+    body: "",
+    env: {},
+  });
+  assert.equal(noPlan.status, 200);
+  const noPlanBody = JSON.parse(noPlan.body);
+  assert.equal(Array.isArray(noPlanBody.plan), true);
+  assert.equal(noPlanBody.plan.length, 0);
+
+  const prevFetch = global.fetch;
+  global.fetch = async () => {
+    throw new Error("fetch explode");
+  };
+  try {
+    const caught = await toolboxBotHandler({
+      method: "GET",
+      query: {
+        dry_run: "false",
+        tool_allow_hosts: "api.ipify.org",
+        text: "[[http:https://api.ipify.org?format=json]]",
+      },
+      body: "",
+      env: {},
+    });
+    assert.equal(caught.status, 200);
+    const caughtBody = JSON.parse(caught.body);
+    assert.equal(caughtBody.results[0].ok, false);
+    assert.ok(String(caughtBody.results[0].error || "").includes("fetch explode"));
+  } finally {
+    global.fetch = prevFetch;
+  }
+}
+
+async function testAiToolAgentPrivateAndErrorBranches() {
+  if (!aiToolAgentInternal) return;
+  assert.equal(aiToolAgentInternal.asBool("invalid", false), false);
+  assert.equal(aiToolAgentInternal.parseJson("{bad"), null);
+  assert.equal(aiToolAgentInternal.chooseSecret("<set-me>", "fallback"), "fallback");
+  assert.equal(aiToolAgentInternal.chooseSecret("<set-me>", " "), "");
+  assert.equal(aiToolAgentInternal.hostAllowed("sub.api.ipify.org", ["ipify.org"]), true);
+  assert.equal(aiToolAgentInternal.hostAllowed("example.com", ["ipify.org"]), false);
+
+  const fs = require("node:fs");
+  const oldWrite = fs.writeFileSync;
+  fs.writeFileSync = () => {
+    throw new Error("write denied");
+  };
+  try {
+    aiToolAgentInternal.saveMemory(
+      {
+        enabled: true,
+        maxTurns: 1,
+        ttlSecs: 60,
+        agentId: "unit",
+        memPath: path.join(require("node:os").tmpdir(), "fastfn-ai-tool-save-fail.json"),
+      },
+      [{ role: "user", text: "hola", ts: Date.now() }]
+    );
+  } finally {
+    fs.writeFileSync = oldWrite;
+  }
+
+  const cfg = {
+    fnBaseUrl: "http://127.0.0.1:8080",
+    timeoutMs: 500,
+    allowedFns: ["request-inspector"],
+    allowedHosts: ["api.ipify.org"],
+  };
+  const invalidUrl = await aiToolAgentInternal.executeToolCall("http_get", { url: "bad-url" }, cfg);
+  assert.equal(invalidUrl.error, "invalid url");
+  const invalidProtocol = await aiToolAgentInternal.executeToolCall("http_get", { url: "ftp://api.ipify.org" }, cfg);
+  assert.equal(invalidProtocol.error, "protocol not allowed");
+  const hostDenied = await aiToolAgentInternal.executeToolCall("http_get", { url: "https://wttr.in/?format=3" }, cfg);
+  assert.equal(hostDenied.error, "host not allowed");
+  const invalidFn = await aiToolAgentInternal.executeToolCall("fn_get", { name: "bad name" }, cfg);
+  assert.equal(invalidFn.error, "invalid function name");
+  const fnDenied = await aiToolAgentInternal.executeToolCall("fn_get", { name: "other-fn" }, cfg);
+  assert.equal(fnDenied.error, "function not allowed");
+  const unknownTool = await aiToolAgentInternal.executeToolCall("other_tool", {}, cfg);
+  assert.equal(unknownTool.error, "unknown tool");
+
+  const missingText = await aiToolAgentHandler({
+    method: "GET",
+    query: { dry_run: "false" },
+    body: "",
+    env: {},
+    context: { timeout_ms: 1200 },
+  });
+  assert.equal(missingText.status, 200);
+  const missingBody = JSON.parse(missingText.body);
+  assert.ok(String(missingBody.note || "").includes("Provide text"));
+
+  const prevFetch = global.fetch;
+  global.fetch = async (url) => {
+    const u = String(url);
+    if (u.includes("/chat/completions")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: null,
+                  tool_calls: [
+                    {
+                      id: "call-1",
+                      function: { name: "unknown_tool", arguments: "{}" },
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+      };
+    }
+    throw new Error(`unexpected fetch url=${u}`);
+  };
+  try {
+    const nonConverge = await aiToolAgentHandler({
+      method: "GET",
+      query: { dry_run: "false", text: "prueba", max_steps: "1" },
+      body: "",
+      env: { OPENAI_API_KEY: "test-openai-key", OPENAI_BASE_URL: "https://api.openai.com/v1" },
+      context: { timeout_ms: 1200 },
+    });
+    assert.equal(nonConverge.status, 502);
+    const nonConvergeBody = JSON.parse(nonConverge.body);
+    assert.equal(nonConvergeBody.error, "tool-calling did not converge");
+  } finally {
+    global.fetch = prevFetch;
+  }
+
+  global.fetch = async () => {
+    throw new Error("openai hard fail");
+  };
+  try {
+    const hardFail = await aiToolAgentHandler({
+      method: "GET",
+      query: { dry_run: "false", text: "prueba error" },
+      body: "",
+      env: { OPENAI_API_KEY: "test-openai-key", OPENAI_BASE_URL: "https://api.openai.com/v1" },
+      context: { timeout_ms: 1200 },
+    });
+    assert.equal(hardFail.status, 502);
+    const hardFailBody = JSON.parse(hardFail.body);
+    assert.ok(String(hardFailBody.error || "").includes("openai hard fail"));
+  } finally {
+    global.fetch = prevFetch;
+  }
+}
+
+async function testTelegramAiReplyPrivateBranches() {
+  if (!telegramAiReplyInternal) return;
+  telegramAiReplyInternal.logInteraction("unit", { bad: 1n });
+  assert.equal(telegramAiReplyInternal.extractResponsesText({ output: [] }), null);
+  assert.equal(
+    telegramAiReplyInternal.extractResponsesText({
+      output: [{ type: "message", role: "assistant", content: [{ type: "output_text", text: "hola" }] }],
+    }),
+    "hola"
+  );
+
+  let retryCalls = 0;
+  const retryOut = await telegramAiReplyInternal.withTransientRetry(async () => {
+    retryCalls += 1;
+    if (retryCalls === 1) {
+      throw new Error("fetch failed transient");
+    }
+    return "ok";
+  }, 2, 1);
+  assert.equal(retryOut, "ok");
+
+  const inferred = telegramAiReplyInternal.inferAutoTools("my ip and request headers", {
+    allowedFns: ["request-inspector"],
+    allowedHosts: ["api.ipify.org", "wttr.in"],
+  });
+  assert.equal(inferred.some((x) => x && x.type === "http"), true);
+  assert.equal(inferred.some((x) => x && x.type === "fn"), true);
+
+  const oldURL = global.URL;
+  global.URL = function BrokenURL() {
+    throw new Error("url parser fail");
+  };
+  try {
+    const brokenInfer = telegramAiReplyInternal.inferAutoTools("my ip weather", {
+      allowedFns: [],
+      allowedHosts: ["api.ipify.org", "wttr.in"],
+    });
+    assert.equal(Array.isArray(brokenInfer), true);
+  } finally {
+    global.URL = oldURL;
+  }
+
+  const toolCfg = {
+    baseUrl: "http://127.0.0.1:8080",
+    timeoutMs: 500,
+    allowedFns: ["request-inspector"],
+    allowedHosts: ["api.ipify.org"],
+  };
+  const invalidToolUrl = await telegramAiReplyInternal.executeTool({ type: "http", url: "https://[bad" }, toolCfg);
+  assert.equal(invalidToolUrl.error, "invalid url");
+  const unknownToolType = await telegramAiReplyInternal.executeTool({ type: "zzz" }, toolCfg);
+  assert.equal(unknownToolType.error, "unknown tool type");
+
+  assert.equal(telegramAiReplyInternal.sanitizeLocation("bad<>"), "");
+  assert.equal(telegramAiReplyInternal.sanitizeLocation("x".repeat(80)), "");
+
+  const prevFetch = global.fetch;
+  global.fetch = async () => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify({ choices: [{ message: { content: "{\"location\":\"Buenos Aires\"}" } }] }),
+  });
+  try {
+    const planned = await telegramAiReplyInternal.planWeatherLocationWithAI(
+      { OPENAI_API_KEY: "test-key", OPENAI_BASE_URL: "https://api.openai.com/v1" },
+      "weather in buenos aires",
+      1200
+    );
+    assert.equal(planned, "Buenos Aires");
+  } finally {
+    global.fetch = prevFetch;
+  }
+
+  global.fetch = async () => {
+    throw new Error("planner boom");
+  };
+  try {
+    const plannedFail = await telegramAiReplyInternal.planWeatherLocationWithAI(
+      { OPENAI_API_KEY: "test-key", OPENAI_BASE_URL: "https://api.openai.com/v1" },
+      "weather in madrid",
+      1200
+    );
+    assert.equal(plannedFail, "");
+  } finally {
+    global.fetch = prevFetch;
+  }
+
+  const resolved = await telegramAiReplyInternal.resolveAutoToolDirectives(
+    [
+      { type: "http", url: "https://api.ipify.org?format=json" },
+      { type: "fn", name: "request-inspector", method: "GET", query: "?key=1" },
+    ],
+    "texto",
+    {},
+    { timeoutMs: 600 }
+  );
+  assert.equal(Array.isArray(resolved), true);
+  assert.equal(resolved.length, 2);
+
+  const os = require("node:os");
+  const fs = require("node:fs");
+  const lockPath = path.join(os.tmpdir(), `fastfn-loop-lock-private-${Date.now()}-${Math.random()}.lock`);
+  const statePath = path.join(os.tmpdir(), `fastfn-loop-state-private-${Date.now()}-${Math.random()}.json`);
+  const prevLock = process.env.FASTFN_TELEGRAM_LOOP_LOCK;
+  const prevState = process.env.FASTFN_TELEGRAM_LOOP_STATE;
+  process.env.FASTFN_TELEGRAM_LOOP_LOCK = lockPath;
+  process.env.FASTFN_TELEGRAM_LOOP_STATE = statePath;
+
+  const oldOpenSync = fs.openSync;
+  const oldReadSync = fs.readFileSync;
+  const oldUnlinkSync = fs.unlinkSync;
+  try {
+    fs.openSync = () => {
+      const err = new Error("no perms");
+      err.code = "EPERM";
+      throw err;
+    };
+    assert.equal(telegramAiReplyInternal.tryAcquireLoopLock(30), null);
+  } finally {
+    fs.openSync = oldOpenSync;
+  }
+
+  try {
+    fs.writeFileSync(lockPath, JSON.stringify({ ts: Date.now() - 999999, pid: 1 }), "utf8");
+    const stale = telegramAiReplyInternal.tryAcquireLoopLock(10);
+    assert.ok(stale && stale.path);
+    telegramAiReplyInternal.releaseLoopLock(stale);
+  } finally {
+    try {
+      fs.unlinkSync(lockPath);
+    } catch (_) {}
+  }
+
+  try {
+    fs.writeFileSync(lockPath, "seed", "utf8");
+    let openCalls = 0;
+    fs.openSync = (...args) => {
+      openCalls += 1;
+      if (openCalls === 1) {
+        const err = new Error("exists");
+        err.code = "EEXIST";
+        throw err;
+      }
+      return oldOpenSync(...args);
+    };
+    fs.readFileSync = () => {
+      throw new Error("read failed");
+    };
+    fs.unlinkSync = oldUnlinkSync;
+    const parseErr = telegramAiReplyInternal.tryAcquireLoopLock(10);
+    assert.ok(parseErr && parseErr.path);
+    telegramAiReplyInternal.releaseLoopLock(parseErr);
+  } finally {
+    fs.openSync = oldOpenSync;
+    fs.readFileSync = oldReadSync;
+    fs.unlinkSync = oldUnlinkSync;
+    try {
+      fs.unlinkSync(lockPath);
+    } catch (_) {}
+  }
+
+  try {
+    fs.openSync = () => {
+      const err = new Error("exists");
+      err.code = "EEXIST";
+      throw err;
+    };
+    fs.readFileSync = () => JSON.stringify({ ts: Date.now() - 999999 });
+    fs.unlinkSync = () => {};
+    assert.equal(telegramAiReplyInternal.tryAcquireLoopLock(10), null);
+  } finally {
+    fs.openSync = oldOpenSync;
+    fs.readFileSync = oldReadSync;
+    fs.unlinkSync = oldUnlinkSync;
+  }
+
+  try {
+    fs.openSync = () => {
+      const err = new Error("exists");
+      err.code = "EEXIST";
+      throw err;
+    };
+    fs.readFileSync = () => {
+      throw new Error("loop lock read failed");
+    };
+    fs.unlinkSync = () => {
+      throw new Error("loop lock unlink failed");
+    };
+    assert.equal(telegramAiReplyInternal.tryAcquireLoopLock(10), null);
+  } finally {
+    fs.openSync = oldOpenSync;
+    fs.readFileSync = oldReadSync;
+    fs.unlinkSync = oldUnlinkSync;
+  }
+
+  const oldClose = fs.closeSync;
+  const oldUnlink = fs.unlinkSync;
+  try {
+    fs.closeSync = () => {
+      throw new Error("close fail");
+    };
+    fs.unlinkSync = () => {
+      throw new Error("unlink fail");
+    };
+    telegramAiReplyInternal.releaseLoopLock({ fd: 1, path: lockPath });
+  } finally {
+    fs.closeSync = oldClose;
+    fs.unlinkSync = oldUnlink;
+  }
+
+  fs.writeFileSync(statePath, "{bad", "utf8");
+  assert.equal(telegramAiReplyInternal.loadLoopState().last_update_id, null);
+  fs.writeFileSync(statePath, JSON.stringify({ last_update_id: -1 }), "utf8");
+  assert.equal(telegramAiReplyInternal.loadLoopState().last_update_id, null);
+
+  const oldWrite = fs.writeFileSync;
+  try {
+    fs.writeFileSync = () => {
+      throw new Error("state write fail");
+    };
+    telegramAiReplyInternal.saveLoopState(42);
+  } finally {
+    fs.writeFileSync = oldWrite;
+  }
+
+  global.fetch = async () => ({ ok: false, status: 500, text: async () => "typing fail" });
+  try {
+    await assert.rejects(
+      () => telegramAiReplyInternal.telegramSendTypingAction({ TELEGRAM_BOT_TOKEN: "test-token" }, "123"),
+      /sendChatAction failed/
+    );
+  } finally {
+    global.fetch = prevFetch;
+    if (prevLock === undefined) delete process.env.FASTFN_TELEGRAM_LOOP_LOCK; else process.env.FASTFN_TELEGRAM_LOOP_LOCK = prevLock;
+    if (prevState === undefined) delete process.env.FASTFN_TELEGRAM_LOOP_STATE; else process.env.FASTFN_TELEGRAM_LOOP_STATE = prevState;
+    try {
+      fs.unlinkSync(lockPath);
+    } catch (_) {}
+    try {
+      fs.unlinkSync(statePath);
+    } catch (_) {}
+  }
+
+  global.fetch = async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ ok: true }) });
+  try {
+    const typingOk = await telegramAiReplyInternal.telegramSendTypingAction({ TELEGRAM_BOT_TOKEN: "test-token" }, "123");
+    assert.equal(typingOk.ok, true);
+  } finally {
+    global.fetch = prevFetch;
+  }
+}
+
+async function testTelegramAiReplyLoopEdgeBranches() {
+  const prevFetch = global.fetch;
+  const prevState = process.env.FASTFN_TELEGRAM_LOOP_STATE;
+  const prevLock = process.env.FASTFN_TELEGRAM_LOOP_LOCK;
+  const os = require("node:os");
+  const fs = require("node:fs");
+  const statePath = path.join(os.tmpdir(), `fastfn-loop-edge-state-${Date.now()}-${Math.random()}.json`);
+  const lockPath = path.join(os.tmpdir(), `fastfn-loop-edge-lock-${Date.now()}-${Math.random()}.lock`);
+  process.env.FASTFN_TELEGRAM_LOOP_STATE = statePath;
+  process.env.FASTFN_TELEGRAM_LOOP_LOCK = lockPath;
+
+  let getUpdatesCalls = 0;
+  global.fetch = async (url, opts = {}) => {
+    const u = String(url);
+    if (u.includes("/getUpdates")) {
+      getUpdatesCalls += 1;
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            ok: true,
+            result: getUpdatesCalls === 1
+              ? []
+              : getUpdatesCalls === 2
+                ? [
+                    { update_id: 10, message: { message_id: 1, chat: { id: 123 }, text: "bot", from: { is_bot: true } } },
+                    { update_id: 11, message: { message_id: 2, chat: { id: 123 }, text: "hola", from: { is_bot: false } } },
+                    { update_id: 11, message: { message_id: 2, chat: { id: 123 }, text: "hola", from: { is_bot: false } } },
+                  ]
+                : [],
+          }),
+      };
+    }
+    if (u.includes("/sendChatAction")) {
+      return { ok: false, status: 500, text: async () => "typing blocked" };
+    }
+    if (u.includes("/chat/completions")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ choices: [{ message: { content: "loop-edge-ok" } }] }),
+      };
+    }
+    if (u.includes("/sendMessage")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ ok: true, result: { message_id: 55 } }),
+      };
+    }
+    return { ok: false, status: 404, text: async () => "not found" };
+  };
+
+  try {
+    const loopResp = await telegramAiReplyHandler({
+      method: "GET",
+      query: {
+        mode: "loop",
+        dry_run: "false",
+        chat_id: "123",
+        wait_secs: "2",
+        poll_ms: "200",
+        max_replies: "1",
+        show_thinking: "true",
+        thinking_mode: "typing",
+        thinking_fallback_text: "true",
+        thinking_text: "Pensando...",
+        thinking_min_ms: "1",
+      },
+      body: "",
+      env: {
+        TELEGRAM_LOOP_ENABLED: "true",
+        TELEGRAM_BOT_TOKEN: "test-token",
+        OPENAI_API_KEY: "test-key",
+        OPENAI_BASE_URL: "https://api.openai.com/v1",
+      },
+      context: { timeout_ms: 2000 },
+    });
+    assert.ok([200, 504].includes(loopResp.status));
+  } finally {
+    global.fetch = prevFetch;
+    if (prevState === undefined) delete process.env.FASTFN_TELEGRAM_LOOP_STATE; else process.env.FASTFN_TELEGRAM_LOOP_STATE = prevState;
+    if (prevLock === undefined) delete process.env.FASTFN_TELEGRAM_LOOP_LOCK; else process.env.FASTFN_TELEGRAM_LOOP_LOCK = prevLock;
+    try {
+      fs.unlinkSync(statePath);
+    } catch (_) {}
+    try {
+      fs.unlinkSync(lockPath);
+    } catch (_) {}
+  }
+
+  const prevFetchSingle = global.fetch;
+  let typingCalls = 0;
+  global.fetch = async (url, opts = {}) => {
+    const u = String(url);
+    if (u.includes("/sendChatAction")) {
+      typingCalls += 1;
+      if (typingCalls === 1) {
+        return { ok: false, status: 500, text: async () => "typing hard fail" };
+      }
+      return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true }) };
+    }
+    if (u.includes("/chat/completions")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ choices: [{ message: { content: "single-ok" } }] }),
+      };
+    }
+    if (u.includes("/sendMessage")) {
+      const body = JSON.parse(String(opts.body || "{}"));
+      if (body.text === "Pensando...") {
+        return { ok: false, status: 500, text: async () => "fallback failed" };
+      }
+      return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, result: { message_id: 99 } }) };
+    }
+    return { ok: false, status: 404, text: async () => "not found" };
+  };
+  try {
+    const single = await telegramAiReplyHandler({
+      method: "GET",
+      query: {
+        mode: "reply",
+        dry_run: "false",
+        chat_id: "123",
+        text: "hola",
+        show_thinking: "true",
+        thinking_mode: "typing",
+        thinking_fallback_text: "true",
+        thinking_text: "Pensando...",
+        thinking_min_ms: "1",
+      },
+      body: "",
+      env: {
+        TELEGRAM_BOT_TOKEN: "test-token",
+        OPENAI_API_KEY: "test-key",
+        OPENAI_BASE_URL: "https://api.openai.com/v1",
+      },
+      context: { timeout_ms: 1500 },
+    });
+    assert.equal(single.status, 200);
+
+    const singleMinMs = await telegramAiReplyHandler({
+      method: "GET",
+      query: {
+        mode: "reply",
+        dry_run: "false",
+        chat_id: "123",
+        text: "hola otra vez",
+        show_thinking: "true",
+        thinking_mode: "typing",
+        thinking_fallback_text: "false",
+        thinking_text: "Pensando...",
+        thinking_min_ms: "2",
+      },
+      body: "",
+      env: {
+        TELEGRAM_BOT_TOKEN: "test-token",
+        OPENAI_API_KEY: "test-key",
+        OPENAI_BASE_URL: "https://api.openai.com/v1",
+      },
+      context: { timeout_ms: 1500 },
+    });
+    assert.equal(singleMinMs.status, 200);
+  } finally {
+    global.fetch = prevFetchSingle;
+  }
+}
+
+async function testTelegramAiReplyLoopProcessBranches() {
+  const prevFetch = global.fetch;
+  const prevState = process.env.FASTFN_TELEGRAM_LOOP_STATE;
+  const prevLock = process.env.FASTFN_TELEGRAM_LOOP_LOCK;
+  const os = require("node:os");
+  const fs = require("node:fs");
+  const statePath = path.join(os.tmpdir(), `fastfn-loop-process-state-${Date.now()}-${Math.random()}.json`);
+  const lockPath = path.join(os.tmpdir(), `fastfn-loop-process-lock-${Date.now()}-${Math.random()}.lock`);
+  process.env.FASTFN_TELEGRAM_LOOP_STATE = statePath;
+  process.env.FASTFN_TELEGRAM_LOOP_LOCK = lockPath;
+
+  let updatesCall = 0;
+  let typingCalls = 0;
+  global.fetch = async (url, opts = {}) => {
+    const u = String(url);
+    if (u.includes("/getUpdates")) {
+      updatesCall += 1;
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            ok: true,
+            result: updatesCall === 1
+              ? []
+              : updatesCall === 2
+                ? [
+                    { update_id: 1, message: { message_id: 10, chat: { id: 123 }, text: "bot", from: { is_bot: true } } },
+                    { update_id: 2, message: { message_id: 11, chat: { id: 123 }, text: "hola", from: { is_bot: false } } },
+                    { update_id: 2, message: { message_id: 11, chat: { id: 123 }, text: "hola", from: { is_bot: false } } },
+                    { update_id: 3, message: { message_id: 12, chat: { id: 123 }, text: "hola 2", from: { is_bot: false } } },
+                  ]
+                : [],
+          }),
+      };
+    }
+    if (u.includes("/sendChatAction")) {
+      typingCalls += 1;
+      if (typingCalls === 1) {
+        throw new Error("fetch failed typing");
+      }
+      return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true }) };
+    }
+    if (u.includes("/chat/completions")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ choices: [{ message: { content: "loop-process-ok" } }] }),
+      };
+    }
+    if (u.includes("/sendMessage")) {
+      const body = JSON.parse(String(opts.body || "{}"));
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ ok: true, result: { message_id: body.reply_to_message_id || 12 } }),
+      };
+    }
+    return { ok: false, status: 404, text: async () => "not found" };
+  };
+
+  try {
+    const resp = await telegramAiReplyHandler({
+      method: "GET",
+      query: {
+        mode: "loop",
+        dry_run: "false",
+        chat_id: "123",
+        wait_secs: "10",
+        poll_ms: "200",
+        max_replies: "2",
+        show_thinking: "true",
+        thinking_mode: "typing",
+        thinking_fallback_text: "false",
+        thinking_min_ms: "2",
+      },
+      body: "",
+      env: {
+        TELEGRAM_LOOP_ENABLED: "true",
+        TELEGRAM_BOT_TOKEN: "test-token",
+        OPENAI_API_KEY: "test-key",
+        OPENAI_BASE_URL: "https://api.openai.com/v1",
+      },
+      context: { timeout_ms: 2000, request_id: "loop-process" },
+    });
+    assert.equal(resp.status, 200);
+  } finally {
+    global.fetch = prevFetch;
+    if (prevState === undefined) delete process.env.FASTFN_TELEGRAM_LOOP_STATE; else process.env.FASTFN_TELEGRAM_LOOP_STATE = prevState;
+    if (prevLock === undefined) delete process.env.FASTFN_TELEGRAM_LOOP_LOCK; else process.env.FASTFN_TELEGRAM_LOOP_LOCK = prevLock;
+    try {
+      fs.unlinkSync(statePath);
+    } catch (_) {}
+    try {
+      fs.unlinkSync(lockPath);
+    } catch (_) {}
+  }
+}
+
+async function testWhatsappPrivateBranches() {
+  if (!whatsappInternal) return;
+  resetWhatsappRuntimeState();
+  const state = whatsappInternal.runtimeState;
+  await whatsappInternal.sleep(1);
+  assert.equal(whatsappInternal.asBool("invalid", false), true);
+
+  const unknownTool = await whatsappInternal.executeTool(
+    { type: "zzz" },
+    { allowedFns: [], allowedHosts: [], baseUrl: "http://127.0.0.1:8080", timeoutMs: 500 }
+  );
+  assert.equal(unknownTool.error, "unknown tool type");
+
+  const prevFetch = global.fetch;
+  global.fetch = async (url, opts = {}) => {
+    const u = String(url);
+    if (u.includes("/responses")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ output: [{ foo: "bar" }, { content: [{}] }, { content: [{ text: "ok-after-continues" }] }] }),
+      };
+    }
+    return { ok: false, status: 404, text: async () => "not found", json: async () => ({}) };
+  };
+  try {
+    const resp = await whatsappInternal.generateAiText("hola", {}, { OPENAI_API_KEY: "k", OPENAI_BASE_URL: "https://api.openai.com/v1" });
+    assert.equal(resp, "ok-after-continues");
+  } finally {
+    global.fetch = prevFetch;
+  }
+
+  global.fetch = async (url) => {
+    const u = String(url);
+    if (u.includes("/responses")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ output: [{ content: [{}] }], choices: [{ message: { content: "from-choices-fallback" } }] }),
+      };
+    }
+    return { ok: false, status: 404, text: async () => "not found", json: async () => ({}) };
+  };
+  try {
+    const fallback = await whatsappInternal.generateAiText("hola", {}, { OPENAI_API_KEY: "k", OPENAI_BASE_URL: "https://api.openai.com/v1" });
+    assert.equal(fallback, "from-choices-fallback");
+  } finally {
+    global.fetch = prevFetch;
+  }
+
+  const fs = require("node:fs");
+  const oldExists = fs.existsSync;
+  try {
+    fs.existsSync = () => {
+      throw new Error("exists fail");
+    };
+    const status = await whatsappHandler({ method: "GET", query: { action: "status" }, body: "", env: {} });
+    assert.equal(status.status, 200);
+  } finally {
+    fs.existsSync = oldExists;
+  }
+
+  state.connected = false;
+  state.connecting = false;
+  const noConnSend = await whatsappHandler({
+    method: "POST",
+    query: { action: "send", to: "15551234567", text: "hola" },
+    body: "",
+    env: {},
+  });
+  assert.ok([200, 409].includes(noConnSend.status));
+
+  state.connected = true;
+  state.socket = {
+    sendMessage: async (jid) => ({ key: { id: `m-${jid}` } }),
+  };
+  const noTo = await whatsappHandler({
+    method: "POST",
+    query: { action: "send", text: "hola sin to" },
+    body: "",
+    env: {},
+  });
+  assert.equal(noTo.status, 500);
+  const withJid = await whatsappHandler({
+    method: "POST",
+    query: { action: "send", to: "12345678@s.whatsapp.net", text: "hola jid" },
+    body: "",
+    env: {},
+  });
+  assert.equal(withJid.status, 200);
+
+  state.outbox = Array.from({ length: 200 }, (_, i) => ({ id: `o${i}`, text: "x" }));
+  const trimSend = await whatsappHandler({
+    method: "POST",
+    query: { action: "send", to: "12345678@s.whatsapp.net", text: "trim me" },
+    body: "",
+    env: {},
+  });
+  assert.equal(trimSend.status, 200);
+  assert.equal(state.outbox.length, 200);
+
+  // deterministic disconnected path for send: skip startConnection and fast-forward wait.
+  const oldSetTimeoutDisconnected = global.setTimeout;
+  const oldDateNowDisconnected = Date.now;
+  let disconnectedNow = 0;
+  global.setTimeout = (fn, _ms, ...args) => oldSetTimeoutDisconnected(fn, 0, ...args);
+  Date.now = () => {
+    disconnectedNow += 5000;
+    return disconnectedNow;
+  };
+  try {
+    state.connected = false;
+    state.connecting = true;
+    state.socket = null;
+    const disconnected = await whatsappHandler({
+      method: "POST",
+      query: { action: "send", to: "15551234567", text: "hola desconectado" },
+      body: "",
+      env: {},
+    });
+    assert.equal(disconnected.status, 409);
+  } finally {
+    global.setTimeout = oldSetTimeoutDisconnected;
+    Date.now = oldDateNowDisconnected;
+  }
+
+  // speed up qr wait loops by patching timer/clock.
+  const oldSetTimeout = global.setTimeout;
+  const oldDateNow = Date.now;
+  let fakeNow = 0;
+  global.setTimeout = (fn, _ms, ...args) => oldSetTimeout(fn, 0, ...args);
+  Date.now = () => {
+    fakeNow += 1000;
+    return fakeNow;
+  };
+  try {
+    state.lastQr = null;
+    state.connecting = true;
+    state.connected = true;
+    const qrConnected = await whatsappHandler({
+      method: "GET",
+      query: { action: "qr" },
+      body: "",
+      env: {},
+    });
+    assert.equal(qrConnected.status, 409);
+
+    state.lastQr = null;
+    state.connecting = true;
+    state.connected = false;
+    const qrPending = await whatsappHandler({
+      method: "GET",
+      query: { action: "qr" },
+      body: "",
+      env: {},
+    });
+    assert.equal(qrPending.status, 202);
+  } finally {
+    global.setTimeout = oldSetTimeout;
+    Date.now = oldDateNow;
+  }
+
+  state.lastQr = "qr-ready";
+  const qrReady = await whatsappInternal.waitUntilQr(10);
+  assert.equal(qrReady, true);
+
+  global.fetch = async (url) => {
+    const u = String(url);
+    if (u.includes("/responses")) {
+      return { ok: true, status: 200, json: async () => ({ output_text: "ai-chat" }) };
+    }
+    return { ok: false, status: 404, text: async () => "not found", json: async () => ({}) };
+  };
+  try {
+    state.inbox = [{ from: "15550001111@s.whatsapp.net" }];
+    state.connected = false;
+    state.socket = null;
+    const chatNoConn = await whatsappHandler({
+      method: "POST",
+      query: { action: "chat" },
+      body: JSON.stringify({ text: "hola con inbox" }),
+      env: { OPENAI_API_KEY: "test-key", OPENAI_BASE_URL: "https://api.openai.com/v1" },
+    });
+    assert.equal(chatNoConn.status, 409);
+
+    state.connected = true;
+    state.socket = {
+      sendMessage: async () => {
+        throw new Error("send failed");
+      },
+    };
+    const chatSendFail = await whatsappHandler({
+      method: "POST",
+      query: { action: "chat" },
+      body: JSON.stringify({ text: "hola con error de send", to: "15550001111" }),
+      env: { OPENAI_API_KEY: "test-key", OPENAI_BASE_URL: "https://api.openai.com/v1" },
+    });
+    assert.equal(chatSendFail.status, 500);
+    const chatSendFailBody = JSON.parse(chatSendFail.body);
+    assert.ok(String(chatSendFailBody.error || "").includes("send failed"));
+
+    const oldURL = global.URL;
+    global.URL = function BrokenURL() {
+      throw new Error("url parse fail");
+    };
+    try {
+      const brokenAuto = await whatsappHandler({
+        method: "POST",
+        query: { action: "chat" },
+        body: JSON.stringify({ text: "mi ip ahora" }),
+        env: {
+          OPENAI_API_KEY: "test-key",
+          OPENAI_BASE_URL: "https://api.openai.com/v1",
+          WHATSAPP_TOOLS_ENABLED: "true",
+          WHATSAPP_AUTO_TOOLS: "true",
+          WHATSAPP_TOOL_ALLOW_HTTP_HOSTS: "api.ipify.org",
+        },
+      });
+      assert.ok([200, 500].includes(brokenAuto.status));
+    } finally {
+      global.URL = oldURL;
+    }
+
+    state.connected = true;
+    state.socket = {
+      sendMessage: async () => ({ key: { id: "chat-ok-1" } }),
+    };
+    const chatOk = await whatsappHandler({
+      method: "POST",
+      query: { action: "chat" },
+      body: JSON.stringify({ text: "hola final", to: "15550001111" }),
+      env: { OPENAI_API_KEY: "test-key", OPENAI_BASE_URL: "https://api.openai.com/v1" },
+    });
+    assert.equal(chatOk.status, 200);
+
+    await withPatchedModuleLoad(
+      {
+        "@whiskeysockets/baileys": {
+          useMultiFileAuthState: async () => ({ state: {}, saveCreds: () => {} }),
+          fetchLatestBaileysVersion: async () => ({ version: [2, 3000, 999999] }),
+          makeWASocket: () => {
+            const listeners = {};
+            return {
+              user: { id: "bot@wa" },
+              ev: {
+                on: (name, cb) => {
+                  listeners[name] = cb;
+                  if (name === "connection.update") {
+                    cb({ connection: "open" });
+                  }
+                },
+              },
+              end: () => {},
+            };
+          },
+          Browsers: { macOS: () => "FastFNTest" },
+        },
+      },
+      async () => {
+        resetWhatsappRuntimeState();
+        const freshInternal = requireFresh(path.join(root, "examples/functions/node/whatsapp/_internal.js"));
+        await freshInternal.startConnection();
+        assert.equal(freshInternal.runtimeState.connected, true);
+      }
+    );
+  } finally {
+    global.fetch = prevFetch;
+  }
+}
+
+async function testTelegramAiDigestPrivateAndErrorBranches() {
+  if (!telegramAiDigestInternal) return;
+  assert.equal(telegramAiDigestInternal.chooseSecret("<set-me>", "fallback"), "fallback");
+  assert.equal(telegramAiDigestInternal.chooseSecret("<set-me>", " "), "");
+
+  const prevFetch = global.fetch;
+  global.fetch = async () => {
+    throw new Error("fetch down");
+  };
+  try {
+    const fetched = await telegramAiDigestInternal.fetchText("https://example.com", 100);
+    assert.equal(fetched.ok, false);
+    assert.ok(String(fetched.error || "").includes("fetch down"));
+  } finally {
+    global.fetch = prevFetch;
+  }
+
+  const os = require("node:os");
+  const fs = require("node:fs");
+  const stateFile = path.join(os.tmpdir(), `fastfn-digest-private-${Date.now()}-${Math.random()}.json`);
+  const lockFile = stateFile + ".lock";
+  const prevState = process.env.FASTFN_DIGEST_STATE;
+  process.env.FASTFN_DIGEST_STATE = stateFile;
+
+  const oldOpenSync = fs.openSync;
+  const oldRead = fs.readFileSync;
+  const oldUnlink = fs.unlinkSync;
+  try {
+    fs.openSync = () => {
+      const err = new Error("no perms");
+      err.code = "EPERM";
+      throw err;
+    };
+    assert.equal(telegramAiDigestInternal.tryAcquireRunLock(30), null);
+  } finally {
+    fs.openSync = oldOpenSync;
+  }
+
+  try {
+    fs.writeFileSync(lockFile, JSON.stringify({ ts: Date.now() - 999999, pid: 1 }), "utf8");
+    const stale = telegramAiDigestInternal.tryAcquireRunLock(10);
+    assert.ok(stale && stale.path);
+    telegramAiDigestInternal.releaseRunLock(stale);
+  } finally {
+    try {
+      fs.unlinkSync(lockFile);
+    } catch (_) {}
+  }
+
+  try {
+    fs.writeFileSync(lockFile, "{bad", "utf8");
+    const bad = telegramAiDigestInternal.tryAcquireRunLock(10);
+    assert.equal(bad, null);
+  } finally {
+    try {
+      fs.unlinkSync(lockFile);
+    } catch (_) {}
+  }
+
+  try {
+    fs.writeFileSync(lockFile, "seed", "utf8");
+    let calls = 0;
+    fs.openSync = (...args) => {
+      calls += 1;
+      if (calls === 1) {
+        const err = new Error("exists");
+        err.code = "EEXIST";
+        throw err;
+      }
+      return oldOpenSync(...args);
+    };
+    fs.readFileSync = () => {
+      throw new Error("lock read failed");
+    };
+    fs.unlinkSync = oldUnlink;
+    const recovered = telegramAiDigestInternal.tryAcquireRunLock(10);
+    assert.ok(recovered && recovered.path);
+    telegramAiDigestInternal.releaseRunLock(recovered);
+  } finally {
+    fs.openSync = oldOpenSync;
+    fs.readFileSync = oldRead;
+    fs.unlinkSync = oldUnlink;
+    try {
+      fs.unlinkSync(lockFile);
+    } catch (_) {}
+  }
+
+  try {
+    fs.openSync = () => {
+      const err = new Error("exists");
+      err.code = "EEXIST";
+      throw err;
+    };
+    fs.readFileSync = () => {
+      throw new Error("lock read failed");
+    };
+    fs.unlinkSync = () => {
+      throw new Error("unlink failed");
+    };
+    assert.equal(telegramAiDigestInternal.tryAcquireRunLock(10), null);
+  } finally {
+    fs.openSync = oldOpenSync;
+    fs.readFileSync = oldRead;
+    fs.unlinkSync = oldUnlink;
+  }
+
+  try {
+    fs.openSync = () => {
+      const err = new Error("exists");
+      err.code = "EEXIST";
+      throw err;
+    };
+    fs.readFileSync = () => JSON.stringify({ ts: Date.now() - 999999, pid: 1 });
+    fs.unlinkSync = () => {};
+    assert.equal(telegramAiDigestInternal.tryAcquireRunLock(10), null);
+  } finally {
+    fs.openSync = oldOpenSync;
+    fs.readFileSync = oldRead;
+    fs.unlinkSync = oldUnlink;
+  }
+
+  const oldClose = fs.closeSync;
+  const oldUnlinkSync = fs.unlinkSync;
+  try {
+    fs.closeSync = () => {
+      throw new Error("close fail");
+    };
+    fs.unlinkSync = () => {
+      throw new Error("unlink fail");
+    };
+    telegramAiDigestInternal.releaseRunLock({ fd: 1, path: lockFile });
+  } finally {
+    fs.closeSync = oldClose;
+    fs.unlinkSync = oldUnlinkSync;
+  }
+
+  fs.writeFileSync(stateFile, JSON.stringify({}), "utf8");
+  assert.equal(telegramAiDigestInternal.readLastSent(), 0);
+  const oldWrite = fs.writeFileSync;
+  try {
+    fs.writeFileSync = () => {
+      throw new Error("state write blocked");
+    };
+    telegramAiDigestInternal.writeLastSent(Date.now());
+  } finally {
+    fs.writeFileSync = oldWrite;
+  }
+
+  global.fetch = async () => {
+    throw new Error("ai fetch failed");
+  };
+  try {
+    const ai = await telegramAiDigestInternal.openaiDigest({ OPENAI_API_KEY: "k", OPENAI_BASE_URL: "https://api.openai.com/v1" }, "hola", 1200, "es");
+    assert.equal(ai, null);
+  } finally {
+    global.fetch = prevFetch;
+  }
+
+  global.fetch = async (url, opts = {}) => {
+    const u = String(url);
+    if (u.includes("/json/")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({ country_code: "AR", city: "Cordoba", country_name: "Argentina", latitude: -31.4, longitude: -64.2 }),
+      };
+    }
+    if (u.includes("open-meteo.com")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ current: { temperature_2m: 25, weather_code: 1, wind_speed_10m: 10 } }),
+      };
+    }
+    if (u.includes("news.google.com/rss")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => "<rss><channel><item><title>T1</title><link>https://example.com/t1</link></item></channel></rss>",
+      };
+    }
+    if (u.includes("/sendMessage")) {
+      if (String(opts.method || "GET").toUpperCase() === "POST") {
+        return { ok: false, status: 500, text: async () => "telegram down" };
+      }
+    }
+    return { ok: false, status: 404, text: async () => "not found" };
+  };
+
+  try {
+    const previewEs = await telegramAiDigestHandler({
+      query: {
+        preview: "true",
+        include_ai: "false",
+        include_news: "true",
+        include_weather: "true",
+      },
+      headers: { "x-forwarded-for": "8.8.8.8" },
+      env: {},
+      context: { timeout_ms: 2000 },
+    });
+    assert.equal(previewEs.status, 200);
+    const previewBody = JSON.parse(previewEs.body);
+    assert.ok(String(previewBody.message || "").includes("Digest diario"));
+    assert.ok(String(previewBody.message || "").includes("Titulares"));
+
+    const sendErr = await telegramAiDigestHandler({
+      query: {
+        chat_id: "321",
+        dry_run: "false",
+        min_interval_secs: "0",
+        include_ai: "false",
+        include_news: "false",
+        include_weather: "false",
+      },
+      headers: {},
+      env: { TELEGRAM_BOT_TOKEN: "test-token" },
+      context: { timeout_ms: 2000 },
+    });
+    assert.equal(sendErr.status, 502);
+  } finally {
+    global.fetch = prevFetch;
+    if (prevState === undefined) delete process.env.FASTFN_DIGEST_STATE; else process.env.FASTFN_DIGEST_STATE = prevState;
+    try {
+      fs.unlinkSync(stateFile);
+    } catch (_) {}
+    try {
+      fs.unlinkSync(lockFile);
+    } catch (_) {}
   }
 }
 

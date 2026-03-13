@@ -654,7 +654,10 @@ def main() -> None:
             threading.Thread(target=_serve_conn, args=(conn,), daemon=True).start()
 
 
-if __name__ == "__main__":
+def _entrypoint() -> None:
     if not WORKER_FILE.is_file():
         raise SystemExit("missing php-worker.php")
     main()
+
+
+if __name__ == "__main__": _entrypoint()

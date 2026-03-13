@@ -11,13 +11,19 @@ RUST_RUNTIME_TEST_FILE="$ROOT_DIR/tests/unit/test-rust-daemon.py"
 RUST_HANDLER_TEST_FILE="$ROOT_DIR/tests/unit/test-rust-handler.py"
 # Large end-to-end demos are validated via integration scripts, not unit coverage gates.
 PY_COVERAGE_OMIT="${PY_COVERAGE_OMIT:-$ROOT_DIR/examples/functions/python/telegram-ai-reply-py/app.py}"
-MIN_PYTHON="${COVERAGE_MIN_PYTHON:-60}"
-MIN_NODE="${COVERAGE_MIN_NODE:-65}"
-MIN_COMBINED="${COVERAGE_MIN_COMBINED:-65}"
-MIN_LUA="${COVERAGE_MIN_LUA:-0}"
-MIN_PHP="${COVERAGE_MIN_PHP:-0}"
-MIN_RUST="${COVERAGE_MIN_RUST:-0}"
-ENFORCE_LUA="${COVERAGE_ENFORCE_LUA:-0}"
+MIN_PYTHON="${COVERAGE_MIN_PYTHON:-100}"
+MIN_PYTHON_FILE="${COVERAGE_MIN_PYTHON_FILE:-$MIN_PYTHON}"
+MIN_NODE="${COVERAGE_MIN_NODE:-100}"
+MIN_NODE_FILE="${COVERAGE_MIN_NODE_FILE:-$MIN_NODE}"
+MIN_COMBINED="${COVERAGE_MIN_COMBINED:-100}"
+MIN_LUA="${COVERAGE_MIN_LUA:-100}"
+MIN_LUA_FILE="${COVERAGE_MIN_LUA_FILE:-$MIN_LUA}"
+MIN_PHP="${COVERAGE_MIN_PHP:-100}"
+MIN_PHP_FILE="${COVERAGE_MIN_PHP_FILE:-$MIN_PHP}"
+MIN_RUST="${COVERAGE_MIN_RUST:-100}"
+MIN_RUST_FILE="${COVERAGE_MIN_RUST_FILE:-$MIN_RUST}"
+ENFORCE_LUA="${COVERAGE_ENFORCE_LUA:-1}"
+ENFORCE_LUA_PER_FILE="${COVERAGE_ENFORCE_LUA_PER_FILE:-1}"
 
 if [[ -n "${FORCE_COLOR:-}" && -n "${NO_COLOR:-}" ]]; then
   unset NO_COLOR
@@ -29,6 +35,13 @@ cd "$ROOT_DIR/cli"
 export PATH="$ROOT_DIR/node_modules/.bin:$PATH"
 
 mkdir -p "$OUT_DIR/node"
+
+echo "== hygiene checks =="
+if rg -n "(__private|FASTFN_EXPOSE_INTERNALS)" "$ROOT_DIR/examples/functions/node" >/dev/null 2>&1; then
+  echo "error: internal exports are forbidden in examples/functions/node" >&2
+  rg -n "(__private|FASTFN_EXPOSE_INTERNALS)" "$ROOT_DIR/examples/functions/node" >&2 || true
+  exit 1
+fi
 
 if ! python3 -m coverage --version >/dev/null 2>&1; then
   echo "error: coverage.py is required (pip install coverage)" >&2
@@ -53,6 +66,7 @@ mkdir -p "$OUT_DIR/node"
 (
   cd "$ROOT_DIR"
   echo "[node] running unit tests with c8..."
+  export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}"
   env -u NO_COLOR "${C8_CMD[@]}" --reporter=text --reporter=json-summary --reporter=lcov --report-dir "$OUT_DIR/node" \
     env -u NO_COLOR node "$NODE_TEST_FILE" 2>&1 | tee "$OUT_DIR/node-coverage.txt"
 )
@@ -320,6 +334,51 @@ print(summary)
 PY
 
 echo "== coverage gates =="
+python3 "$ROOT_DIR/scripts/ci/check_line_coverage.py" \
+  --format coveragepy \
+  --input "$OUT_DIR/python-coverage.json" \
+  --min-total "$MIN_PYTHON" \
+  --min-file "$MIN_PYTHON_FILE" \
+  --include-prefix "$PY_SOURCE_DIR/" \
+  --output-json "$OUT_DIR/python-coverage-by-file.json"
+
+python3 "$ROOT_DIR/scripts/ci/check_line_coverage.py" \
+  --format c8 \
+  --input "$OUT_DIR/node/coverage-summary.json" \
+  --min-total "$MIN_NODE" \
+  --min-file "$MIN_NODE_FILE" \
+  --include-prefix "$ROOT_DIR/examples/functions/" \
+  --output-json "$OUT_DIR/node/coverage-by-file.json"
+
+python3 "$ROOT_DIR/scripts/ci/check_line_coverage.py" \
+  --format coveragepy \
+  --input "$OUT_DIR/php-runtime-coverage.json" \
+  --min-total "$MIN_PHP" \
+  --min-file "$MIN_PHP_FILE" \
+  --include-suffix "/srv/fn/runtimes/php-daemon.py" \
+  --output-json "$OUT_DIR/php-runtime-coverage-by-file.json"
+
+python3 "$ROOT_DIR/scripts/ci/check_line_coverage.py" \
+  --format coveragepy \
+  --input "$OUT_DIR/rust-runtime-coverage.json" \
+  --min-total "$MIN_RUST" \
+  --min-file "$MIN_RUST_FILE" \
+  --include-suffix "/srv/fn/runtimes/rust-daemon.py" \
+  --output-json "$OUT_DIR/rust-runtime-coverage-by-file.json"
+
+if [[ "$ENFORCE_LUA_PER_FILE" == "1" || "$MIN_LUA_FILE" != "0" || "$MIN_LUA" != "0" ]]; then
+  if [[ -f "$OUT_DIR/lua/luacov.report.out" ]]; then
+    python3 "$ROOT_DIR/scripts/ci/check_lua_coverage.py" \
+      --report "$OUT_DIR/lua/luacov.report.out" \
+      --min-total "$MIN_LUA" \
+      --min-file "$MIN_LUA_FILE" \
+      --output-json "$OUT_DIR/lua/coverage-by-file.json"
+  elif [[ "$ENFORCE_LUA" == "1" || "$ENFORCE_LUA_PER_FILE" == "1" ]]; then
+    echo "error: lua coverage report required but not found" >&2
+    exit 1
+  fi
+fi
+
 COVERAGE_MIN_PYTHON="$MIN_PYTHON" \
 COVERAGE_MIN_NODE="$MIN_NODE" \
 COVERAGE_MIN_COMBINED="$MIN_COMBINED" \

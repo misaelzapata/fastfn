@@ -37,6 +37,8 @@ jobs:
         run: cd cli && go mod download
 
       - name: Run Go Tests (with coverage)
+        env:
+          COVERAGE_MIN_GO: "100"
         run: ./cli/coverage-go.sh
 
       - name: Upload Go coverage artifacts
@@ -46,6 +48,7 @@ jobs:
           path: |
             coverage/go-cli-coverage.out
             coverage/go-cli-coverage.txt
+            coverage/go-cli-coverage.json
 
       - name: Publish Go coverage to Codecov
         uses: codecov/codecov-action@v5
@@ -144,6 +147,14 @@ jobs:
             echo "present=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Require bash for full coverage gates
+        shell: sh
+        run: |
+          if [ "${{ steps.has_bash.outputs.present }}" != "true" ]; then
+            echo "bash is required for coverage gates in CI" >&2
+            exit 1
+          fi
+
       - name: Install coverage tooling
         run: |
           python3 -m pip install --upgrade pip
@@ -151,52 +162,29 @@ jobs:
           npm install -g c8
 
       - name: Ensure scripts are executable
-        if: steps.has_bash.outputs.present == 'true'
         run: chmod +x cli/coverage.sh
 
-      - name: Run unit tests with coverage (bash path)
-        if: steps.has_bash.outputs.present == 'true'
+      - name: Run unit tests with coverage
         env:
-          COVERAGE_MIN_PYTHON: "60"
-          COVERAGE_MIN_NODE: "65"
-          COVERAGE_MIN_COMBINED: "65"
-          COVERAGE_MIN_LUA: "70"
+          COVERAGE_MIN_PYTHON: "100"
+          COVERAGE_MIN_PYTHON_FILE: "100"
+          COVERAGE_MIN_NODE: "100"
+          COVERAGE_MIN_NODE_FILE: "100"
+          COVERAGE_MIN_COMBINED: "100"
+          COVERAGE_MIN_LUA: "100"
+          COVERAGE_MIN_LUA_FILE: "100"
           COVERAGE_ENFORCE_LUA: "1"
+          COVERAGE_ENFORCE_LUA_PER_FILE: "1"
+          COVERAGE_MIN_PHP: "100"
+          COVERAGE_MIN_PHP_FILE: "100"
+          COVERAGE_MIN_RUST: "100"
+          COVERAGE_MIN_RUST_FILE: "100"
         run: ./cli/coverage.sh
 
-      - name: Run unit tests (no-bash fallback)
-        if: steps.has_bash.outputs.present != 'true'
-        shell: sh
-        run: |
-          python3 tests/unit/test-python-handlers.py
-          if ! command -v node >/dev/null 2>&1; then
-            echo "node is required for no-bash fallback tests" >&2
-            exit 1
-          fi
-          env -u NO_COLOR node tests/unit/test-node-handler.js
-          (cd sdk/js && env -u NO_COLOR node smoke.test.cjs)
-
-      - name: Run SDK contract tests (bash path)
-        if: steps.has_bash.outputs.present == 'true'
+      - name: Run SDK contract tests
         run: bash tests/unit/test-sdks.sh
 
-      - name: Run SDK contract tests (no-bash fallback)
-        if: steps.has_bash.outputs.present != 'true'
-        shell: sh
-        run: |
-          python3 - <<'PY'
-          from sdk.python.fastfn.types import Request, Response
-          req: Request = {"id": "ci-no-bash", "method": "GET", "path": "/x", "query": {}, "headers": {}, "body": "", "client": {}, "context": {}, "env": {}}
-          resp: Response = {"status": 200, "headers": {"Content-Type": "application/json"}, "body": "{}"}
-          assert req["method"] == "GET"
-          assert resp["status"] == 200
-          PY
-          if command -v cargo >/dev/null 2>&1 && command -v rustc >/dev/null 2>&1; then
-            (cd sdk/rust && cargo test --quiet)
-          fi
-
       - name: Upload coverage artifacts
-        if: steps.has_bash.outputs.present == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: coverage-artifacts
@@ -204,23 +192,27 @@ jobs:
             coverage/python-coverage.xml
             coverage/python-coverage.json
             coverage/python-coverage.txt
+            coverage/python-coverage-by-file.json
             coverage/node/coverage-summary.json
             coverage/node/lcov.info
+            coverage/node/coverage-by-file.json
             coverage/lua/luacov.report.out
             coverage/lua/lcov.info
+            coverage/lua/coverage-by-file.json
             coverage/php-runtime-coverage.xml
             coverage/php-runtime-coverage.json
             coverage/php-runtime-coverage.txt
+            coverage/php-runtime-coverage-by-file.json
             coverage/rust-runtime-coverage.xml
             coverage/rust-runtime-coverage.json
             coverage/rust-runtime-coverage.txt
+            coverage/rust-runtime-coverage-by-file.json
             coverage/node-coverage.txt
             coverage/lua-coverage.txt
             coverage/summary.md
             coverage/summary.json
 
       - name: Publish coverage to Codecov
-        if: steps.has_bash.outputs.present == 'true'
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -230,13 +222,34 @@ jobs:
           fail_ci_if_error: false
 
       - name: Coverage summary
-        if: steps.has_bash.outputs.present == 'true'
         run: cat coverage/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+  docs_quality:
+    name: Docs Quality (Strict + Visual Evidence)
+    runs-on: ubuntu-latest
+    needs: cli
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install MkDocs
+        run: python3 -m pip install --upgrade pip mkdocs-material
+
+      - name: Verify visual evidence manifest
+        run: python3 scripts/docs/visual_manifest.py verify
+
+      - name: Build docs in strict mode
+        run: mkdocs build --strict
 
   e2e:
     name: E2E (OpenResty + Docker Compose)
     runs-on: ubuntu-latest
-    needs: unit
+    needs: [unit, docs_quality]
     timeout-minutes: 40
     env:
       DOCKER_BUILDKIT: "1"

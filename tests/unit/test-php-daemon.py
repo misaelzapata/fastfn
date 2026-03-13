@@ -3,6 +3,7 @@ import importlib.util
 import json
 import os
 import socket
+import stat
 import struct
 import tempfile
 from concurrent.futures import Future, TimeoutError as FutureTimeoutError
@@ -96,7 +97,7 @@ def test_read_write_frame_paths() -> None:
     with left, right:
         expected = {"ok": True, "nested": {"a": 1}}
         php_daemon._write_frame(left, expected)
-        assert _read_frame(right) == expected
+        assert php_daemon._read_frame(right) == expected
 
     left, right = socket.socketpair()
     with left, right:
@@ -729,6 +730,284 @@ def test_additional_edge_branches() -> None:
         php_daemon._read_frame = old_read
         php_daemon._handle_request_with_pool = old_handle
         php_daemon._write_frame = old_write
+
+    # _parse_extra_allow_roots catches bad path entries.
+    old_extra = php_daemon.STRICT_FS_EXTRA_ALLOW
+    try:
+        php_daemon.STRICT_FS_EXTRA_ALLOW = "\x00bad"
+        assert php_daemon._parse_extra_allow_roots() == []
+    finally:
+        php_daemon.STRICT_FS_EXTRA_ALLOW = old_extra
+
+    # _read_function_env: non-string keys are skipped.
+    with tempfile.TemporaryDirectory() as tmp:
+        fn_dir = Path(tmp)
+        handler = fn_dir / "app.php"
+        handler.write_text("<?php", encoding="utf-8")
+        env_path = fn_dir / "fn.env.json"
+        env_path.write_text("{}", encoding="utf-8")
+        old_loads = php_daemon.json.loads
+        try:
+            php_daemon.json.loads = lambda _raw: {1: "x", "OK": "1"}
+            assert php_daemon._read_function_env(handler) == {"OK": "1"}
+        finally:
+            php_daemon.json.loads = old_loads
+
+    # _patched_process_env tracks previous vars and supports None delete.
+    old_prev = os.environ.get("UNIT_PREV")
+    os.environ["UNIT_PREV"] = "old"
+    try:
+        with php_daemon._patched_process_env({1: "x", "": "y", "UNIT_PREV": "new", "UNIT_NONE": None}):
+            assert os.environ.get("UNIT_PREV") == "new"
+            assert "UNIT_NONE" not in os.environ
+        assert os.environ.get("UNIT_PREV") == "old"
+    finally:
+        if old_prev is None:
+            os.environ.pop("UNIT_PREV", None)
+        else:
+            os.environ["UNIT_PREV"] = old_prev
+
+    # _resolve_handler_path fallback + invalid version + unknown function.
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        old_functions = php_daemon.FUNCTIONS_DIR
+        old_runtime = php_daemon.RUNTIME_FUNCTIONS_DIR
+        try:
+            php_daemon.FUNCTIONS_DIR = root
+            php_daemon.RUNTIME_FUNCTIONS_DIR = root / "php"
+            try:
+                php_daemon._resolve_handler_path("missing", "bad/version")
+            except ValueError as exc:
+                assert "version" in str(exc).lower()
+            else:
+                raise AssertionError("expected invalid version error")
+            try:
+                php_daemon._resolve_handler_path("missing", None)
+            except FileNotFoundError:
+                pass
+            else:
+                raise AssertionError("expected unknown function error")
+        finally:
+            php_daemon.FUNCTIONS_DIR = old_functions
+            php_daemon.RUNTIME_FUNCTIONS_DIR = old_runtime
+
+    try:
+        php_daemon._normalize_response({"status": 200, "headers": {}, "is_base64": True, "body_base64": ""})
+    except ValueError as exc:
+        assert "body_base64" in str(exc)
+    else:
+        raise AssertionError("expected invalid body_base64")
+
+    # _run_php_handler includes stderr when present.
+    class _Proc:
+        def __init__(self, stdout: str, stderr: str):
+            self.stdout = stdout
+            self.stderr = stderr
+            self.returncode = 0
+
+    old_run = php_daemon.subprocess.run
+    try:
+        php_daemon.subprocess.run = lambda *_a, **_k: _Proc(json.dumps({"status": 200, "headers": {}, "body": "ok"}), "warn")
+        out = php_daemon._run_php_handler(Path("/tmp/x.php"), {}, 200)
+        assert out.get("stderr") == "warn"
+    finally:
+        php_daemon.subprocess.run = old_run
+
+    # _normalize_worker_pool_settings acquire_timeout floor branch.
+    old_acquire = php_daemon.RUNTIME_POOL_ACQUIRE_TIMEOUT_MS
+    try:
+        php_daemon.RUNTIME_POOL_ACQUIRE_TIMEOUT_MS = 0
+        settings = php_daemon._normalize_worker_pool_settings({"event": {"context": {"worker_pool": {"max_workers": 1}}}})
+        assert settings["acquire_timeout_ms"] == 100
+    finally:
+        php_daemon.RUNTIME_POOL_ACQUIRE_TIMEOUT_MS = old_acquire
+
+    # _start_runtime_pool_reaper early exits.
+    old_started = php_daemon._RUNTIME_POOL_REAPER_STARTED
+    old_interval = php_daemon.RUNTIME_POOL_REAPER_INTERVAL_MS
+    try:
+        php_daemon._RUNTIME_POOL_REAPER_STARTED = True
+        php_daemon._start_runtime_pool_reaper()
+        php_daemon._RUNTIME_POOL_REAPER_STARTED = False
+        php_daemon.RUNTIME_POOL_REAPER_INTERVAL_MS = 0
+        php_daemon._start_runtime_pool_reaper()
+    finally:
+        php_daemon._RUNTIME_POOL_REAPER_STARTED = old_started
+        php_daemon.RUNTIME_POOL_REAPER_INTERVAL_MS = old_interval
+
+    # _warmup_runtime_pool tolerates future failures.
+    exec3 = php_daemon.ThreadPoolExecutor(max_workers=1)
+    old_submit = exec3.submit
+    try:
+        class _BadFuture:
+            def result(self, timeout=None):  # noqa: ARG002
+                raise RuntimeError("boom")
+
+        exec3.submit = lambda *_a, **_k: _BadFuture()
+        php_daemon._warmup_runtime_pool({"min_warm": 1, "executor": exec3})
+    finally:
+        exec3.submit = old_submit
+        exec3.shutdown(wait=False, cancel_futures=False)
+
+    # _submit_runtime_pool_request invalid executor + missing current pool callback.
+    try:
+        php_daemon._submit_runtime_pool_request("x", {"executor": object()}, {"fn": "demo", "event": {}})
+    except RuntimeError as exc:
+        assert "executor" in str(exc).lower()
+    else:
+        raise AssertionError("expected invalid executor error")
+
+    old_pools = php_daemon._RUNTIME_POOLS
+    old_direct = php_daemon._handle_request_direct
+    exec4 = php_daemon.ThreadPoolExecutor(max_workers=1)
+    try:
+        started = php_daemon.threading.Event()
+        release = php_daemon.threading.Event()
+
+        def _slow_ok(_req):
+            started.set()
+            release.wait(timeout=2)
+            return {"status": 200, "headers": {}, "body": "ok"}
+
+        pool = {"executor": exec4, "pending": 0, "last_used": 0.0}
+        php_daemon._RUNTIME_POOLS = {"gone@v1": pool}
+        php_daemon._handle_request_direct = _slow_ok
+        fut = php_daemon._submit_runtime_pool_request("gone@v1", pool, {"fn": "demo", "event": {}})
+        assert started.wait(timeout=2)
+        php_daemon._RUNTIME_POOLS = {}
+        release.set()
+        assert fut.result(timeout=2)["status"] == 200
+    finally:
+        php_daemon._RUNTIME_POOLS = old_pools
+        php_daemon._handle_request_direct = old_direct
+        exec4.shutdown(wait=False, cancel_futures=False)
+
+    # _start_runtime_pool_reaper inner-loop continue branch (pending/min_warm > 0).
+    old_started = php_daemon._RUNTIME_POOL_REAPER_STARTED
+    old_interval = php_daemon.RUNTIME_POOL_REAPER_INTERVAL_MS
+    old_thread_cls = php_daemon.threading.Thread
+    old_sleep = php_daemon.time.sleep
+    old_mono = php_daemon.time.monotonic
+    old_shutdown_pool = php_daemon._shutdown_runtime_pool
+    old_pools = php_daemon._RUNTIME_POOLS
+    try:
+        sleep_calls = {"n": 0}
+        shutdown_calls = {"n": 0}
+
+        def _fake_sleep(_seconds):
+            sleep_calls["n"] += 1
+            if sleep_calls["n"] > 1:
+                raise RuntimeError("stop-reaper")
+
+        def _fake_shutdown(_pool):
+            shutdown_calls["n"] += 1
+
+        class _InlineThread:
+            def __init__(self, *, target=None, **_kwargs):
+                self._target = target
+
+            def start(self):
+                try:
+                    if self._target is not None:
+                        self._target()
+                except RuntimeError as exc:
+                    if str(exc) != "stop-reaper":
+                        raise
+
+        php_daemon._RUNTIME_POOLS = {
+            "pending@v1": {"pending": 1, "min_warm": 0, "idle_ttl_ms": 1, "last_used": 0.0},
+            "warm@v1": {"pending": 0, "min_warm": 1, "idle_ttl_ms": 1, "last_used": 0.0},
+        }
+        php_daemon._RUNTIME_POOL_REAPER_STARTED = False
+        php_daemon.RUNTIME_POOL_REAPER_INTERVAL_MS = 1
+        php_daemon.threading.Thread = _InlineThread
+        php_daemon.time.sleep = _fake_sleep
+        php_daemon.time.monotonic = lambda: 10.0
+        php_daemon._shutdown_runtime_pool = _fake_shutdown
+        php_daemon._start_runtime_pool_reaper()
+        assert shutdown_calls["n"] == 0
+    finally:
+        php_daemon._RUNTIME_POOLS = old_pools
+        php_daemon._RUNTIME_POOL_REAPER_STARTED = old_started
+        php_daemon.RUNTIME_POOL_REAPER_INTERVAL_MS = old_interval
+        php_daemon.threading.Thread = old_thread_cls
+        php_daemon.time.sleep = old_sleep
+        php_daemon.time.monotonic = old_mono
+        php_daemon._shutdown_runtime_pool = old_shutdown_pool
+
+    # _prepare_socket_path non-socket / stale socket / in-use socket branches.
+    with tempfile.TemporaryDirectory() as tmp:
+        not_socket = Path(tmp) / "plain.file"
+        not_socket.write_text("x", encoding="utf-8")
+        try:
+            php_daemon._prepare_socket_path(str(not_socket))
+        except RuntimeError as exc:
+            assert "not a unix socket" in str(exc).lower()
+        else:
+            raise AssertionError("expected non-socket error")
+
+    old_stat = php_daemon.os.stat
+    old_socket_ctor = php_daemon.socket.socket
+    old_remove = php_daemon.os.remove
+    try:
+        class _SockStat:
+            st_mode = stat.S_IFSOCK
+
+        class _Probe:
+            def __init__(self, should_connect=False):
+                self._connect = should_connect
+
+            def settimeout(self, _v):
+                return None
+
+            def connect(self, _path):
+                if self._connect:
+                    return None
+                raise OSError("stale")
+
+            def close(self):
+                return None
+
+        php_daemon.os.stat = lambda _p: _SockStat()
+        php_daemon.socket.socket = lambda *_a, **_k: _Probe(False)
+        php_daemon.os.remove = lambda _p: (_ for _ in ()).throw(FileNotFoundError())
+        php_daemon._prepare_socket_path("/tmp/fn-php.sock")
+
+        php_daemon.socket.socket = lambda *_a, **_k: _Probe(True)
+        try:
+            php_daemon._prepare_socket_path("/tmp/fn-php.sock")
+        except RuntimeError as exc:
+            assert "already in use" in str(exc).lower()
+        else:
+            raise AssertionError("expected in-use socket error")
+    finally:
+        php_daemon.os.stat = old_stat
+        php_daemon.socket.socket = old_socket_ctor
+        php_daemon.os.remove = old_remove
+
+    # _entrypoint validates worker existence and calls main.
+    old_worker = php_daemon.WORKER_FILE
+    old_main = php_daemon.main
+    try:
+        php_daemon.WORKER_FILE = Path("/tmp/does-not-exist-worker.php")
+        try:
+            php_daemon._entrypoint()
+        except SystemExit as exc:
+            assert "missing php-worker.php" in str(exc)
+        else:
+            raise AssertionError("expected missing worker SystemExit")
+
+        hit = {"ok": False}
+        with tempfile.TemporaryDirectory() as tmp:
+            worker = Path(tmp) / "php-worker.php"
+            worker.write_text("<?php", encoding="utf-8")
+            php_daemon.WORKER_FILE = worker
+            php_daemon.main = lambda: hit.update(ok=True)
+            php_daemon._entrypoint()
+            assert hit["ok"] is True
+    finally:
+        php_daemon.WORKER_FILE = old_worker
+        php_daemon.main = old_main
 
 
 def test_php_worker_has_reflection_param_injection() -> None:

@@ -97,7 +97,7 @@ def test_read_write_frame_and_normalize_response() -> None:
     with left, right:
         expected = {"ok": True, "x": 1}
         rust_daemon._write_frame(left, expected)
-        assert _read_frame(right) == expected
+        assert rust_daemon._read_frame(right) == expected
 
     left, right = socket.socketpair()
     with left, right:
@@ -680,6 +680,285 @@ def test_additional_edge_branches() -> None:
         rust_daemon._read_frame = old_read
         rust_daemon._handle_request_with_pool = old_handle
         rust_daemon._write_frame = old_write
+
+    # _read_function_env: non-string keys are skipped.
+    with tempfile.TemporaryDirectory() as tmp:
+        fn_dir = Path(tmp)
+        handler = fn_dir / "app.rs"
+        handler.write_text("pub fn handler(_e: serde_json::Value) -> serde_json::Value { serde_json::json!({}) }\n", encoding="utf-8")
+        env_path = fn_dir / "fn.env.json"
+        env_path.write_text("{}", encoding="utf-8")
+        old_loads = rust_daemon.json.loads
+        try:
+            rust_daemon.json.loads = lambda _raw: {1: "x", "OK": "1"}
+            assert rust_daemon._read_function_env(handler) == {"OK": "1"}
+        finally:
+            rust_daemon.json.loads = old_loads
+
+    # _patched_process_env tracks previous vars and supports None delete.
+    old_prev = os.environ.get("UNIT_PREV")
+    os.environ["UNIT_PREV"] = "old"
+    try:
+        with rust_daemon._patched_process_env({1: "x", "": "y", "UNIT_PREV": "new", "UNIT_NONE": None}):
+            assert os.environ.get("UNIT_PREV") == "new"
+            assert "UNIT_NONE" not in os.environ
+        assert os.environ.get("UNIT_PREV") == "old"
+    finally:
+        if old_prev is None:
+            os.environ.pop("UNIT_PREV", None)
+        else:
+            os.environ["UNIT_PREV"] = old_prev
+
+    # _resolve_handler_path fallback + invalid version + unknown function.
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        old_functions = rust_daemon.FUNCTIONS_DIR
+        old_runtime = rust_daemon.RUNTIME_FUNCTIONS_DIR
+        try:
+            rust_daemon.FUNCTIONS_DIR = root
+            rust_daemon.RUNTIME_FUNCTIONS_DIR = root / "rust"
+            try:
+                rust_daemon._resolve_handler_path("missing", "bad/version")
+            except ValueError as exc:
+                assert "version" in str(exc).lower()
+            else:
+                raise AssertionError("expected invalid version error")
+            try:
+                rust_daemon._resolve_handler_path("missing", None)
+            except FileNotFoundError:
+                pass
+            else:
+                raise AssertionError("expected unknown function error")
+            (root / "rust").mkdir(parents=True, exist_ok=True)
+            (root / "rust" / "runtime-only.rs").write_text("// rt", encoding="utf-8")
+            assert rust_daemon._resolve_handler_path("runtime-only.rs", None) == root / "rust" / "runtime-only.rs"
+        finally:
+            rust_daemon.FUNCTIONS_DIR = old_functions
+            rust_daemon.RUNTIME_FUNCTIONS_DIR = old_runtime
+
+    try:
+        rust_daemon._normalize_response({"status": 200, "headers": {}, "is_base64": True, "body_base64": ""})
+    except ValueError as exc:
+        assert "body_base64" in str(exc)
+    else:
+        raise AssertionError("expected invalid body_base64")
+
+    # _ensure_rust_binary cached/hot-reload branch.
+    with tempfile.TemporaryDirectory() as tmp:
+        handler = Path(tmp) / "handler.rs"
+        handler.write_text("pub fn handler(_e: serde_json::Value) -> serde_json::Value { serde_json::json!({}) }\n", encoding="utf-8")
+        binary = Path(tmp) / "fn_handler"
+        binary.write_text("bin", encoding="utf-8")
+        old_hot = rust_daemon.HOT_RELOAD
+        old_cache = dict(rust_daemon._BINARY_CACHE)
+        try:
+            rust_daemon.HOT_RELOAD = True
+            rust_daemon._BINARY_CACHE.clear()
+            rust_daemon._BINARY_CACHE[str(handler)] = {"mtime_ns": handler.stat().st_mtime_ns, "binary": str(binary)}
+            assert rust_daemon._ensure_rust_binary(handler) == binary
+        finally:
+            rust_daemon.HOT_RELOAD = old_hot
+            rust_daemon._BINARY_CACHE.clear()
+            rust_daemon._BINARY_CACHE.update(old_cache)
+
+    # _run_rust_handler includes stderr when present.
+    class _Proc:
+        def __init__(self, stdout: str, stderr: str):
+            self.stdout = stdout
+            self.stderr = stderr
+            self.returncode = 0
+
+    old_run = rust_daemon.subprocess.run
+    try:
+        rust_daemon.subprocess.run = lambda *_a, **_k: _Proc(json.dumps({"status": 200, "headers": {}, "body": "ok"}), "warn")
+        out = rust_daemon._run_rust_handler(Path("/tmp/bin"), {}, 200)
+        assert out.get("stderr") == "warn"
+    finally:
+        rust_daemon.subprocess.run = old_run
+
+    # _normalize_worker_pool_settings acquire_timeout floor branch + min_warm cap.
+    old_acquire = rust_daemon.RUNTIME_POOL_ACQUIRE_TIMEOUT_MS
+    try:
+        rust_daemon.RUNTIME_POOL_ACQUIRE_TIMEOUT_MS = 0
+        settings = rust_daemon._normalize_worker_pool_settings({"event": {"context": {"worker_pool": {"max_workers": 1}}}})
+        assert settings["acquire_timeout_ms"] == 100
+        capped = rust_daemon._normalize_worker_pool_settings(
+            {"event": {"context": {"worker_pool": {"max_workers": 2, "min_warm": 5}}}}
+        )
+        assert capped["min_warm"] == 2
+    finally:
+        rust_daemon.RUNTIME_POOL_ACQUIRE_TIMEOUT_MS = old_acquire
+
+    # _start_runtime_pool_reaper early exits.
+    old_started = rust_daemon._RUNTIME_POOL_REAPER_STARTED
+    old_interval = rust_daemon.RUNTIME_POOL_REAPER_INTERVAL_MS
+    try:
+        rust_daemon._RUNTIME_POOL_REAPER_STARTED = True
+        rust_daemon._start_runtime_pool_reaper()
+        rust_daemon._RUNTIME_POOL_REAPER_STARTED = False
+        rust_daemon.RUNTIME_POOL_REAPER_INTERVAL_MS = 0
+        rust_daemon._start_runtime_pool_reaper()
+    finally:
+        rust_daemon._RUNTIME_POOL_REAPER_STARTED = old_started
+        rust_daemon.RUNTIME_POOL_REAPER_INTERVAL_MS = old_interval
+
+    # _warmup_runtime_pool tolerates future failures.
+    exec3 = rust_daemon.ThreadPoolExecutor(max_workers=1)
+    old_submit = exec3.submit
+    try:
+        class _BadFuture:
+            def result(self, timeout=None):  # noqa: ARG002
+                raise RuntimeError("boom")
+
+        exec3.submit = lambda *_a, **_k: _BadFuture()
+        rust_daemon._warmup_runtime_pool({"min_warm": 1, "executor": exec3})
+    finally:
+        exec3.submit = old_submit
+        exec3.shutdown(wait=False, cancel_futures=False)
+
+    # _submit_runtime_pool_request invalid executor + missing current pool callback.
+    try:
+        rust_daemon._submit_runtime_pool_request("x", {"executor": object()}, {"fn": "demo", "event": {}})
+    except RuntimeError as exc:
+        assert "executor" in str(exc).lower()
+    else:
+        raise AssertionError("expected invalid executor error")
+
+    old_pools = rust_daemon._RUNTIME_POOLS
+    old_direct = rust_daemon._handle_request_direct
+    exec4 = rust_daemon.ThreadPoolExecutor(max_workers=1)
+    try:
+        started = rust_daemon.threading.Event()
+        release = rust_daemon.threading.Event()
+
+        def _slow_ok(_req):
+            started.set()
+            release.wait(timeout=2)
+            return {"status": 200, "headers": {}, "body": "ok"}
+
+        pool = {"executor": exec4, "pending": 0, "last_used": 0.0}
+        rust_daemon._RUNTIME_POOLS = {"gone@v1": pool}
+        rust_daemon._handle_request_direct = _slow_ok
+        fut = rust_daemon._submit_runtime_pool_request("gone@v1", pool, {"fn": "demo", "event": {}})
+        assert started.wait(timeout=2)
+        rust_daemon._RUNTIME_POOLS = {}
+        release.set()
+        assert fut.result(timeout=2)["status"] == 200
+    finally:
+        rust_daemon._RUNTIME_POOLS = old_pools
+        rust_daemon._handle_request_direct = old_direct
+        exec4.shutdown(wait=False, cancel_futures=False)
+
+    # _start_runtime_pool_reaper inner-loop continue branch (pending/min_warm > 0).
+    old_started = rust_daemon._RUNTIME_POOL_REAPER_STARTED
+    old_interval = rust_daemon.RUNTIME_POOL_REAPER_INTERVAL_MS
+    old_thread_cls = rust_daemon.threading.Thread
+    old_sleep = rust_daemon.time.sleep
+    old_mono = rust_daemon.time.monotonic
+    old_shutdown_pool = rust_daemon._shutdown_runtime_pool
+    old_pools = rust_daemon._RUNTIME_POOLS
+    try:
+        sleep_calls = {"n": 0}
+        shutdown_calls = {"n": 0}
+
+        def _fake_sleep(_seconds):
+            sleep_calls["n"] += 1
+            if sleep_calls["n"] > 1:
+                raise RuntimeError("stop-reaper")
+
+        def _fake_shutdown(_pool):
+            shutdown_calls["n"] += 1
+
+        class _InlineThread:
+            def __init__(self, *, target=None, **_kwargs):
+                self._target = target
+
+            def start(self):
+                try:
+                    if self._target is not None:
+                        self._target()
+                except RuntimeError as exc:
+                    if str(exc) != "stop-reaper":
+                        raise
+
+        rust_daemon._RUNTIME_POOLS = {
+            "pending@v1": {"pending": 1, "min_warm": 0, "idle_ttl_ms": 1, "last_used": 0.0},
+            "warm@v1": {"pending": 0, "min_warm": 1, "idle_ttl_ms": 1, "last_used": 0.0},
+        }
+        rust_daemon._RUNTIME_POOL_REAPER_STARTED = False
+        rust_daemon.RUNTIME_POOL_REAPER_INTERVAL_MS = 1
+        rust_daemon.threading.Thread = _InlineThread
+        rust_daemon.time.sleep = _fake_sleep
+        rust_daemon.time.monotonic = lambda: 10.0
+        rust_daemon._shutdown_runtime_pool = _fake_shutdown
+        rust_daemon._start_runtime_pool_reaper()
+        assert shutdown_calls["n"] == 0
+    finally:
+        rust_daemon._RUNTIME_POOLS = old_pools
+        rust_daemon._RUNTIME_POOL_REAPER_STARTED = old_started
+        rust_daemon.RUNTIME_POOL_REAPER_INTERVAL_MS = old_interval
+        rust_daemon.threading.Thread = old_thread_cls
+        rust_daemon.time.sleep = old_sleep
+        rust_daemon.time.monotonic = old_mono
+        rust_daemon._shutdown_runtime_pool = old_shutdown_pool
+
+    # _handle_request_direct fn required branch.
+    try:
+        rust_daemon._handle_request_direct({"event": {}})
+    except ValueError as exc:
+        assert "fn is required" in str(exc).lower()
+    else:
+        raise AssertionError("expected fn is required error")
+
+    # _prepare_socket_path non-socket / stale socket / in-use socket branches.
+    with tempfile.TemporaryDirectory() as tmp:
+        not_socket = Path(tmp) / "plain.file"
+        not_socket.write_text("x", encoding="utf-8")
+        try:
+            rust_daemon._prepare_socket_path(str(not_socket))
+        except RuntimeError as exc:
+            assert "not a unix socket" in str(exc).lower()
+        else:
+            raise AssertionError("expected non-socket error")
+
+    old_stat = rust_daemon.os.stat
+    old_socket_ctor = rust_daemon.socket.socket
+    old_remove = rust_daemon.os.remove
+    try:
+        class _SockStat:
+            st_mode = rust_daemon.stat.S_IFSOCK
+
+        class _Probe:
+            def __init__(self, should_connect=False):
+                self._connect = should_connect
+
+            def settimeout(self, _v):
+                return None
+
+            def connect(self, _path):
+                if self._connect:
+                    return None
+                raise OSError("stale")
+
+            def close(self):
+                return None
+
+        rust_daemon.os.stat = lambda _p: _SockStat()
+        rust_daemon.socket.socket = lambda *_a, **_k: _Probe(False)
+        rust_daemon.os.remove = lambda _p: (_ for _ in ()).throw(FileNotFoundError())
+        rust_daemon._prepare_socket_path("/tmp/fn-rust.sock")
+
+        rust_daemon.socket.socket = lambda *_a, **_k: _Probe(True)
+        try:
+            rust_daemon._prepare_socket_path("/tmp/fn-rust.sock")
+        except RuntimeError as exc:
+            assert "already in use" in str(exc).lower()
+        else:
+            raise AssertionError("expected in-use socket error")
+    finally:
+        rust_daemon.os.stat = old_stat
+        rust_daemon.socket.socket = old_socket_ctor
+        rust_daemon.os.remove = old_remove
 
 
 def test_rust_main_rs_merges_params_into_event() -> None:

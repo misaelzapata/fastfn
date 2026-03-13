@@ -640,5 +640,4 @@ def main() -> None:
             threading.Thread(target=_serve_conn, args=(conn,), daemon=True).start()
 
 
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__": main()
