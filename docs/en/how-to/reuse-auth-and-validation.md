@@ -116,6 +116,12 @@ functions/
     }
     ```
 
+Runtime-specific import notes:
+
+- Python: add `functions/_shared/__init__.py` and keep `functions/` on runtime import path.
+- Rust: expose shared helpers in your crate entry (`mod shared;` in `lib.rs`/`main.rs`) before using `crate::shared::*`.
+- PHP: for deep nested routes, prefer a bootstrap with a stable base path constant instead of many `../`.
+
 ## 3. Verify with curl
 
 ```bash

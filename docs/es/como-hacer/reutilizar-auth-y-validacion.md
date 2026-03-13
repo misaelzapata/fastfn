@@ -116,6 +116,12 @@ functions/
     }
     ```
 
+Notas de import por runtime:
+
+- Python: agrega `functions/_shared/__init__.py` y mantiene `functions/` dentro del import path del runtime.
+- Rust: expone helpers compartidos en el entry del crate (`mod shared;` en `lib.rs`/`main.rs`) antes de usar `crate::shared::*`.
+- PHP: para rutas muy anidadas, conviene un bootstrap con constante de base path en lugar de acumular `../`.
+
 ## 3. Verificar con curl
 
 ```bash
