@@ -168,7 +168,15 @@ def test_ensure_rust_binary_paths() -> None:
             assert calls["n"] == 1, calls
 
             rust_daemon._BINARY_CACHE.clear()
+            rust_daemon.subprocess.run = lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("unexpected rebuild"))
+            b3 = rust_daemon._ensure_rust_binary(handler)
+            assert b3 == b1
+
+            rust_daemon._BINARY_CACHE.clear()
             rust_daemon.subprocess.run = lambda *_a, **_k: Proc(returncode=1, stderr="compile failed")
+            meta_path = handler.parent / ".rust-build" / ".fastfn-build-meta.json"
+            if meta_path.exists():
+                meta_path.unlink()
             try:
                 rust_daemon._ensure_rust_binary(handler)
             except RuntimeError as exc:
@@ -215,11 +223,10 @@ def test_run_handler_direct_pool_and_serve_conn() -> None:
     old_resolve = rust_daemon._resolve_handler_path
     old_binary = rust_daemon._ensure_rust_binary
     old_env = rust_daemon._read_function_env
-    old_run = rust_daemon._run_rust_handler
+    old_run_prepared = rust_daemon._run_prepared_request_persistent
     old_enabled = rust_daemon.ENABLE_RUNTIME_WORKER_POOL
     old_direct = rust_daemon._handle_request_direct
-    old_ensure_pool = rust_daemon._ensure_runtime_pool
-    old_submit = rust_daemon._submit_runtime_pool_request
+    old_prepare = rust_daemon._prepare_request
     old_read = rust_daemon._read_frame
     old_handle_pool = rust_daemon._handle_request_with_pool
 
@@ -228,24 +235,22 @@ def test_run_handler_direct_pool_and_serve_conn() -> None:
         rust_daemon._ensure_rust_binary = lambda _p: Path("/tmp/fn_handler")
         rust_daemon._read_function_env = lambda _p: {"FN_ENV": "1", "UNIT_PROCESS_ENV": "yes"}
         seen = {}
-        previous_unit_env = os.environ.get("UNIT_PROCESS_ENV")
 
-        def fake_run_handler(_binary, event, timeout_ms):
+        def fake_run_handler(_pool_key, _path, _binary, event, timeout_ms, settings):
             seen["event"] = event
             seen["timeout_ms"] = timeout_ms
-            seen["process_env"] = os.environ.get("UNIT_PROCESS_ENV")
+            seen["settings"] = settings
             return {"status": 200, "headers": {}, "body": "ok"}
 
-        rust_daemon._run_rust_handler = fake_run_handler
+        rust_daemon._run_prepared_request_persistent = fake_run_handler
         direct_resp = rust_daemon._handle_request_direct(
             {"fn": "demo", "event": {"env": {"A": "2"}, "context": {"timeout_ms": 10}}}
         )
         assert direct_resp["status"] == 200
         assert seen["event"]["env"]["A"] == "2"
         assert seen["event"]["env"]["FN_ENV"] == "1"
-        assert seen["process_env"] == "yes"
         assert seen["timeout_ms"] == 510
-        assert os.environ.get("UNIT_PROCESS_ENV") == previous_unit_env
+        assert seen["settings"]["max_workers"] == 1
 
         rust_daemon.ENABLE_RUNTIME_WORKER_POOL = False
         rust_daemon._handle_request_direct = lambda _req: {"status": 200, "headers": {}, "body": "direct"}
@@ -253,13 +258,8 @@ def test_run_handler_direct_pool_and_serve_conn() -> None:
         assert fallback_resp["body"] == "direct"
 
         rust_daemon.ENABLE_RUNTIME_WORKER_POOL = True
-        rust_daemon._ensure_runtime_pool = lambda *_a, **_k: {"executor": object()}
-
-        class SlowFuture:
-            def result(self, timeout=None):  # noqa: ARG002
-                raise FutureTimeoutError()
-
-        rust_daemon._submit_runtime_pool_request = lambda *_a, **_k: SlowFuture()
+        rust_daemon._prepare_request = lambda _req: (Path("/tmp/handler.rs"), Path("/tmp/fn_handler"), {}, 510)
+        rust_daemon._run_prepared_request_persistent = lambda *_a, **_k: {"status": 504, "headers": {}, "body": "timeout"}
         timeout_resp = rust_daemon._handle_request_with_pool(
             {"fn": "demo", "event": {"context": {"timeout_ms": 10, "worker_pool": {"enabled": True, "max_workers": 1}}}}
         )
@@ -282,11 +282,10 @@ def test_run_handler_direct_pool_and_serve_conn() -> None:
         rust_daemon._resolve_handler_path = old_resolve
         rust_daemon._ensure_rust_binary = old_binary
         rust_daemon._read_function_env = old_env
-        rust_daemon._run_rust_handler = old_run
+        rust_daemon._run_prepared_request_persistent = old_run_prepared
         rust_daemon.ENABLE_RUNTIME_WORKER_POOL = old_enabled
         rust_daemon._handle_request_direct = old_direct
-        rust_daemon._ensure_runtime_pool = old_ensure_pool
-        rust_daemon._submit_runtime_pool_request = old_submit
+        rust_daemon._prepare_request = old_prepare
         rust_daemon._read_frame = old_read
         rust_daemon._handle_request_with_pool = old_handle_pool
 
@@ -754,7 +753,14 @@ def test_additional_edge_branches() -> None:
         try:
             rust_daemon.HOT_RELOAD = True
             rust_daemon._BINARY_CACHE.clear()
-            rust_daemon._BINARY_CACHE[str(handler)] = {"mtime_ns": handler.stat().st_mtime_ns, "binary": str(binary)}
+            rust_daemon._BINARY_CACHE[str(handler)] = {
+                "signature": {
+                    "source_mtime_ns": handler.stat().st_mtime_ns,
+                    "main_rs_hash": rust_daemon._MAIN_RS_DIGEST,
+                    "cargo_toml_hash": rust_daemon._CARGO_TOML_DIGEST,
+                },
+                "binary": str(binary),
+            }
             assert rust_daemon._ensure_rust_binary(handler) == binary
         finally:
             rust_daemon.HOT_RELOAD = old_hot
@@ -968,8 +974,8 @@ def test_rust_main_rs_merges_params_into_event() -> None:
         "main.rs must extract params from event"
     assert "as_object_mut" in main_rs, \
         "main.rs must use as_object_mut to merge params"
-    assert "or_insert" in main_rs, \
-        "main.rs must use entry().or_insert() to not overwrite existing keys"
+    assert "contains_key" in main_rs or "or_insert" in main_rs, \
+        "main.rs must avoid overwriting existing event keys when merging params"
 
 
 def test_rust_handle_request_passes_params_through() -> None:
@@ -977,29 +983,31 @@ def test_rust_handle_request_passes_params_through() -> None:
     old_resolve = rust_daemon._resolve_handler_path
     old_binary = rust_daemon._ensure_rust_binary
     old_env = rust_daemon._read_function_env
-    old_run = rust_daemon._run_rust_handler
+    old_run_prepared = rust_daemon._run_prepared_request_persistent
     seen = {}
     try:
         rust_daemon._resolve_handler_path = lambda *_a, **_k: Path("/tmp/handler.rs")
         rust_daemon._ensure_rust_binary = lambda _p: Path("/tmp/fn_handler")
         rust_daemon._read_function_env = lambda _p: {}
 
-        def fake_run(_binary, event, timeout_ms):
+        def fake_run(_pool_key, _handler_path, _binary, event, timeout_ms, settings):
             seen["event"] = event
+            seen["settings"] = settings
             return {"status": 200, "headers": {}, "body": "ok"}
 
-        rust_daemon._run_rust_handler = fake_run
+        rust_daemon._run_prepared_request_persistent = fake_run
         resp = rust_daemon._handle_request_direct(
             {"fn": "demo", "event": {"params": {"id": "42", "slug": "test"}}}
         )
         assert resp["status"] == 200
         assert seen["event"]["params"]["id"] == "42"
         assert seen["event"]["params"]["slug"] == "test"
+        assert seen["settings"]["max_workers"] == 1
     finally:
         rust_daemon._resolve_handler_path = old_resolve
         rust_daemon._ensure_rust_binary = old_binary
         rust_daemon._read_function_env = old_env
-        rust_daemon._run_rust_handler = old_run
+        rust_daemon._run_prepared_request_persistent = old_run_prepared
 
 
 def main() -> None:

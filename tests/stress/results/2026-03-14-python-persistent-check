@@ -1,0 +1,36 @@
+{
+  "generated_at": "2026-03-14T17:46:14Z",
+  "mode": "native",
+  "fixture": "tests/fixtures/worker-pool",
+  "concurrency": 6,
+  "repeats": 2,
+  "warmup_requests_per_case": 1,
+  "cases": [
+    {
+      "runtime": "python",
+      "path": "/slow-python",
+      "daemons": 1,
+      "samples_ms": [
+        1280.2,
+        1282.7
+      ],
+      "avg_ms": 1281.5,
+      "min_ms": 1280.2,
+      "max_ms": 1282.7
+    },
+    {
+      "runtime": "python",
+      "path": "/slow-python",
+      "daemons": 3,
+      "samples_ms": [
+        1114.4,
+        427.5
+      ],
+      "avg_ms": 771.0,
+      "min_ms": 427.5,
+      "max_ms": 1114.4,
+      "improvement_ms": 510.5,
+      "improvement_pct": 39.8
+    }
+  ]
+}

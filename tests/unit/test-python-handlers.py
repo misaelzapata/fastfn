@@ -82,6 +82,14 @@ def test_python_hello_debug():
     assert body["debug"]["trace_id"] == "trace-1"
 
 
+def test_python_hello_prefix():
+    handler = load_handler(ROOT / "examples/functions/python/hello/app.py")
+    resp = handler({"query": {"name": "Unit"}, "env": {"GREETING_PREFIX": "Hola"}})
+    assert_response_contract(resp)
+    body = json.loads(resp["body"])
+    assert body["hello"] == "Hola Unit"
+
+
 def test_python_risk_score():
     handler = load_handler(ROOT / "examples/functions/python/risk-score/app.py")
     resp = handler({"query": {"email": "user@example.com"}, "client": {"ip": "192.168.1.10"}})
@@ -244,6 +252,22 @@ def test_python_slow_invalid_sleep_ms_is_zero():
     assert body["slept_ms"] == 0
 
 
+def test_python_slow_positive_sleep_ms_calls_sleep():
+    mod = load_module(ROOT / "examples/functions/python/slow/app.py")
+    handler = mod.handler
+    seen = {"secs": None}
+    original_sleep = mod.time.sleep
+    try:
+        mod.time.sleep = lambda secs: seen.__setitem__("secs", float(secs))
+        resp = handler({"query": {"sleep_ms": "250"}})
+        assert_response_contract(resp)
+        body = json.loads(resp["body"])
+        assert body["slept_ms"] == 250
+        assert seen["secs"] == 0.25
+    finally:
+        mod.time.sleep = original_sleep
+
+
 def test_python_cron_tick_read_and_inc_uses_local_count_file():
     mod = load_module(ROOT / "examples/functions/python/cron-tick/app.py")
     handler = mod.handler
@@ -263,6 +287,23 @@ def test_python_cron_tick_read_and_inc_uses_local_count_file():
             assert_response_contract(resp1)
             body1 = json.loads(resp1["body"])
             assert body1["count"] == 1
+        finally:
+            mod.COUNT_PATH = original
+
+
+def test_python_cron_tick_invalid_count_falls_back_to_zero():
+    mod = load_module(ROOT / "examples/functions/python/cron-tick/app.py")
+    handler = mod.handler
+    with tempfile.TemporaryDirectory() as tmp:
+        count_path = Path(tmp) / "count.txt"
+        count_path.write_text("not-an-int\n", encoding="utf-8")
+        original = mod.COUNT_PATH
+        mod.COUNT_PATH = count_path
+        try:
+            resp = handler({"query": {"action": "read"}})
+            assert_response_contract(resp)
+            body = json.loads(resp["body"])
+            assert body["count"] == 0
         finally:
             mod.COUNT_PATH = original
 
@@ -366,6 +407,25 @@ def test_python_sendgrid_send_dry_run_and_enforce_paths():
     assert missing_from["status"] == 400
 
 
+def test_python_sendgrid_send_parse_payload_error_and_bool_none_branch():
+    mod = load_module(ROOT / "examples/functions/python/sendgrid-send/app.py")
+    handler = mod.handler
+    assert mod._bool(None) is False
+
+    resp = handler(
+        {
+            "method": "POST",
+            "body": "{bad-json",
+            "query": {"dry_run": "true"},
+            "env": {},
+        }
+    )
+    assert_response_contract(resp)
+    body = json.loads(resp["body"])
+    assert body["dry_run"] is True
+    assert body["request"]["body"]["subject"] == "Hello"
+
+
 def test_python_sendgrid_send_exec_success_and_failure_via_mock():
     mod = load_module(ROOT / "examples/functions/python/sendgrid-send/app.py")
     handler = mod.handler
@@ -452,6 +512,36 @@ def test_python_github_webhook_verify_dry_run_and_enforce():
     )
     assert_response_contract(bad)
     assert bad["status"] == 400
+
+
+def test_python_github_webhook_verify_bool_none_branch():
+    mod = load_module(ROOT / "examples/functions/python/github-webhook-verify/app.py")
+    assert mod._bool(None) is False
+
+
+def test_python_gmail_parse_json_and_forced_dry_run_without_creds():
+    mod = load_module(ROOT / "examples/functions/python/gmail-send/app.py")
+    handler = mod.handler
+
+    assert mod._parse_json('{"to":"x@example.com"}') == {"to": "x@example.com"}
+
+    resp = handler(
+        {
+            "method": "POST",
+            "body": json.dumps({"to": "u@example.com", "dry_run": False}),
+            "query": {},
+            "env": {},
+        }
+    )
+    assert_response_contract(resp)
+    body = json.loads(resp["body"])
+    assert body["dry_run"] is False
+    assert "forced dry_run" in body.get("note", "")
+
+
+def test_python_sheets_webapp_append_bool_none_branch():
+    mod = load_module(ROOT / "examples/functions/python/sheets-webapp-append/app.py")
+    assert mod._bool(None) is False
 
 
 def test_python_custom_handler_demo_main():
@@ -632,7 +722,7 @@ def test_python_tools_loop_http_json_success_error_and_truncate():
     original_time = mod.time.time
     original_max = mod.MAX_RESPONSE_BYTES
     calls = {"count": 0}
-    ticks = iter([1.0, 1.01, 2.0, 2.02, 3.0, 3.03])
+    ticks = iter([1.0, 1.01, 2.0, 2.02, 3.0, 3.03, 4.0, 4.04])
 
     try:
         mod.MAX_RESPONSE_BYTES = 5
@@ -647,7 +737,9 @@ def test_python_tools_loop_http_json_success_error_and_truncate():
                 return FakeResp(201, b'{"ok":true}')
             if calls["count"] == 2:
                 return FakeResp(200, b"plain-text-response")
-            raise RuntimeError("boom")
+            if calls["count"] == 3:
+                raise RuntimeError("boom")
+            return FakeResp(200, b"{}")
 
         mod.time.time = fake_time
         mod.urllib.request.urlopen = fake_urlopen
@@ -669,6 +761,11 @@ def test_python_tools_loop_http_json_success_error_and_truncate():
         assert out3["ok"] is False
         assert out3["status"] == 0
         assert "boom" in out3["error"]
+
+        mod.MAX_RESPONSE_BYTES = 50
+        out4 = mod._http_json("https://example.com/short", timeout_ms=10)
+        assert out4["ok"] is True
+        assert out4["truncated"] is False
     finally:
         mod.urllib.request.urlopen = original_urlopen
         mod.time.time = original_time
@@ -835,6 +932,26 @@ def test_python_gmail_send_dry_run():
     assert body["channel"] == "gmail"
     assert body["to"] == "demo@example.com"
     assert body["dry_run"] is True
+
+
+def test_python_gmail_send_dry_run_with_credentials_no_forced_note():
+    handler = load_handler(ROOT / "examples/functions/python/gmail-send/app.py")
+    resp = handler(
+        {
+            "query": {
+                "to": "demo@example.com",
+                "dry_run": "true",
+            },
+            "env": {
+                "GMAIL_USER": "u@example.com",
+                "GMAIL_APP_PASSWORD": "app-pass",
+            },
+        }
+    )
+    assert_response_contract(resp)
+    body = json.loads(resp["body"])
+    assert body["dry_run"] is True
+    assert "note" not in body
 
 
 def test_python_gmail_send_requires_to():
@@ -1144,6 +1261,37 @@ def test_python_subprocess_tuple_response():
             assert body["message"] == "tuple"
         finally:
             _clear_subprocess_pool(daemon)
+
+
+def test_python_subprocess_does_not_fallback_to_oneshot() -> None:
+    daemon = PYTHON_DAEMON
+
+    handler_path = (ROOT / "tests" / "fixtures" / "dep-isolation" / "python" / "py-persistent" / "app.py").resolve()
+    called = {"oneshot": False, "persistent": 0}
+    old_get = daemon._get_or_create_worker
+    old_oneshot = daemon._run_in_subprocess_oneshot
+    old_pool = daemon._SUBPROCESS_POOL
+    try:
+        daemon._SUBPROCESS_POOL = {}
+
+        def fake_get(*_args, **_kwargs):
+            called["persistent"] += 1
+            raise RuntimeError("worker crashed")
+
+        def fake_oneshot(*_args, **_kwargs):
+            called["oneshot"] = True
+            return {"status": 200, "headers": {}, "body": "unexpected"}
+
+        daemon._get_or_create_worker = fake_get
+        daemon._run_in_subprocess_oneshot = fake_oneshot
+        resp = daemon._run_in_subprocess(handler_path, "handler", [], {"query": {"name": "x"}}, 1.0)
+        assert resp["status"] == 503, resp
+        assert called["persistent"] == 2, called
+        assert called["oneshot"] is False, called
+    finally:
+        daemon._get_or_create_worker = old_get
+        daemon._run_in_subprocess_oneshot = old_oneshot
+        daemon._SUBPROCESS_POOL = old_pool
 
 
 def test_python_prefers_handler_over_main():
@@ -1529,6 +1677,7 @@ def test_worker_handle_multi_params_from_event():
 def main():
     test_python_hello()
     test_python_hello_debug()
+    test_python_hello_prefix()
     test_python_risk_score()
     test_python_risk_score_branches()
     test_python_lambda_echo_shape()
@@ -1539,14 +1688,20 @@ def main():
     test_python_csv_demo()
     test_python_png_demo_binary_contract()
     test_python_slow_invalid_sleep_ms_is_zero()
+    test_python_slow_positive_sleep_ms_calls_sleep()
     test_python_cron_tick_read_and_inc_uses_local_count_file()
+    test_python_cron_tick_invalid_count_falls_back_to_zero()
     test_python_utc_time_and_offset_time_include_trigger()
     test_python_requirements_demo()
     test_python_sheets_webapp_append_dry_run_and_missing_env()
     test_python_sheets_webapp_append_exec_success_and_failure_via_mock()
+    test_python_sheets_webapp_append_bool_none_branch()
     test_python_sendgrid_send_dry_run_and_enforce_paths()
+    test_python_sendgrid_send_parse_payload_error_and_bool_none_branch()
     test_python_sendgrid_send_exec_success_and_failure_via_mock()
     test_python_github_webhook_verify_dry_run_and_enforce()
+    test_python_github_webhook_verify_bool_none_branch()
+    test_python_gmail_parse_json_and_forced_dry_run_without_creds()
     test_python_custom_handler_demo_main()
     test_python_nombre_handler()
     test_python_tools_loop_dry_run_plan()
@@ -1560,6 +1715,7 @@ def main():
     test_python_telegram_ai_reply_py_blocks_local_host_tools()
     test_python_telegram_ai_reply_py_scheduler_bypass_loop_token()
     test_python_gmail_send_dry_run()
+    test_python_gmail_send_dry_run_with_credentials_no_forced_note()
     test_python_gmail_send_requires_to()
     test_python_gmail_send_forced_dry_run_without_credentials()
     test_python_gmail_send_success_via_mocked_smtp()

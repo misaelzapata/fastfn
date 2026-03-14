@@ -2,6 +2,7 @@
 import json
 import os
 import re
+import select
 import shutil
 import socket
 import stat
@@ -11,8 +12,10 @@ import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from contextlib import contextmanager
+import fcntl
+import hashlib
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 SOCKET_PATH = os.environ.get("FN_RUST_SOCKET", "/tmp/fastfn/fn-rust.sock")
 MAX_FRAME_BYTES = int(os.environ.get("FN_MAX_FRAME_BYTES", str(2 * 1024 * 1024)))
@@ -35,6 +38,9 @@ _BINARY_CACHE_LOCK = threading.Lock()
 _RUNTIME_POOLS: Dict[str, Dict[str, Any]] = {}
 _RUNTIME_POOLS_LOCK = threading.Lock()
 _RUNTIME_POOL_REAPER_STARTED = False
+_PERSISTENT_RUNTIME_POOLS: Dict[str, Dict[str, Any]] = {}
+_PERSISTENT_RUNTIME_POOLS_LOCK = threading.Lock()
+_PERSISTENT_RUNTIME_POOL_REAPER_STARTED = False
 
 _CARGO_TOML = """[package]
 name = \"fn_handler\"
@@ -45,31 +51,124 @@ edition = \"2021\"
 serde_json = \"1\"
 """
 
-_MAIN_RS = """use serde_json::{json, Value};
-use std::io::{self, Read};
+_MAIN_RS = """use serde_json::{json, Map, Value};
+use std::env;
+use std::io::{self, Read, Write};
+use std::panic::{catch_unwind, AssertUnwindSafe};
 
 mod user_handler;
 
-fn main() {
-    let mut input = String::new();
-    if io::stdin().read_to_string(&mut input).is_err() {
-        print!(\"{}\", json!({\"error\": \"failed to read stdin\"}).to_string());
-        return;
-    }
+fn error_response(message: &str) -> Value {
+    json!({
+        "status": 500,
+        "headers": {"Content-Type": "application/json"},
+        "body": json!({"error": message}).to_string()
+    })
+}
 
-    let req: Value = serde_json::from_str(&input).unwrap_or_else(|_| json!({}));
-    let mut event = req.get(\"event\").cloned().unwrap_or_else(|| json!({}));
-    if let Some(params) = event.get(\"params\").cloned() {
-        if let (Some(event_map), Some(params_map)) = (event.as_object_mut(), params.as_object()) {
-            for (k, v) in params_map {
-                event_map.entry(k.clone()).or_insert(v.clone());
+fn read_frame<R: Read>(reader: &mut R) -> io::Result<Option<Vec<u8>>> {
+    let mut header = [0u8; 4];
+    match reader.read_exact(&mut header) {
+        Ok(()) => {}
+        Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => return Ok(None),
+        Err(err) => return Err(err),
+    }
+    let length = u32::from_be_bytes(header) as usize;
+    if length == 0 {
+        return Ok(None);
+    }
+    let mut payload = vec![0u8; length];
+    reader.read_exact(&mut payload)?;
+    Ok(Some(payload))
+}
+
+fn write_frame<W: Write>(writer: &mut W, payload: &Value) -> io::Result<()> {
+    let encoded = serde_json::to_vec(payload).unwrap_or_else(|_| serde_json::to_vec(&error_response("failed to encode rust handler output")).unwrap());
+    let header = (encoded.len() as u32).to_be_bytes();
+    writer.write_all(&header)?;
+    writer.write_all(&encoded)?;
+    writer.flush()
+}
+
+fn merge_params_into_event(event: &mut Value) {
+    let params = event.get("params").cloned();
+    if let Some(params_value) = params {
+        if let (Some(event_map), Some(params_map)) = (event.as_object_mut(), params_value.as_object()) {
+            for (key, value) in params_map {
+                if !event_map.contains_key(key) {
+                    event_map.insert(key.clone(), value.clone());
+                }
             }
         }
     }
-    let out = user_handler::handler(event);
-    print!(\"{}\", out.to_string());
+}
+
+fn apply_runtime_env(event: &Value) -> Vec<(String, Option<String>)> {
+    let mut previous: Vec<(String, Option<String>)> = Vec::new();
+    let Some(env_map) = event.get("env").and_then(|value| value.as_object()) else {
+        return previous;
+    };
+
+    for (key, value) in env_map {
+        let prior = env::var(key).ok();
+        previous.push((key.clone(), prior));
+        if value.is_null() {
+            env::remove_var(key);
+        } else {
+            let string_value = value.as_str().map(|item| item.to_string()).unwrap_or_else(|| value.to_string());
+            env::set_var(key, string_value);
+        }
+    }
+    previous
+}
+
+fn restore_runtime_env(previous: Vec<(String, Option<String>)>) {
+    for (key, value) in previous {
+        if let Some(item) = value {
+            env::set_var(key, item);
+        } else {
+            env::remove_var(key);
+        }
+    }
+}
+
+fn handle_event(mut event: Value) -> Value {
+    merge_params_into_event(&mut event);
+    match catch_unwind(AssertUnwindSafe(|| user_handler::handler(event))) {
+        Ok(out) => out,
+        Err(_) => error_response("rust handler panicked"),
+    }
+}
+
+fn main() {
+    let stdin = io::stdin();
+    let stdout = io::stdout();
+    let mut reader = stdin.lock();
+    let mut writer = stdout.lock();
+
+    loop {
+        let frame = match read_frame(&mut reader) {
+            Ok(Some(payload)) => payload,
+            Ok(None) => break,
+            Err(_) => {
+                let _ = write_frame(&mut writer, &error_response("failed to read stdin"));
+                break;
+            }
+        };
+
+        let req: Value = serde_json::from_slice(&frame).unwrap_or_else(|_| json!({}));
+        let event = req.get("event").cloned().unwrap_or_else(|| Value::Object(Map::new()));
+        let previous_env = apply_runtime_env(&event);
+        let out = handle_event(event);
+        restore_runtime_env(previous_env);
+        if write_frame(&mut writer, &out).is_err() {
+            break;
+        }
+    }
 }
 """
+_MAIN_RS_DIGEST = hashlib.sha256(_MAIN_RS.encode("utf-8")).hexdigest()
+_CARGO_TOML_DIGEST = hashlib.sha256(_CARGO_TOML.encode("utf-8")).hexdigest()
 
 
 def _resolve_command(env_name: str, default: str) -> str:
@@ -88,6 +187,14 @@ def _resolve_command(env_name: str, default: str) -> str:
     if resolved:
         return resolved
     raise RuntimeError(f"{default} not found in PATH")
+
+
+def _file_signature(path: Path) -> Optional[tuple[int, int]]:
+    try:
+        stat_info = path.stat()
+    except FileNotFoundError:
+        return None
+    return (stat_info.st_mtime_ns, stat_info.st_size)
 
 
 def _read_function_env(handler_path: Path) -> Dict[str, str]:
@@ -274,53 +381,95 @@ def _ensure_rust_binary(handler_path: Path) -> Path:
 
     cache_key = str(handler_path)
     source_mtime = handler_path.stat().st_mtime_ns
+    signature = {
+        "source_mtime_ns": source_mtime,
+        "main_rs_hash": _MAIN_RS_DIGEST,
+        "cargo_toml_hash": _CARGO_TOML_DIGEST,
+    }
     with _BINARY_CACHE_LOCK:
         cached = _BINARY_CACHE.get(cache_key)
-    if cached is not None and cached.get("mtime_ns") == source_mtime:
-        binary = Path(cached.get("binary", ""))
-        if binary.is_file() and not HOT_RELOAD:
-            return binary
-        if binary.is_file() and HOT_RELOAD:
-            return binary
 
     fn_dir = handler_path.parent
     build_dir = fn_dir / ".rust-build"
     src_dir = build_dir / "src"
     src_dir.mkdir(parents=True, exist_ok=True)
+    binary = build_dir / "target" / "release" / "fn_handler"
+    meta_path = build_dir / ".fastfn-build-meta.json"
+    lock_path = build_dir / ".fastfn-build.lock"
+
+    if cached is not None:
+        cached_binary = Path(str(cached.get("binary", "")))
+        if cached_binary.is_file() and cached.get("signature") == signature:
+            return cached_binary
 
     cargo_toml = build_dir / "Cargo.toml"
     main_rs = src_dir / "main.rs"
     user_rs = src_dir / "user_handler.rs"
 
-    cargo_toml.write_text(_CARGO_TOML, encoding="utf-8")
-    main_rs.write_text(_MAIN_RS, encoding="utf-8")
-    user_rs.write_text(handler_path.read_text(encoding="utf-8"), encoding="utf-8")
+    def _load_metadata() -> Optional[Dict[str, Any]]:
+        try:
+            raw = meta_path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return None
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            return None
+        return parsed if isinstance(parsed, dict) else None
 
-    cmd = [cargo, "build", "--release", "--manifest-path", str(cargo_toml)]
-    try:
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            cwd=str(build_dir),
-            timeout=max(1.0, RUST_BUILD_TIMEOUT_S),
-            check=False,
+    def _write_metadata() -> None:
+        meta_path.write_text(
+            json.dumps({"signature": signature, "binary": str(binary)}, separators=(",", ":"), sort_keys=True),
+            encoding="utf-8",
         )
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(f"rust build timeout after {max(1.0, RUST_BUILD_TIMEOUT_S):.1f}s: {exc}") from exc
-    if proc.returncode != 0:
-        stderr = (proc.stderr or "").strip()
-        stdout = (proc.stdout or "").strip()
-        detail = stderr or stdout or "unknown cargo build error"
-        raise RuntimeError(f"rust build failed: {detail[:1200]}")
 
-    binary = build_dir / "target" / "release" / "fn_handler"
-    if not binary.is_file():
-        raise RuntimeError("rust build produced no binary")
+    with lock_path.open("a+", encoding="utf-8") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            metadata = _load_metadata()
+            if (
+                isinstance(metadata, dict)
+                and metadata.get("signature") == signature
+                and binary.is_file()
+            ):
+                with _BINARY_CACHE_LOCK:
+                    _BINARY_CACHE[cache_key] = {
+                        "signature": signature,
+                        "binary": str(binary),
+                    }
+                return binary
+
+            cargo_toml.write_text(_CARGO_TOML, encoding="utf-8")
+            main_rs.write_text(_MAIN_RS, encoding="utf-8")
+            user_rs.write_text(handler_path.read_text(encoding="utf-8"), encoding="utf-8")
+
+            cmd = [cargo, "build", "--release", "--manifest-path", str(cargo_toml)]
+            try:
+                proc = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    cwd=str(build_dir),
+                    timeout=max(1.0, RUST_BUILD_TIMEOUT_S),
+                    check=False,
+                )
+            except subprocess.TimeoutExpired as exc:
+                raise RuntimeError(f"rust build timeout after {max(1.0, RUST_BUILD_TIMEOUT_S):.1f}s: {exc}") from exc
+            if proc.returncode != 0:
+                stderr = (proc.stderr or "").strip()
+                stdout = (proc.stdout or "").strip()
+                detail = stderr or stdout or "unknown cargo build error"
+                raise RuntimeError(f"rust build failed: {detail[:1200]}")
+
+            if not binary.is_file():
+                raise RuntimeError("rust build produced no binary")
+            _write_metadata()
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
     with _BINARY_CACHE_LOCK:
         _BINARY_CACHE[cache_key] = {
-            "mtime_ns": source_mtime,
+            "signature": signature,
             "binary": str(binary),
         }
     return binary
@@ -370,6 +519,104 @@ def _run_rust_handler(binary: Path, event: Dict[str, Any], timeout_ms: int) -> D
     return result
 
 
+class _PersistentRustWorker:
+    __slots__ = ("binary", "proc", "lock", "_dead")
+
+    def __init__(self, binary: Path):
+        self.binary = binary
+        self.lock = threading.Lock()
+        self._dead = False
+        self.proc = subprocess.Popen(
+            [str(binary)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            bufsize=0,
+            cwd=str(binary.parent),
+        )
+
+    @property
+    def alive(self) -> bool:
+        return not self._dead and self.proc.poll() is None
+
+    def send_request(self, event: Dict[str, Any], timeout_ms: int) -> Dict[str, Any]:
+        timeout_s = max(1.0, float(timeout_ms) / 1000.0)
+        payload = json.dumps({"event": event}, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+        with self.lock:
+            if not self.alive:
+                raise RuntimeError("worker process is dead")
+            if self.proc.stdin is None or self.proc.stdout is None:
+                self._mark_dead()
+                raise RuntimeError("worker pipes are unavailable")
+            try:
+                self.proc.stdin.write(struct.pack("!I", len(payload)))
+                self.proc.stdin.write(payload)
+                self.proc.stdin.flush()
+
+                stdout_fd = self.proc.stdout.fileno()
+                resp_header = self._read_exact(stdout_fd, 4, timeout_s)
+                if resp_header is None:
+                    self._mark_dead()
+                    raise RuntimeError("worker closed stdout")
+                (resp_len,) = struct.unpack("!I", resp_header)
+                if resp_len <= 0 or resp_len > MAX_FRAME_BYTES:
+                    self._mark_dead()
+                    raise RuntimeError("invalid worker frame length")
+                resp_payload = self._read_exact(stdout_fd, resp_len, timeout_s)
+                if resp_payload is None:
+                    self._mark_dead()
+                    raise RuntimeError("incomplete worker response")
+                parsed = json.loads(resp_payload.decode("utf-8"))
+                if not isinstance(parsed, dict):
+                    raise RuntimeError("worker response must be an object")
+                return parsed
+            except TimeoutError:
+                self._mark_dead()
+                raise
+            except (BrokenPipeError, OSError):
+                self._mark_dead()
+                raise RuntimeError("worker pipe broken")
+
+    def _read_exact(self, fd: int, size: int, timeout_s: float) -> Optional[bytes]:
+        data = bytearray()
+        deadline = time.monotonic() + timeout_s
+        while len(data) < size:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                self._mark_dead()
+                raise TimeoutError("rust worker read timeout")
+            ready, _, _ = select.select([fd], [], [], min(remaining, 1.0))
+            if not ready:
+                continue
+            chunk = os.read(fd, size - len(data))
+            if not chunk:
+                return None
+            data.extend(chunk)
+        return bytes(data)
+
+    def _mark_dead(self) -> None:
+        self._dead = True
+        try:
+            self.proc.kill()
+        except Exception:
+            pass
+
+    def shutdown(self) -> None:
+        self._dead = True
+        try:
+            if self.proc.stdin is not None:
+                self.proc.stdin.close()
+        except Exception:
+            pass
+        try:
+            self.proc.wait(timeout=2.0)
+        except Exception:
+            try:
+                self.proc.kill()
+            except Exception:
+                pass
+
+
 def _error_response(message: str, status: int = 500) -> Dict[str, Any]:
     return {
         "status": status,
@@ -382,6 +629,21 @@ def _runtime_pool_key(fn_name: Any, version: Any) -> str:
     key_fn = fn_name if isinstance(fn_name, str) and fn_name else "unknown"
     key_ver = version if isinstance(version, str) and version else "default"
     return f"{key_fn}@{key_ver}"
+
+
+def _persistent_runtime_pool_key(fn_name: Any, version: Any, handler_path: Path) -> str:
+    return f"{_runtime_pool_key(fn_name, version)}::{_handler_signature(handler_path)}"
+
+
+def _handler_signature(handler_path: Path) -> str:
+    files = [
+        handler_path,
+        handler_path.with_name("fn.env.json"),
+    ]
+    parts: list[str] = [str(_file_signature(path) or "missing") for path in files]
+    parts.append(str(hash(_MAIN_RS)))
+    parts.append(str(hash(_CARGO_TOML)))
+    return "|".join(parts)
 
 
 def _normalize_worker_pool_settings(req: Dict[str, Any]) -> Dict[str, Any]:
@@ -438,6 +700,16 @@ def _shutdown_runtime_pool(pool: Dict[str, Any]) -> None:
         executor.shutdown(wait=False, cancel_futures=False)
 
 
+def _shutdown_persistent_runtime_pool(pool: Dict[str, Any]) -> None:
+    workers = pool.get("workers")
+    if not isinstance(workers, list):
+        return
+    for entry in list(workers):
+        worker = entry.get("worker") if isinstance(entry, dict) else None
+        if isinstance(worker, _PersistentRustWorker):
+            worker.shutdown()
+
+
 def _start_runtime_pool_reaper() -> None:
     global _RUNTIME_POOL_REAPER_STARTED
     if _RUNTIME_POOL_REAPER_STARTED or RUNTIME_POOL_REAPER_INTERVAL_MS <= 0:
@@ -468,6 +740,36 @@ def _start_runtime_pool_reaper() -> None:
     threading.Thread(target=_run_reaper, name="fn-rust-runtime-pool-reaper", daemon=True).start()
 
 
+def _start_persistent_runtime_pool_reaper() -> None:
+    global _PERSISTENT_RUNTIME_POOL_REAPER_STARTED
+    if _PERSISTENT_RUNTIME_POOL_REAPER_STARTED or RUNTIME_POOL_REAPER_INTERVAL_MS <= 0:
+        return
+    _PERSISTENT_RUNTIME_POOL_REAPER_STARTED = True
+
+    def _run_reaper() -> None:
+        interval_s = max(0.5, float(RUNTIME_POOL_REAPER_INTERVAL_MS) / 1000.0)
+        while True:
+            time.sleep(interval_s)
+            now = time.monotonic()
+            evicted: list[Dict[str, Any]] = []
+            with _PERSISTENT_RUNTIME_POOLS_LOCK:
+                for key, pool in list(_PERSISTENT_RUNTIME_POOLS.items()):
+                    pending = int(pool.get("pending") or 0)
+                    min_warm = int(pool.get("min_warm") or 0)
+                    idle_ttl_ms = int(pool.get("idle_ttl_ms") or RUNTIME_POOL_IDLE_TTL_MS)
+                    last_used = float(pool.get("last_used") or now)
+                    if pending > 0 or min_warm > 0:
+                        continue
+                    idle_for_ms = int((now - last_used) * 1000)
+                    if idle_for_ms >= idle_ttl_ms:
+                        evicted.append(pool)
+                        _PERSISTENT_RUNTIME_POOLS.pop(key, None)
+            for pool in evicted:
+                _shutdown_persistent_runtime_pool(pool)
+
+    threading.Thread(target=_run_reaper, name="fn-rust-persistent-pool-reaper", daemon=True).start()
+
+
 def _warmup_runtime_pool(pool: Dict[str, Any]) -> None:
     target = int(pool.get("min_warm") or 0)
     if target <= 0:
@@ -485,6 +787,30 @@ def _warmup_runtime_pool(pool: Dict[str, Any]) -> None:
             fut.result(timeout=1.0)
         except Exception:
             continue
+
+
+def _create_persistent_runtime_worker(pool: Dict[str, Any]) -> Dict[str, Any]:
+    worker = _PersistentRustWorker(pool["binary"])
+    return {
+        "worker": worker,
+        "busy": False,
+        "last_used": time.monotonic(),
+    }
+
+
+def _warmup_persistent_runtime_pool(pool: Dict[str, Any]) -> None:
+    target = int(pool.get("min_warm") or 0)
+    if target <= 0:
+        return
+    cond = pool.get("cond")
+    if not isinstance(cond, threading.Condition):
+        return
+    with cond:
+        workers = pool.get("workers")
+        if not isinstance(workers, list):
+            return
+        while len(workers) < target and len(workers) < int(pool.get("max_workers") or 1):
+            workers.append(_create_persistent_runtime_worker(pool))
 
 
 def _ensure_runtime_pool(pool_key: str, settings: Dict[str, Any]) -> Dict[str, Any]:
@@ -523,6 +849,117 @@ def _ensure_runtime_pool(pool_key: str, settings: Dict[str, Any]) -> Dict[str, A
     return pool
 
 
+def _ensure_persistent_runtime_pool(
+    pool_key: str, handler_path: Path, binary: Path, settings: Dict[str, Any]
+) -> Dict[str, Any]:
+    stale: Optional[Dict[str, Any]] = None
+    with _PERSISTENT_RUNTIME_POOLS_LOCK:
+        existing = _PERSISTENT_RUNTIME_POOLS.get(pool_key)
+        max_workers = max(1, int(settings.get("max_workers") or 1))
+        min_warm = int(settings.get("min_warm") or 0)
+        if min_warm < 0:
+            min_warm = 0
+        if min_warm > max_workers:
+            min_warm = max_workers
+        idle_ttl_ms = int(settings.get("idle_ttl_ms") or RUNTIME_POOL_IDLE_TTL_MS)
+
+        if existing is not None and int(existing.get("max_workers") or 0) == max_workers:
+            existing["min_warm"] = min_warm
+            existing["idle_ttl_ms"] = idle_ttl_ms
+            existing["last_used"] = time.monotonic()
+            pool = existing
+        else:
+            if existing is not None:
+                stale = existing
+            pool = {
+                "handler_path": handler_path,
+                "binary": binary,
+                "max_workers": max_workers,
+                "min_warm": min_warm,
+                "idle_ttl_ms": idle_ttl_ms,
+                "workers": [],
+                "pending": 0,
+                "last_used": time.monotonic(),
+            }
+            lock = threading.Lock()
+            pool["lock"] = lock
+            pool["cond"] = threading.Condition(lock)
+            _PERSISTENT_RUNTIME_POOLS[pool_key] = pool
+
+    if stale is not None:
+        _shutdown_persistent_runtime_pool(stale)
+    _start_persistent_runtime_pool_reaper()
+    _warmup_persistent_runtime_pool(pool)
+    return pool
+
+
+def _checkout_persistent_runtime_worker(pool: Dict[str, Any], acquire_timeout_ms: int) -> Dict[str, Any]:
+    cond = pool.get("cond")
+    if not isinstance(cond, threading.Condition):
+        raise RuntimeError("invalid persistent runtime pool")
+    deadline = time.monotonic() + max(0.1, float(acquire_timeout_ms) / 1000.0)
+    stale_workers: list[_PersistentRustWorker] = []
+    with cond:
+        workers = pool.get("workers")
+        if not isinstance(workers, list):
+            raise RuntimeError("invalid persistent runtime pool workers")
+        while True:
+            alive_workers: list[Dict[str, Any]] = []
+            for entry in workers:
+                worker = entry.get("worker") if isinstance(entry, dict) else None
+                if isinstance(worker, _PersistentRustWorker) and worker.alive:
+                    alive_workers.append(entry)
+                elif isinstance(worker, _PersistentRustWorker):
+                    stale_workers.append(worker)
+            workers[:] = alive_workers
+
+            for entry in workers:
+                if not bool(entry.get("busy")):
+                    entry["busy"] = True
+                    pool["last_used"] = time.monotonic()
+                    for worker in stale_workers:
+                        worker.shutdown()
+                    return entry
+
+            if len(workers) < int(pool.get("max_workers") or 1):
+                entry = _create_persistent_runtime_worker(pool)
+                entry["busy"] = True
+                workers.append(entry)
+                pool["last_used"] = time.monotonic()
+                for worker in stale_workers:
+                    worker.shutdown()
+                return entry
+
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("runtime worker timeout")
+            cond.wait(timeout=min(remaining, 0.2))
+
+
+def _release_persistent_runtime_worker(pool: Dict[str, Any], entry: Dict[str, Any], discard: bool = False) -> None:
+    cond = pool.get("cond")
+    if not isinstance(cond, threading.Condition):
+        return
+    stale: Optional[_PersistentRustWorker] = None
+    with cond:
+        workers = pool.get("workers")
+        if not isinstance(workers, list):
+            return
+        if entry in workers:
+            worker = entry.get("worker")
+            if discard or not isinstance(worker, _PersistentRustWorker) or not worker.alive:
+                workers.remove(entry)
+                if isinstance(worker, _PersistentRustWorker):
+                    stale = worker
+            else:
+                entry["busy"] = False
+                entry["last_used"] = time.monotonic()
+            pool["last_used"] = time.monotonic()
+            cond.notify()
+    if stale is not None:
+        stale.shutdown()
+
+
 def _submit_runtime_pool_request(pool_key: str, pool: Dict[str, Any], req: Dict[str, Any]) -> Future[Dict[str, Any]]:
     executor = pool.get("executor")
     if not isinstance(executor, ThreadPoolExecutor):
@@ -546,7 +983,7 @@ def _submit_runtime_pool_request(pool_key: str, pool: Dict[str, Any], req: Dict[
     return future
 
 
-def _handle_request_direct(req: Dict[str, Any]) -> Dict[str, Any]:
+def _prepare_request(req: Dict[str, Any]) -> tuple[Path, Path, Dict[str, Any], int]:
     fn_name = req.get("fn")
     version = req.get("version")
     event = req.get("event", {})
@@ -574,28 +1011,67 @@ def _handle_request_direct(req: Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(value, (int, float)) and value > 0:
             timeout_ms = int(value) + 500
 
-    with _patched_process_env(event_with_env.get("env", {})):
-        return _run_rust_handler(binary, event_with_env, timeout_ms)
+    return path, binary, event_with_env, timeout_ms
+
+
+def _run_prepared_request_persistent(
+    pool_key: str, handler_path: Path, binary: Path, event: Dict[str, Any], timeout_ms: int, settings: Dict[str, Any]
+) -> Dict[str, Any]:
+    pool = _ensure_persistent_runtime_pool(pool_key, handler_path, binary, settings)
+    acquire_timeout_ms = int(settings.get("acquire_timeout_ms") or RUNTIME_POOL_ACQUIRE_TIMEOUT_MS)
+    with _PERSISTENT_RUNTIME_POOLS_LOCK:
+        current = _PERSISTENT_RUNTIME_POOLS.get(pool_key)
+        if current is pool:
+            current["pending"] = int(current.get("pending") or 0) + 1
+            current["last_used"] = time.monotonic()
+    entry: Optional[Dict[str, Any]] = None
+    try:
+        entry = _checkout_persistent_runtime_worker(pool, acquire_timeout_ms)
+        worker = entry.get("worker")
+        if not isinstance(worker, _PersistentRustWorker):
+            raise RuntimeError("invalid persistent worker")
+        return _normalize_response(worker.send_request(event, timeout_ms))
+    except TimeoutError:
+        if entry is not None:
+            _release_persistent_runtime_worker(pool, entry, discard=True)
+            entry = None
+        return _error_response("rust handler timeout", status=504)
+    except Exception as exc:  # noqa: BLE001
+        if entry is not None:
+            _release_persistent_runtime_worker(pool, entry, discard=True)
+            entry = None
+        return _error_response(str(exc), status=500)
+    finally:
+        if entry is not None:
+            _release_persistent_runtime_worker(pool, entry)
+        with _PERSISTENT_RUNTIME_POOLS_LOCK:
+            current = _PERSISTENT_RUNTIME_POOLS.get(pool_key)
+            if current is pool:
+                current["pending"] = max(0, int(current.get("pending") or 0) - 1)
+                current["last_used"] = time.monotonic()
+
+
+def _handle_request_direct(req: Dict[str, Any]) -> Dict[str, Any]:
+    fn_name = req.get("fn")
+    version = req.get("version")
+    path, binary, event_with_env, timeout_ms = _prepare_request(req)
+    settings = {
+        "max_workers": 1,
+        "min_warm": 0,
+        "idle_ttl_ms": RUNTIME_POOL_IDLE_TTL_MS,
+        "acquire_timeout_ms": max(timeout_ms + 250, RUNTIME_POOL_ACQUIRE_TIMEOUT_MS, 100),
+    }
+    pool_key = _persistent_runtime_pool_key(fn_name, version, path)
+    return _run_prepared_request_persistent(pool_key, path, binary, event_with_env, timeout_ms, settings)
 
 
 def _handle_request_with_pool(req: Dict[str, Any]) -> Dict[str, Any]:
     settings = _normalize_worker_pool_settings(req)
     if not ENABLE_RUNTIME_WORKER_POOL or not settings["enabled"] or settings["max_workers"] <= 0:
         return _handle_request_direct(req)
-
-    pool_key = _runtime_pool_key(req.get("fn"), req.get("version"))
-    pool = _ensure_runtime_pool(pool_key, settings)
-    future = _submit_runtime_pool_request(pool_key, pool, req)
-
-    timeout_ms = int(settings.get("request_timeout_ms") or 0)
-    wait_seconds = max(1.0, timeout_ms / 1000.0 + 0.5) if timeout_ms > 0 else max(
-        1.0, float(settings.get("acquire_timeout_ms") or RUNTIME_POOL_ACQUIRE_TIMEOUT_MS) / 1000.0
-    )
-
-    try:
-        return future.result(timeout=wait_seconds)
-    except FutureTimeoutError:
-        return _error_response("runtime worker timeout", status=504)
+    path, binary, event_with_env, timeout_ms = _prepare_request(req)
+    pool_key = _persistent_runtime_pool_key(req.get("fn"), req.get("version"), path)
+    return _run_prepared_request_persistent(pool_key, path, binary, event_with_env, timeout_ms, settings)
 
 
 def _ensure_socket_dir(path: str) -> None:

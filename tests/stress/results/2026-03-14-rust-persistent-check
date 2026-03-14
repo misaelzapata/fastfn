@@ -1,0 +1,36 @@
+{
+  "generated_at": "2026-03-14T17:55:50Z",
+  "mode": "native",
+  "fixture": "tests/fixtures/worker-pool",
+  "concurrency": 6,
+  "repeats": 2,
+  "warmup_requests_per_case": 1,
+  "cases": [
+    {
+      "runtime": "rust",
+      "path": "/slow-rust",
+      "daemons": 1,
+      "samples_ms": [
+        1267.3,
+        1259.6
+      ],
+      "avg_ms": 1263.4,
+      "min_ms": 1259.6,
+      "max_ms": 1267.3
+    },
+    {
+      "runtime": "rust",
+      "path": "/slow-rust",
+      "daemons": 3,
+      "samples_ms": [
+        702.3,
+        419.0
+      ],
+      "avg_ms": 560.6,
+      "min_ms": 419.0,
+      "max_ms": 702.3,
+      "improvement_ms": 702.8,
+      "improvement_pct": 55.6
+    }
+  ]
+}

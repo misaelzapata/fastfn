@@ -30,6 +30,7 @@ TARGETS = [
     RuntimeTarget(runtime="python", path="/slow-python"),
     RuntimeTarget(runtime="php", path="/slow-php"),
     RuntimeTarget(runtime="rust", path="/slow-rust"),
+    RuntimeTarget(runtime="go", path="/slow-go"),
 ]
 
 

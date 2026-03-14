@@ -1408,7 +1408,8 @@ def _run_in_subprocess(
         "event": event_with_env,
     }, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
-    # Try the persistent worker first; fall back to one-shot if it dies.
+    # Try the persistent worker first; if it dies, evict it and retry once
+    # with a fresh persistent worker. Do not fall back to one-shot execution.
     for attempt in range(2):
         try:
             worker = _get_or_create_worker(handler_path, handler_name, deps_dirs, invoke_adapter)
@@ -1426,10 +1427,7 @@ def _run_in_subprocess(
                     except Exception:
                         pass
             if attempt == 1:
-                # Second attempt also failed — fall back to one-shot.
-                return _run_in_subprocess_oneshot(
-                    handler_path, handler_name, deps_dirs, event_with_env, timeout_s, invoke_adapter
-                )
+                return _error_response("persistent worker restart failed", status=503)
 
     return _error_response("worker pool exhausted", status=500)
 
