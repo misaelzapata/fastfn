@@ -2,7 +2,7 @@
 
 
 > Verified status as of **March 10, 2026**.
-> Runtime note: FastFN auto-installs function-local dependencies from `requirements.txt` / `package.json`; host runtimes are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
+> Runtime note: FastFN resolves dependencies and build steps per function: Python uses `requirements.txt`, Node uses `package.json`, PHP installs from `composer.json` when present, and Rust handlers are built with `cargo`. Host runtimes/tools are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
 This page is a guided tour of the **example functions** shipped with this repository.
 
 Important distinction:
@@ -1311,12 +1311,16 @@ curl -sS -X POST 'http://127.0.0.1:8080/_fn/reload'
 
 ### Tail logs
 
-Tail OpenResty logs (requires console API access):
+Tail OpenResty or runtime logs (requires console API access):
 
 ```bash
 curl -sS 'http://127.0.0.1:8080/_fn/logs?file=error&lines=200'
 curl -sS 'http://127.0.0.1:8080/_fn/logs?file=access&lines=50&format=json'
+curl -sS 'http://127.0.0.1:8080/_fn/logs?file=runtime&format=json&runtime=python&fn=hello&version=default&stream=stdout&lines=50' \
+  -H 'x-fn-admin-token: my-secret-token'
 ```
+
+Use `file=runtime` when you need the full handler debug stream. Response headers like `X-Fn-Stdout` are only a short preview.
 
 ## Contract
 

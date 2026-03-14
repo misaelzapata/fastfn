@@ -2,7 +2,7 @@
 
 
 > Verified status as of **March 10, 2026**.
-> Runtime note: FastFN auto-installs function-local dependencies from `requirements.txt` / `package.json`; host runtimes are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
+> Runtime note: FastFN resolves dependencies and build steps per function: Python uses `requirements.txt`, Node uses `package.json`, PHP installs from `composer.json` when present, and Rust handlers are built with `cargo`. Host runtimes/tools are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
 The **fastfn** CLI automates project creation and local development.
 
 ## Installation
@@ -110,7 +110,7 @@ fastfn logs
 ```
 
 **Flags:**
-- `--file`: Native log file(s): `error|access|all` (default: `all`).
+- `--file`: Native log file(s): `error|access|runtime|all` (default: `all`).
 - `--lines`: Tail N lines (default: 200).
 - `--no-follow`: Print current logs and exit (do not follow).
 - `--native`: Force native logs backend.
@@ -119,7 +119,10 @@ fastfn logs
 **Example:**
 ```bash
 fastfn logs --native --file error --lines 200
+fastfn logs --native --file runtime --lines 100
 ```
+
+Use `--file runtime` to read the full handler `stdout`/`stderr` stream locally in native mode.
 
 ---
 

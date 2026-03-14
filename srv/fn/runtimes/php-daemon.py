@@ -19,6 +19,7 @@ from typing import Any, Dict, Optional
 SOCKET_PATH = os.environ.get("FN_PHP_SOCKET", "/tmp/fastfn/fn-php.sock")
 MAX_FRAME_BYTES = int(os.environ.get("FN_MAX_FRAME_BYTES", str(2 * 1024 * 1024)))
 STRICT_FS = os.environ.get("FN_STRICT_FS", "1").lower() not in {"0", "false", "off", "no"}
+RUNTIME_LOG_FILE = os.environ.get("FN_RUNTIME_LOG_FILE", "").strip()
 STRICT_FS_EXTRA_ALLOW = os.environ.get("FN_STRICT_FS_ALLOW", "")
 AUTO_COMPOSER_DEPS = os.environ.get("FN_AUTO_PHP_DEPS", "1").lower() not in {"0", "false", "off", "no"}
 ENABLE_RUNTIME_WORKER_POOL = os.environ.get("FN_PHP_RUNTIME_WORKER_POOL", "1").lower() not in {"0", "false", "off", "no"}
@@ -521,12 +522,28 @@ def _emit_handler_logs(req: Dict[str, Any], resp: Dict[str, Any]) -> None:
     stdout_value = resp.get("stdout")
     if isinstance(stdout_value, str) and stdout_value != "":
         for line in stdout_value.splitlines():
-            print(f"[fn:{label}@{version_label} stdout] {line}", flush=True)
+            log_line = f"[fn:{label}@{version_label} stdout] {line}"
+            print(log_line, flush=True)
+            _append_runtime_log("php", log_line)
 
     stderr_value = resp.get("stderr")
     if isinstance(stderr_value, str) and stderr_value != "":
         for line in stderr_value.splitlines():
-            print(f"[fn:{label}@{version_label} stderr] {line}", file=sys.stderr, flush=True)
+            log_line = f"[fn:{label}@{version_label} stderr] {line}"
+            print(log_line, file=sys.stderr, flush=True)
+            _append_runtime_log("php", log_line)
+
+
+def _append_runtime_log(runtime_name: str, line: str) -> None:
+    if not RUNTIME_LOG_FILE:
+        return
+    try:
+        parent = Path(RUNTIME_LOG_FILE).parent
+        parent.mkdir(parents=True, exist_ok=True)
+        with open(RUNTIME_LOG_FILE, "a", encoding="utf-8") as handle:
+            handle.write(f"[{runtime_name}] {line}\n")
+    except Exception:
+        return
 
 
 def _runtime_pool_key(fn_name: Any, version: Any) -> str:

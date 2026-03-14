@@ -367,9 +367,17 @@ logs_get = paths["/_fn/logs"]["get"]
 file_p = get_param(logs_get.get("parameters"), "file")
 lines_p = get_param(logs_get.get("parameters"), "lines")
 format_p = get_param(logs_get.get("parameters"), "format")
+runtime_p = get_param(logs_get.get("parameters"), "runtime")
+fn_p = get_param(logs_get.get("parameters"), "fn")
+version_p = get_param(logs_get.get("parameters"), "version")
+stream_p = get_param(logs_get.get("parameters"), "stream")
 assert file_p and file_p.get("in") == "query" and file_p.get("schema", {}).get("default") == "error"
 assert lines_p and lines_p.get("in") == "query" and lines_p.get("schema", {}).get("default") == 200
 assert format_p and format_p.get("in") == "query" and format_p.get("schema", {}).get("default") == "text"
+assert runtime_p and runtime_p.get("in") == "query"
+assert fn_p and fn_p.get("in") == "query"
+assert version_p and version_p.get("in") == "query"
+assert stream_p and stream_p.get("in") == "query" and stream_p.get("schema", {}).get("default") == "all"
 
 for path, ops in paths.items():
     assert ":" not in path, f"unexpected raw dynamic route token in path: {path}"

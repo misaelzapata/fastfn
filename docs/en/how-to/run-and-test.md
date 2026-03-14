@@ -244,6 +244,8 @@ use these rules:
 - `fastfn dev` terminal logs: full `stdout`/`stderr`, with function prefixes
 - `X-Fn-Stdout` / `X-Fn-Stderr`: useful from external clients, but truncated
 - `/_fn/invoke`: full `stdout` / `stderr` in JSON for console/admin flows
+- `fastfn logs --native --file runtime`: full local runtime log stream in native mode
+- `/_fn/logs?file=runtime...`: full filtered runtime log stream for admin/internal clients
 
 Example runtime log line:
 
@@ -251,7 +253,20 @@ Example runtime log line:
 [python] [fn:hello@default stdout] {'query': {'id': '42'}}
 ```
 
-If you are debugging from another app, prefer headers for a quick check and runtime logs for the full stream.
+Local native tail:
+
+```bash
+fastfn logs --native --file runtime --lines 50
+```
+
+From another app or admin tool, read the internal log tail endpoint with an admin token:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/_fn/logs?file=runtime&format=json&runtime=python&fn=hello&version=default&stream=stdout&lines=50' \
+  -H 'x-fn-admin-token: my-secret-token'
+```
+
+Use headers for a quick preview and runtime logs for the full stream.
 
 ## Next step
 Continue with [Deploy to production](./deploy-to-production.md) after this checklist is consistently green in local and CI.

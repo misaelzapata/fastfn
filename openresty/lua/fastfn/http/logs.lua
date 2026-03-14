@@ -14,6 +14,10 @@ local args = ngx.req.get_uri_args()
 local file = tostring(args.file or "error")
 local lines = tonumber(args.lines) or 200
 local format = tostring(args.format or "text")
+local runtime = args.runtime and tostring(args.runtime) or nil
+local fn_name = args.fn and tostring(args.fn) or nil
+local version = args.version and tostring(args.version) or nil
+local stream = tostring(args.stream or "all")
 
 if lines < 1 then lines = 1 end
 if lines > 2000 then lines = 2000 end
@@ -23,9 +27,42 @@ if file == "error" then
   log_name = "/app/openresty/logs/error.log"
 elseif file == "access" then
   log_name = "/app/openresty/logs/access.log"
+elseif file == "runtime" then
+  log_name = "/app/openresty/logs/runtime.log"
 else
   guard.write_json(400, { error = "invalid file" })
   return
+end
+
+if stream ~= "all" and stream ~= "stdout" and stream ~= "stderr" then
+  guard.write_json(400, { error = "invalid stream" })
+  return
+end
+
+local function is_non_empty(value)
+  return type(value) == "string" and value ~= ""
+end
+
+local function line_matches(line)
+  if not is_non_empty(line) then
+    return false
+  end
+  if is_non_empty(runtime) and not line:find("[" .. runtime .. "]", 1, true) then
+    return false
+  end
+  if is_non_empty(fn_name) and not line:find("[fn:" .. fn_name .. "@", 1, true) then
+    return false
+  end
+  if is_non_empty(version) and not line:find("@" .. version .. " ", 1, true) then
+    return false
+  end
+  if stream == "stdout" and not line:find(" stdout]", 1, true) then
+    return false
+  end
+  if stream == "stderr" and not line:find(" stderr]", 1, true) then
+    return false
+  end
+  return true
 end
 
 local function read_tail(path, max_bytes)
@@ -52,7 +89,7 @@ end
 
 local all = {}
 for line in chunk:gmatch("([^\n]*)\n?") do
-  if line ~= "" then
+  if line ~= "" and line_matches(line) then
     all[#all + 1] = line
   end
 end
@@ -68,6 +105,10 @@ if format == "json" then
   guard.write_json(200, {
     file = file,
     lines = #out_lines,
+    runtime = runtime,
+    fn = fn_name,
+    version = version,
+    stream = stream,
     data = out_lines,
   })
   return

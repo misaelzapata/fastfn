@@ -13,7 +13,7 @@ COPY srv/fn/runtimes /app/srv/fn/runtimes
 COPY srv/fn/functions /app/srv/fn/functions
 COPY docker/openresty/start.sh /app/docker/openresty/start.sh
 
-RUN chmod -R a+rwX /app/srv/fn/functions \
+RUN chmod -R a+rwX /app/openresty/logs /app/srv/fn/functions \
   && chmod +x /app/docker/openresty/start.sh
 
 ENV FN_FUNCTIONS_ROOT=/app/srv/fn/functions

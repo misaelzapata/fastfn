@@ -291,19 +291,6 @@ local function normalized_methods(methods)
   return invoke_rules.normalized_methods(methods, DEFAULT_METHODS)
 end
 
-local function methods_operations(runtime, name, version, methods, path_parameters, invoke_meta_lookup)
-  local ops = {}
-  local invoke_meta = nil
-  if type(invoke_meta_lookup) == "function" then
-    invoke_meta = invoke_meta_lookup(runtime, name, version)
-  end
-  for _, method in ipairs(normalized_methods(methods)) do
-    local lower = string.lower(method)
-    ops[lower] = operation_template(runtime, name, version, lower, path_parameters, invoke_meta)
-  end
-  return ops
-end
-
 local function mapped_route_entries(raw_entry)
   if type(raw_entry) ~= "table" then
     return {}
@@ -1094,9 +1081,13 @@ function M.build(catalog, opts)
           summary = "Tail OpenResty logs",
           operationId = "internal_logs_get",
           parameters = {
-            { name = "file", ["in"] = "query", required = false, schema = { type = "string", enum = { "error", "access" }, default = "error" } },
+            { name = "file", ["in"] = "query", required = false, schema = { type = "string", enum = { "error", "access", "runtime" }, default = "error" } },
             { name = "lines", ["in"] = "query", required = false, schema = { type = "integer", minimum = 1, maximum = 2000, default = 200 } },
             { name = "format", ["in"] = "query", required = false, schema = { type = "string", enum = { "text", "json" }, default = "text" } },
+            { name = "runtime", ["in"] = "query", required = false, schema = { type = "string" } },
+            { name = "fn", ["in"] = "query", required = false, schema = { type = "string" } },
+            { name = "version", ["in"] = "query", required = false, schema = { type = "string" } },
+            { name = "stream", ["in"] = "query", required = false, schema = { type = "string", enum = { "all", "stdout", "stderr" }, default = "all" } },
           },
           responses = {
             ["200"] = {

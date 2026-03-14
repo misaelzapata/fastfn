@@ -3,8 +3,10 @@ import importlib.util
 import io
 import json
 import os
+import shutil
 import socket
 import struct
+import subprocess
 import tempfile
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
@@ -316,6 +318,33 @@ def test_go_wrapper_params_merge_runs_in_handler_request() -> None:
         go_daemon._run_prepared_request_persistent = old_run_prepared
 
 
+def test_go_wrapper_template_builds_with_stub_handler() -> None:
+    go_cmd = shutil.which("go")
+    if go_cmd is None:
+        return
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmpdir = Path(tmp)
+        (tmpdir / "go.mod").write_text("module fastfnwrappertest\n\ngo 1.20\n", encoding="utf-8")
+        (tmpdir / "handler.go").write_text(
+            "package main\n\nfunc handler(event map[string]interface{}) interface{} {\n    return map[string]interface{}{\"status\": 200, \"headers\": map[string]interface{}{}, \"body\": \"ok\"}\n}\n",
+            encoding="utf-8",
+        )
+        (tmpdir / "fastfn_entry.go").write_text(
+            go_daemon._WRAPPER_TEMPLATE.replace("__FASTFN_HANDLER__", "handler"),
+            encoding="utf-8",
+        )
+
+        proc = subprocess.run(
+            [go_cmd, "build", "./..."],
+            cwd=tmp,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert proc.returncode == 0, proc.stderr
+
+
 def main() -> None:
     test_write_frame_roundtrip()
     test_write_frame_fallback_for_unserializable_payload()
@@ -333,6 +362,7 @@ def main() -> None:
     test_handle_request_sets_process_env_from_function_env()
     test_go_wrapper_merges_params_into_event()
     test_go_wrapper_params_merge_runs_in_handler_request()
+    test_go_wrapper_template_builds_with_stub_handler()
     print("go runtime unit tests passed")
 
 

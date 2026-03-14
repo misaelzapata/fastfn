@@ -2,7 +2,7 @@
 
 
 > Estado verificado al **10 de marzo de 2026**.
-> Nota de runtime: FastFN auto-instala dependencias locales por función desde `requirements.txt` / `package.json`; en `fastfn dev --native` necesitas runtimes instalados en host, mientras que `fastfn dev` depende de Docker daemon activo.
+> Nota de runtime: FastFN resuelve dependencias y build por función según el runtime: Python usa `requirements.txt`, Node usa `package.json`, PHP instala desde `composer.json` cuando existe, y Rust compila handlers con `cargo`. En `fastfn dev --native` necesitas runtimes y herramientas del host; `fastfn dev` depende de un daemon de Docker activo.
 Este documento describe las **funciones de ejemplo** incluidas en el repo, con requests y responses concretos.
 
 Diferencia importante:
@@ -576,17 +576,21 @@ La respuesta incluye `trace.steps[]` con tool calls, resultados, y memoria.
 Scheduler / cron:
 
 - `ai-tool-agent` trae un bloque `schedule` de ejemplo en `examples/functions/node/ai-tool-agent/fn.config.json` (desactivado por defecto).
-- Podés activar schedules vía Console API, o editando `fn.config.json` y haciendo reload.
+- Puedes activar schedules vía Console API, o editando `fn.config.json` y haciendo reload.
 - Ver: [Gestionar funciones](../como-hacer/gestionar-funciones.md)
 
 ### Logs (interno)
 
-Tail de logs de OpenResty (requiere API de consola):
+Tail de logs de OpenResty o runtime (requiere API de consola):
 
 ```bash
 curl -sS 'http://127.0.0.1:8080/_fn/logs?file=error&lines=200'
 curl -sS 'http://127.0.0.1:8080/_fn/logs?file=access&lines=50&format=json'
+curl -sS 'http://127.0.0.1:8080/_fn/logs?file=runtime&format=json&runtime=python&fn=hello&version=default&stream=stdout&lines=50' \
+  -H 'x-fn-admin-token: my-secret-token'
 ```
+
+Usa `file=runtime` cuando necesites el stream completo de debug del handler. Headers como `X-Fn-Stdout` solo muestran una vista corta.
 
 ### `request-inspector`
 

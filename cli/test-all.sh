@@ -94,6 +94,9 @@ bash "$ROOT_DIR/tests/integration/test-platform-equivalents.sh"
 echo "== integration: openapi internal contract =="
 bash "$ROOT_DIR/tests/integration/test-openapi-system.sh"
 
+echo "== integration: runtime log tail =="
+bash "$ROOT_DIR/tests/integration/test-runtime-log-tail.sh"
+
 echo "== integration: openapi native parity =="
 bash "$ROOT_DIR/tests/integration/test-openapi-native.sh"
 

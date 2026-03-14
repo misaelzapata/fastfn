@@ -2,12 +2,24 @@
 
 
 > Estado verificado al **10 de marzo de 2026**.
-> Nota de runtime: FastFN auto-instala dependencias locales por función desde `requirements.txt` / `package.json`; en `fastfn dev --native` necesitas runtimes instalados en host, mientras que `fastfn dev` depende de Docker daemon activo.
+> Nota de runtime: FastFN resuelve dependencias y build por función según el runtime: Python usa `requirements.txt`, Node usa `package.json`, PHP instala desde `composer.json` cuando existe, y Rust compila handlers con `cargo`. En `fastfn dev --native` necesitas runtimes y herramientas del host; `fastfn dev` depende de un daemon de Docker activo.
 La referencia oficial del CLI está disponible en inglés:
 
 - [CLI Reference](../../en/reference/cli.md)
 
 Se mantendrá una versión en español en este mismo documento.
+
+## `logs`
+
+Sigue logs de un stack FastFN en ejecución.
+
+```bash
+fastfn logs
+fastfn logs --native --file runtime --lines 100
+```
+
+- `--file` admite `error|access|runtime|all`
+- usa `runtime` para leer `stdout` y `stderr` completos del handler en modo native
 
 ## Contrato
 

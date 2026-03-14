@@ -25,6 +25,15 @@ const (
 	logsBackendNative logsBackend = "native"
 )
 
+var (
+	readNativeSessionFn = process.ReadNativeSession
+	runNativeLogsFn     = runNativeLogs
+	runDockerLogsFn     = runDockerLogs
+	chooseLogsBackendFn = chooseLogsBackend
+	logsFatal           = log.Fatal
+	logsFatalf          = log.Fatalf
+)
+
 func chooseLogsBackend(forceNative, forceDocker, nativeAvailable, composeExists bool) (logsBackend, error) {
 	if forceNative && forceDocker {
 		return "", fmt.Errorf("use either --native or --docker, not both")
@@ -65,13 +74,15 @@ func selectedNativeLogFiles(session *process.NativeSession) ([]string, error) {
 	var files []string
 	switch logsFile {
 	case "all":
-		files = append(files, session.ErrorLogPath(), session.AccessLogPath())
+		files = append(files, session.ErrorLogPath(), session.AccessLogPath(), session.RuntimeLogPath())
 	case "error":
 		files = append(files, session.ErrorLogPath())
 	case "access":
 		files = append(files, session.AccessLogPath())
+	case "runtime":
+		files = append(files, session.RuntimeLogPath())
 	default:
-		return nil, fmt.Errorf("invalid --file value %q (use error|access|all)", logsFile)
+		return nil, fmt.Errorf("invalid --file value %q (use error|access|runtime|all)", logsFile)
 	}
 	return files, nil
 }
@@ -115,7 +126,7 @@ Backend selection:
 - --native: force native logs backend.
 - --docker: force Docker logs backend.
 
-Native mode reads OpenResty access/error logs.
+Native mode reads OpenResty access/error logs plus persisted runtime handler logs.
 Docker mode uses 'docker compose logs'.`,
 	Example: `  fastfn logs
   fastfn logs --lines 500
@@ -136,27 +147,27 @@ Docker mode uses 'docker compose logs'.`,
 		}
 
 		var nativeSession *process.NativeSession
-		if s, err := process.ReadNativeSession(); err == nil {
+		if s, err := readNativeSessionFn(); err == nil {
 			nativeSession = s
 		}
 		nativeAvailable := nativeSession != nil && nativeSession.IsActive()
 
-		backend, err := chooseLogsBackend(logsNativeMode, logsDockerMode, nativeAvailable, composeExists)
+		backend, err := chooseLogsBackendFn(logsNativeMode, logsDockerMode, nativeAvailable, composeExists)
 		if err != nil {
-			log.Fatal(err)
+			logsFatal(err)
 		}
 
 		switch backend {
 		case logsBackendNative:
-			if err := runNativeLogs(nativeSession); err != nil {
-				log.Fatalf("Failed to stream native logs: %v", err)
+			if err := runNativeLogsFn(nativeSession); err != nil {
+				logsFatalf("Failed to stream native logs: %v", err)
 			}
 		case logsBackendDocker:
-			if err := runDockerLogs(composePath); err != nil {
-				log.Fatalf("Failed to attach Docker logs: %v", err)
+			if err := runDockerLogsFn(composePath); err != nil {
+				logsFatalf("Failed to attach Docker logs: %v", err)
 			}
 		default:
-			log.Fatalf("Unknown logs backend: %s", backend)
+			logsFatalf("Unknown logs backend: %s", backend)
 		}
 	},
 }
@@ -167,5 +178,5 @@ func init() {
 	logsCmd.Flags().BoolVar(&logsDockerMode, "docker", false, "Force Docker logs backend")
 	logsCmd.Flags().IntVar(&logsLines, "lines", 200, "Number of recent lines to show")
 	logsCmd.Flags().BoolVar(&logsNoFollow, "no-follow", false, "Print current logs and exit (do not follow)")
-	logsCmd.Flags().StringVar(&logsFile, "file", "all", "Native log file(s): error|access|all")
+	logsCmd.Flags().StringVar(&logsFile, "file", "all", "Native log file(s): error|access|runtime|all")
 }

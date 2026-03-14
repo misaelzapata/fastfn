@@ -403,6 +403,16 @@ When you run FastFN locally, captured handler output is also written to the runt
 
 Use this path when you need the full debug stream. It is easier to read than response headers and does not truncate large payloads.
 
+Two common ways to read it:
+
+```bash
+fastfn logs --native --file runtime --lines 100
+curl -sS 'http://127.0.0.1:8080/_fn/logs?file=runtime&format=json&runtime=python&fn=hello&version=default&stream=stdout&lines=50' \
+  -H 'x-fn-admin-token: my-secret-token'
+```
+
+Use the CLI when you are on the same machine. Use `/_fn/logs?file=runtime` for admin or internal tooling that needs the full debug stream over HTTP.
+
 ### Example
 
 ```python

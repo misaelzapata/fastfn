@@ -256,6 +256,8 @@ usa estas reglas:
 - terminal de `fastfn dev`: `stdout`/`stderr` completos, con prefijo por funcion
 - `X-Fn-Stdout` / `X-Fn-Stderr`: utiles desde clientes externos, pero truncados
 - `/_fn/invoke`: `stdout` / `stderr` completos en JSON para flujos de consola/admin
+- `fastfn logs --native --file runtime`: stream local completo de logs runtime en modo native
+- `/_fn/logs?file=runtime...`: stream completo filtrado para clientes admin/internos
 
 Ejemplo de linea en logs:
 
@@ -263,7 +265,20 @@ Ejemplo de linea en logs:
 [python] [fn:hello@default stdout] {'query': {'id': '42'}}
 ```
 
-Si haces debugging desde otra app, usa headers para una verificacion rapida y los logs runtime para la salida completa.
+Tail local en native:
+
+```bash
+fastfn logs --native --file runtime --lines 50
+```
+
+Desde otra app o una herramienta admin, lee el endpoint interno de logs con token admin:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/_fn/logs?file=runtime&format=json&runtime=python&fn=hello&version=default&stream=stdout&lines=50' \
+  -H 'x-fn-admin-token: my-secret-token'
+```
+
+Usa headers para una vista rapida y los logs runtime para la salida completa.
 
 ## Siguiente paso
 

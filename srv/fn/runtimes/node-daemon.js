@@ -18,6 +18,7 @@ const PREINSTALL_NODE_DEPS_ON_START = !["0", "false", "off", "no"].includes(Stri
 const PREINSTALL_NODE_DEPS_CONCURRENCY = Math.max(1, Number(process.env.FN_PREINSTALL_NODE_DEPS_CONCURRENCY || 4));
 const STRICT_FS = !["0", "false", "off", "no"].includes(String(process.env.FN_STRICT_FS || "1").toLowerCase());
 const STRICT_FS_EXTRA_ALLOW = String(process.env.FN_STRICT_FS_ALLOW || "");
+const RUNTIME_LOG_FILE = String(process.env.FN_RUNTIME_LOG_FILE || "").trim();
 
 const BASE_DIR = path.resolve(__dirname, "..");
 const FUNCTIONS_DIR = process.env.FN_FUNCTIONS_ROOT || path.join(BASE_DIR, "functions", "node");
@@ -2574,15 +2575,29 @@ function emitHandlerLogs(req, resp) {
   const stdout = typeof resp.stdout === "string" ? resp.stdout : "";
   if (stdout) {
     for (const line of stdout.split(/\r?\n/)) {
-      process.stdout.write(`[fn:${fnName}@${version} stdout] ${line}\n`);
+      const value = `[fn:${fnName}@${version} stdout] ${line}`;
+      process.stdout.write(`${value}\n`);
+      appendRuntimeLog("node", value);
     }
   }
 
   const stderr = typeof resp.stderr === "string" ? resp.stderr : "";
   if (stderr) {
     for (const line of stderr.split(/\r?\n/)) {
-      process.stderr.write(`[fn:${fnName}@${version} stderr] ${line}\n`);
+      const value = `[fn:${fnName}@${version} stderr] ${line}`;
+      process.stderr.write(`${value}\n`);
+      appendRuntimeLog("node", value);
     }
+  }
+}
+
+function appendRuntimeLog(runtimeName, line) {
+  if (!RUNTIME_LOG_FILE) return;
+  try {
+    fs.mkdirSync(path.dirname(RUNTIME_LOG_FILE), { recursive: true });
+    fs.appendFileSync(RUNTIME_LOG_FILE, `[${runtimeName}] ${line}\n`, "utf8");
+  } catch {
+    // Ignore runtime log persistence failures.
   }
 }
 

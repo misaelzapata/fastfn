@@ -316,6 +316,7 @@ func RunNative(cfg RunConfig) error {
 	baseEnv := []string{
 		"FN_FUNCTIONS_ROOT=" + cfg.FnDir,
 		"FN_SOCKET_BASE_DIR=" + socketDir,
+		"FN_RUNTIME_LOG_FILE=" + filepath.Join(logsDir, "runtime.log"),
 		"FN_PY_SOCKET=" + strings.TrimPrefix(firstRuntimeSocket(runtimeSockets["python"]), "unix:"),
 		"FN_NODE_SOCKET=" + strings.TrimPrefix(firstRuntimeSocket(runtimeSockets["node"]), "unix:"),
 		"FN_PHP_SOCKET=" + strings.TrimPrefix(firstRuntimeSocket(runtimeSockets["php"]), "unix:"),

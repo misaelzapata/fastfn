@@ -50,6 +50,10 @@ RUNTIMES="${FN_RUNTIMES:-python,node,php,lua}"
 PYTHON_BIN="${FN_PYTHON_BIN:-python3}"
 NODE_BIN="${FN_NODE_BIN:-node}"
 OPENRESTY_BIN="${FN_OPENRESTY_BIN:-openresty}"
+FN_RUNTIME_LOG_FILE="${FN_RUNTIME_LOG_FILE:-/app/openresty/logs/runtime.log}"
+export FN_RUNTIME_LOG_FILE
+mkdir -p "$(dirname "$FN_RUNTIME_LOG_FILE")"
+touch "$FN_RUNTIME_LOG_FILE" 2>/dev/null || true
 
 has_runtime() {
   echo ",${RUNTIMES}," | grep -qi ",$1,"

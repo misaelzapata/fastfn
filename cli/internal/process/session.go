@@ -12,6 +12,15 @@ import (
 
 const nativeSessionFileName = "fastfn-native-session.json"
 
+var (
+	sessionMkdirAllFn = os.MkdirAll
+	sessionWriteFileFn = os.WriteFile
+	sessionRenameFn = os.Rename
+	sessionReadFileFn = os.ReadFile
+	sessionRemoveFn = os.Remove
+	sessionKillFn = syscall.Kill
+)
+
 // NativeSession describes the active native `fastfn dev --native` process.
 type NativeSession struct {
 	RuntimeDir string `json:"runtime_dir"`
@@ -53,6 +62,14 @@ func (s *NativeSession) AccessLogPath() string {
 	return filepath.Join(s.LogsDir, "access.log")
 }
 
+// RuntimeLogPath returns the persisted handler/runtime debug log path for this session.
+func (s *NativeSession) RuntimeLogPath() string {
+	if s == nil {
+		return ""
+	}
+	return filepath.Join(s.LogsDir, "runtime.log")
+}
+
 // IsActive reports whether this session appears alive and readable.
 func (s *NativeSession) IsActive() bool {
 	if s == nil {
@@ -74,6 +91,9 @@ func (s *NativeSession) IsActive() bool {
 	if _, err := os.Stat(s.AccessLogPath()); err == nil {
 		return true
 	}
+	if _, err := os.Stat(s.RuntimeLogPath()); err == nil {
+		return true
+	}
 	return false
 }
 
@@ -88,20 +108,17 @@ func WriteNativeSession(session NativeSession) error {
 	}
 
 	path := NativeSessionPath()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := sessionMkdirAllFn(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("failed to create native session dir: %w", err)
 	}
 
-	payload, err := json.MarshalIndent(session, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal native session: %w", err)
-	}
+	payload, _ := json.MarshalIndent(session, "", "  ")
 
 	tmpPath := path + ".tmp"
-	if err := os.WriteFile(tmpPath, payload, 0o600); err != nil {
+	if err := sessionWriteFileFn(tmpPath, payload, 0o600); err != nil {
 		return fmt.Errorf("failed to write native session temp file: %w", err)
 	}
-	if err := os.Rename(tmpPath, path); err != nil {
+	if err := sessionRenameFn(tmpPath, path); err != nil {
 		return fmt.Errorf("failed to persist native session: %w", err)
 	}
 	return nil
@@ -109,7 +126,7 @@ func WriteNativeSession(session NativeSession) error {
 
 // ReadNativeSession loads native-session metadata.
 func ReadNativeSession() (*NativeSession, error) {
-	payload, err := os.ReadFile(NativeSessionPath())
+	payload, err := sessionReadFileFn(NativeSessionPath())
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +151,7 @@ func ClearNativeSessionForPID(pid int) error {
 	if current.LaunchPID != pid {
 		return nil
 	}
-	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+	if err := sessionRemoveFn(path); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	return nil
@@ -145,7 +162,7 @@ func IsPIDRunning(pid int) bool {
 	if pid <= 0 {
 		return false
 	}
-	err := syscall.Kill(pid, 0)
+	err := sessionKillFn(pid, 0)
 	if err == nil {
 		return true
 	}

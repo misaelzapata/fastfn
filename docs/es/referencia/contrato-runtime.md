@@ -403,6 +403,16 @@ Cuando ejecutas FastFN localmente, la salida capturada del handler tambien se es
 
 Usa este camino cuando necesites la salida completa. Es mas facil de leer que los headers y no trunca payloads grandes.
 
+Dos formas comunes de leerla:
+
+```bash
+fastfn logs --native --file runtime --lines 100
+curl -sS 'http://127.0.0.1:8080/_fn/logs?file=runtime&format=json&runtime=python&fn=hello&version=default&stream=stdout&lines=50' \
+  -H 'x-fn-admin-token: my-secret-token'
+```
+
+Usa el CLI cuando estas en la misma maquina. Usa `/_fn/logs?file=runtime` para herramientas admin o internas que necesiten el stream completo por HTTP.
+
 ## 10) Modo estricto de filesystem (por defecto)
 
 `fastfn` ejecuta handlers con modo estricto de filesystem habilitado por defecto:
