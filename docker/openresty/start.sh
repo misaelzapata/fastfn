@@ -137,14 +137,14 @@ payload = {}
 for runtime_name, sockets in sockets_by_runtime.items():
     payload[runtime_name] = sockets[0] if len(sockets) == 1 else sockets
 
-print("FN_RUNTIME_SOCKETS_RESOLVED=" + shlex.quote(json.dumps(payload, separators=(",", ":"))))
+print("export FN_RUNTIME_SOCKETS_RESOLVED=" + shlex.quote(json.dumps(payload, separators=(",", ":"))))
 for runtime_name, sockets in sockets_by_runtime.items():
     prefix = f"RT_{runtime_name.upper()}"
-    print(f"{prefix}_COUNT={len(sockets)}")
+    print(f"export {prefix}_COUNT={len(sockets)}")
     for idx, socket_uri in enumerate(sockets, 1):
         socket_path = socket_uri[5:] if socket_uri.startswith("unix:") else socket_uri
-        print(f"{prefix}_SOCKET_{idx}=" + shlex.quote(socket_path))
-        print(f"{prefix}_URI_{idx}=" + shlex.quote(socket_uri))
+        print(f"export {prefix}_SOCKET_{idx}=" + shlex.quote(socket_path))
+        print(f"export {prefix}_URI_{idx}=" + shlex.quote(socket_uri))
 PY
 }
 
@@ -204,7 +204,7 @@ PY
 }
 
 run_supervised() {
-  runtime_name="$1"
+  service_label="$1"
   shift
   (
     child_pid=""
@@ -236,7 +236,7 @@ run_supervised() {
         exit 0
       fi
 
-      echo "[$runtime_name] runtime exited (code=$exit_code), restarting in ${backoff}s" >&2
+      echo "[$service_label] runtime exited (code=$exit_code), restarting in ${backoff}s" >&2
       sleep "$backoff" || true
       if [ "$backoff" -lt 8 ]; then
         backoff=$((backoff * 2))
@@ -249,14 +249,22 @@ run_supervised() {
 runtime_count() {
   runtime_name="$1"
   upper_name="$(printf "%s" "$runtime_name" | tr '[:lower:]' '[:upper:]')"
-  eval "printf '%s\n' \"\${RT_${upper_name}_COUNT:-0}\""
+  var_name="RT_${upper_name}_COUNT"
+  value="$(printenv "$var_name" 2>/dev/null || true)"
+  if [ -z "$value" ]; then
+    printf '0\n'
+  else
+    printf '%s\n' "$value"
+  fi
 }
 
 runtime_socket_path() {
   runtime_name="$1"
   index="$2"
   upper_name="$(printf "%s" "$runtime_name" | tr '[:lower:]' '[:upper:]')"
-  eval "printf '%s\n' \"\${RT_${upper_name}_SOCKET_${index}:-}\""
+  var_name="RT_${upper_name}_SOCKET_${index}"
+  value="$(printenv "$var_name" 2>/dev/null || true)"
+  printf '%s\n' "$value"
 }
 
 start_runtime_instances() {

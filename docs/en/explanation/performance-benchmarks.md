@@ -1,6 +1,6 @@
 # Performance Benchmarks
 
-> Verified status as of **March 13, 2026**.
+> Verified status as of **March 14, 2026**.
 > Runtime note: FastFN resolves dependencies and build steps per function: Python uses `requirements.txt`, Node uses `package.json`, PHP installs from `composer.json` when present, and Rust handlers are built with `cargo`. Host runtimes and tools are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
 
 This page publishes reproducible benchmark snapshots for FastFN. The goal is to show real measurements, not broad claims.
@@ -52,38 +52,42 @@ Raw artifact:
 
 ## Runtime daemon routing snapshot
 
-Snapshot: **March 13, 2026**.
+Snapshot: **March 14, 2026**.
 
 Workload:
 
-- Mode: `native`
 - Fixture: `tests/fixtures/worker-pool`
 - Request pattern: `6` concurrent requests, `3` measured repeats, `2` warmup requests per case
 - Handler cost: `sleep(200ms)`
+- Compared modes:
+  - `native`
+  - `docker`
 - Compared settings:
   - `runtime-daemons = 1`
   - `runtime-daemons = 3`
 
 Results:
 
-| Runtime | Path | `1` daemon avg | `3` daemons avg | Effect in this fixture |
-| --- | --- | ---: | ---: | --- |
-| Node | `/slow-node` | `267.2ms` | `232.4ms` | `13.0%` faster |
-| Python | `/slow-python` | `1281.9ms` | `447.4ms` | `65.1%` faster |
-| PHP | `/slow-php` | `629.4ms` | `862.5ms` | `37.0%` slower |
-| Rust | `/slow-rust` | `384.6ms` | `417.7ms` | `8.6%` slower |
+| Runtime | Path | Native `1` | Native `3` | Docker `1` | Docker `3` | What this means |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| Node | `/slow-node` | `276.7ms` | `243.1ms` | `284.1ms` | `258.9ms` | modest gain in both modes |
+| Python | `/slow-python` | `1283.3ms` | `451.6ms` | `1928.0ms` | `450.1ms` | strong gain in both modes |
+| PHP | `/slow-php` | `872.9ms` | `953.0ms` | `368.0ms` | `268.6ms` | worse in native, better in Docker |
+| Rust | `/slow-rust` | `529.2ms` | `423.3ms` | `329.5ms` | `314.7ms` | better in both modes, but modest in Docker |
 
 Raw artifact:
 
-- `tests/stress/results/2026-03-13-runtime-daemon-scaling-native.json`
+- `tests/stress/results/2026-03-14-runtime-daemon-scaling-native.json`
+- `tests/stress/results/2026-03-14-runtime-daemon-scaling-docker.json`
 
 ## How to read these numbers
 
-This benchmark is useful because it shows both sides:
+This benchmark is useful because it shows real tradeoffs instead of one blanket story:
 
-- adding daemons helped Python strongly on this fixture
-- adding daemons helped Node a little
-- adding daemons made PHP and Rust worse on this fixture
+- adding daemons helped Python strongly in both modes
+- adding daemons helped Node a little in both modes
+- PHP reacted differently between native and Docker
+- Rust improved in both modes, but the Docker gain was small enough to treat as workload-dependent
 
 The practical conclusion is simple:
 
@@ -91,22 +95,29 @@ The practical conclusion is simple:
 - measure the workload you actually care about
 - treat `worker_pool` and `runtime-daemons` as separate controls
 
+One more operational point matters here:
+
+- FastFN now exposes socket-level health in `/_fn/health`
+- a runtime can remain `up=true` while one socket is `up=false`
+- the remaining sockets continue serving traffic while the failed daemon restarts
+
+That behavior is covered by:
+
+- `tests/integration/test-runtime-daemon-failover.sh`
+
 `worker_pool.max_workers` is a per-function admission and queueing control. `runtime-daemons` is a per-runtime routing control. They can work together, but they answer different questions.
 
 ## Reproduce the runtime-daemon benchmark
 
-1. Start the fixture in native mode.
-2. Run each runtime once with `runtime-daemons = 1`.
-3. Repeat with `runtime-daemons = 3`.
-4. Keep the same request count, warmup, and concurrency.
-5. Save the raw result under `tests/stress/results/`.
+1. Start from a clean stack.
+2. Run the benchmark in `native`, `docker`, or both.
+3. Keep the same request count, warmup, and concurrency.
+4. Save the raw result under `tests/stress/results/`.
 
 Minimal example:
 
 ```bash
-FN_RUNTIMES=node,python,php,rust \
-FN_RUNTIME_DAEMONS=node=3,python=3,php=3,rust=3 \
-fastfn dev --native tests/fixtures/worker-pool
+python3 tests/stress/benchmark-runtime-daemons.py --mode both
 ```
 
 Validation check:
@@ -118,8 +129,9 @@ curl -sS http://127.0.0.1:8080/_fn/health | jq '.runtimes'
 ## Notes
 
 - Results depend on host CPU, background load, and runtime install/build state.
-- Native and Docker mode can behave differently.
+- Native and Docker mode can behave differently, so publish both if you care about both.
 - A better average time is useful only if error rate stays acceptable.
+- Docker Python with one daemon showed the highest variance in this snapshot, so always inspect the raw samples, not only the average.
 
 ## Troubleshooting
 

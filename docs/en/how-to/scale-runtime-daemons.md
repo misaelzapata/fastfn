@@ -1,6 +1,6 @@
 # Scale Runtime Daemons
 
-> Verified status as of **March 13, 2026**.
+> Verified status as of **March 14, 2026**.
 
 ## Quick View
 
@@ -106,16 +106,34 @@ If you enabled debug headers in a function config, responses can also include:
 - `X-Fn-Runtime-Routing`
 - `X-Fn-Runtime-Socket-Index`
 
+One important behavior to verify:
+
+- a runtime can stay available even if one daemon socket is down
+- `/_fn/health` shows that degraded socket in the `sockets` list
+- traffic keeps flowing through the remaining healthy sockets
+
+The repository now has an integration check for this exact case:
+
+```bash
+bash tests/integration/test-runtime-daemon-failover.sh
+```
+
 ## Step 5: Measure before keeping it on
 
 Do not assume more daemons are always better.
 
-In the current native benchmark on **March 13, 2026**:
+In the current benchmark on **March 14, 2026**:
 
-- Node improved by `13.0%`
-- Python improved by `65.1%`
-- PHP got slower by `37.0%`
-- Rust got slower by `8.6%`
+- Native:
+  - Node improved by `12.1%`
+  - Python improved by `64.8%`
+  - Rust improved by `20.0%`
+  - PHP got slower by `9.2%`
+- Docker:
+  - Node improved by `8.9%`
+  - Python improved by `76.7%`
+  - PHP improved by `27.0%`
+  - Rust improved by `4.5%`
 
 Read the full numbers here:
 
@@ -152,6 +170,7 @@ Expected:
 - If the daemon count seems ignored, check whether you are scaling `lua`.
 - If a runtime stays down, confirm the binary selection first (`FN_*_BIN` or `runtime-binaries`).
 - If only one socket appears, confirm there is no explicit `FN_RUNTIME_SOCKETS` override.
+- If one socket is down but the runtime is still up, traffic should continue through the remaining sockets while the supervisor restarts the failed daemon.
 - If performance gets worse, keep the count at `1` for that runtime and measure again later with a heavier workload.
 
 ## Related links

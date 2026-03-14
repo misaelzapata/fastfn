@@ -1,6 +1,6 @@
 # Escalar daemons de runtime
 
-> Estado verificado al **13 de marzo de 2026**.
+> Estado verificado al **14 de marzo de 2026**.
 
 ## Vista rápida
 
@@ -106,16 +106,34 @@ Si habilitaste debug headers en `fn.config.json`, las respuestas también pueden
 - `X-Fn-Runtime-Routing`
 - `X-Fn-Runtime-Socket-Index`
 
+Comportamiento importante para validar:
+
+- un runtime puede seguir disponible aunque un socket de daemon quede caído
+- `/_fn/health` muestra ese socket degradado dentro de `sockets`
+- el tráfico sigue entrando por los sockets sanos restantes
+
+El repositorio ya trae una prueba de integración para este escenario:
+
+```bash
+bash tests/integration/test-runtime-daemon-failover.sh
+```
+
 ## Paso 5: Mide antes de dejarlo fijo
 
 No des por hecho que más daemons siempre mejoran el resultado.
 
-En el benchmark native actual del **13 de marzo de 2026**:
+En el benchmark actual del **14 de marzo de 2026**:
 
-- Node mejoró `13.0%`
-- Python mejoró `65.1%`
-- PHP empeoró `37.0%`
-- Rust empeoró `8.6%`
+- Native:
+  - Node mejoró `12.1%`
+  - Python mejoró `64.8%`
+  - Rust mejoró `20.0%`
+  - PHP empeoró `9.2%`
+- Docker:
+  - Node mejoró `8.9%`
+  - Python mejoró `76.7%`
+  - PHP mejoró `27.0%`
+  - Rust mejoró `4.5%`
 
 Puedes ver el detalle completo aquí:
 
@@ -152,6 +170,7 @@ Esperado:
 - Si parece que el count no tuvo efecto, confirma que no estás intentando escalar `lua`.
 - Si un runtime queda caído, revisa primero la selección de binario (`FN_*_BIN` o `runtime-binaries`).
 - Si solo aparece un socket, confirma que no exista un override explícito en `FN_RUNTIME_SOCKETS`.
+- Si un socket aparece caído pero el runtime sigue en `up=true`, el tráfico debería continuar por los sockets restantes mientras el supervisor reinicia el daemon fallado.
 - Si el rendimiento empeora, deja ese runtime en `1` y vuelve a medir más adelante con una carga más representativa.
 
 ## Enlaces relacionados
