@@ -20,6 +20,16 @@ var dryRun bool
 var devForceURL bool
 var devBuild bool
 var devNativeMode bool
+var devLookPath = exec.LookPath
+var devCommandRunner = exec.Command
+var devFatal = log.Fatal
+var devFatalf = log.Fatalf
+var checkSystemRequirementsFn = checkSystemRequirements
+var devStartHotReloadWatcher = process.StartHotReloadWatcher
+var devExecCommand = exec.Command
+var devAbsFn = filepath.Abs
+var devYAMLMarshalFn = yaml.Marshal
+var discoveryScanFn = discovery.Scan
 
 func resolveDevTargetDir(args []string) string {
 	if len(args) > 0 {
@@ -33,14 +43,18 @@ func resolveDevTargetDir(args []string) string {
 
 func checkSystemRequirements() {
 	// 1. Check for docker binary
-	if _, err := exec.LookPath("docker"); err != nil {
-		log.Fatal("Error: Docker is not installed or not in your PATH.\nPlease install Docker: https://docs.docker.com/get-docker/")
+	dockerBin := strings.TrimSpace(os.Getenv("FN_DOCKER_BIN"))
+	if dockerBin == "" {
+		dockerBin = "docker"
+	}
+	if _, err := devLookPath(dockerBin); err != nil {
+		devFatal("Error: Docker is not installed or not in your PATH.\nPlease install Docker: https://docs.docker.com/get-docker/")
 	}
 
 	// 2. Check if Docker Daemon is running
-	cmd := exec.Command("docker", "info")
+	cmd := devCommandRunner(dockerBin, "info")
 	if err := cmd.Run(); err != nil {
-		log.Fatal("Error: Docker Daemon is not running.\nPlease start Docker Desktop or the docker daemon.")
+		devFatal("Error: Docker Daemon is not running.\nPlease start Docker Desktop or the docker daemon.")
 	}
 }
 
@@ -71,6 +85,12 @@ var devCmd = &cobra.Command{
 		applyConfiguredForceURL(func(forceURL bool) {
 			fmt.Printf("Using force-url from config: %t\n", forceURL)
 		})
+		applyConfiguredRuntimeDaemons(func(value string) {
+			fmt.Printf("Using runtime-daemons from config: %s\n", value)
+		})
+		applyConfiguredRuntimeBinaries(func(envVar, value string) {
+			fmt.Printf("Using runtime binary from config: %s=%s\n", envVar, value)
+		})
 		if devForceURL {
 			_ = os.Setenv("FN_FORCE_URL", "1")
 			fmt.Println("force-url enabled (will allow config/policy routes to override existing URLs)")
@@ -78,17 +98,17 @@ var devCmd = &cobra.Command{
 
 		// Resolve absolute path.
 		targetDir := resolveDevTargetDir(args)
-		absPath, err := filepath.Abs(targetDir)
+		absPath, err := devAbsFn(targetDir)
 		if err != nil {
-			log.Fatalf("Failed to resolve absolute path: %v", err)
+			devFatalf("Failed to resolve absolute path: %v", err)
 		}
 		if _, err := os.Stat(absPath); err != nil {
-			log.Fatalf("Invalid functions directory: %s", absPath)
+			devFatalf("Invalid functions directory: %s", absPath)
 		}
 
 		if devNativeMode {
 			if dryRun || devBuild {
-				log.Fatal("--dry-run/--build are only supported in Docker mode (omit --native)")
+				devFatal("--dry-run/--build are only supported in Docker mode (omit --native)")
 			}
 			if os.Getenv("FN_PUBLIC_BASE_URL") == "" {
 				if baseURL := configuredPublicBaseURL(); baseURL != "" {
@@ -98,7 +118,7 @@ var devCmd = &cobra.Command{
 			}
 			fmt.Println("Running in NATIVE mode (embedded runtime stack)...")
 			if err := runNative(absPath); err != nil {
-				log.Fatalf("Native dev failed: %v", err)
+				devFatalf("Native dev failed: %v", err)
 			}
 			return
 		}
@@ -107,7 +127,7 @@ var devCmd = &cobra.Command{
 		// Resolve volume mounts.
 		mounts := scanForMounts(absPath)
 		if len(mounts) == 0 {
-			log.Fatalf("Invalid functions directory: %s", absPath)
+			devFatalf("Invalid functions directory: %s", absPath)
 		}
 
 		// Find docker-compose.yml (recursively up).
@@ -137,7 +157,7 @@ var devCmd = &cobra.Command{
 			fmt.Println("No local docker-compose.yml found. Using portable mode...")
 
 			// For now, fail as we need the image to exist
-			log.Fatal("Portable mode requires 'ghcr.io/fastfn/runtime' image which is not yet published.\nPlease run from within the repo.")
+			devFatal("Portable mode requires 'ghcr.io/fastfn/runtime' image which is not yet published.\nPlease run from within the repo.")
 
 			/* FUTURE IMPLEMENTATION:
 			tempDir, err := os.MkdirTemp("", "fastfn-dev-*")
@@ -160,22 +180,22 @@ var devCmd = &cobra.Command{
 		// 4. Parse YAML
 		data, err := os.ReadFile(composePath)
 		if err != nil {
-			log.Fatalf("Failed to read docker-compose.yml: %v", err)
+			devFatalf("Failed to read docker-compose.yml: %v", err)
 		}
 
 		var compose map[string]interface{}
 		if err := yaml.Unmarshal(data, &compose); err != nil {
-			log.Fatalf("Failed to parse docker-compose.yml: %v", err)
+			devFatalf("Failed to parse docker-compose.yml: %v", err)
 		}
 
 		// 5. Apply volumes
 		services, ok := compose["services"].(map[string]interface{})
 		if !ok {
-			log.Fatal("Invalid docker-compose.yml: no services")
+			devFatal("Invalid docker-compose.yml: no services")
 		}
 		openresty, ok := services["openresty"].(map[string]interface{})
 		if !ok {
-			log.Fatal("Invalid docker-compose.yml: no openresty service")
+			devFatal("Invalid docker-compose.yml: no openresty service")
 		}
 
 		applyOpenRestyDockerUser(openresty)
@@ -212,11 +232,41 @@ var devCmd = &cobra.Command{
 			envMap["FN_FORCE_URL"] = os.Getenv("FN_FORCE_URL")
 			openresty["environment"] = envMap
 		}
+		if strings.TrimSpace(os.Getenv("FN_RUNTIME_DAEMONS")) != "" {
+			envRaw := openresty["environment"]
+			envMap, ok := envRaw.(map[string]interface{})
+			if !ok || envMap == nil {
+				envMap = map[string]interface{}{}
+			}
+			envMap["FN_RUNTIME_DAEMONS"] = os.Getenv("FN_RUNTIME_DAEMONS")
+			openresty["environment"] = envMap
+		}
+		for _, envVar := range []string{
+			"FN_PYTHON_BIN",
+			"FN_NODE_BIN",
+			"FN_NPM_BIN",
+			"FN_PHP_BIN",
+			"FN_COMPOSER_BIN",
+			"FN_CARGO_BIN",
+			"FN_GO_BIN",
+			"FN_OPENRESTY_BIN",
+		} {
+			if strings.TrimSpace(os.Getenv(envVar)) == "" {
+				continue
+			}
+			envRaw := openresty["environment"]
+			envMap, ok := envRaw.(map[string]interface{})
+			if !ok || envMap == nil {
+				envMap = map[string]interface{}{}
+			}
+			envMap[envVar] = os.Getenv(envVar)
+			openresty["environment"] = envMap
+		}
 
 		// Encode back to YAML
-		modifiedYAML, err := yaml.Marshal(compose)
+		modifiedYAML, err := devYAMLMarshalFn(compose)
 		if err != nil {
-			log.Fatalf("Failed to generate modified YAML: %v", err)
+			devFatalf("Failed to generate modified YAML: %v", err)
 		}
 
 		if dryRun {
@@ -226,7 +276,7 @@ var devCmd = &cobra.Command{
 		}
 
 		// Docker mode: ensure Docker is available and the daemon is running.
-		checkSystemRequirements()
+		checkSystemRequirementsFn()
 
 		// On Docker Desktop (and some CI setups), bind mount filesystem events do not
 		// reliably propagate into containers. Use a host watcher to trigger reloads so
@@ -236,7 +286,7 @@ var devCmd = &cobra.Command{
 			hostPort = "8080"
 		}
 		reloadURL := fmt.Sprintf("http://127.0.0.1:%s/_fn/reload", hostPort)
-		watcher, watchErr := process.StartHotReloadWatcher(absPath, reloadURL, func(format string, args ...interface{}) {
+		watcher, watchErr := devStartHotReloadWatcher(absPath, reloadURL, func(format string, args ...interface{}) {
 			fmt.Printf(format+"\n", args...)
 		})
 		if watchErr == nil {
@@ -251,7 +301,7 @@ var devCmd = &cobra.Command{
 		if devBuild {
 			dockerArgs = append(dockerArgs, "--build")
 		}
-		dockerCmd := exec.Command("docker", dockerArgs...)
+		dockerCmd := devExecCommand("docker", dockerArgs...)
 		dockerCmd.Stdin = bytes.NewReader(modifiedYAML)
 		dockerCmd.Stdout = os.Stdout
 		dockerCmd.Stderr = os.Stderr
@@ -261,7 +311,7 @@ var devCmd = &cobra.Command{
 
 		fmt.Println("Starting FastFN dev server...")
 		if err := dockerCmd.Run(); err != nil {
-			log.Fatalf("Docker run failed: %v", err)
+			devFatalf("Docker run failed: %v", err)
 		}
 	},
 }
@@ -336,7 +386,7 @@ func scanForMounts(rootPath string) []string {
 		return mountProjectRoot(rootPath)
 	}
 
-	functions, err := discovery.Scan(rootPath, nil)
+	functions, err := discoveryScanFn(rootPath, nil)
 	if err != nil || len(functions) == 0 {
 		return mountProjectRoot(rootPath)
 	}
@@ -384,10 +434,6 @@ func scanForMounts(rootPath string) []string {
 			seen[mount] = struct{}{}
 			mounts = append(mounts, mount)
 		}
-	}
-
-	if len(mounts) == 0 {
-		return mountProjectRoot(rootPath)
 	}
 
 	return mounts

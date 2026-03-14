@@ -112,6 +112,7 @@ nav:
       - Authentication: en/how-to/authentication.md
       - Reuse Auth and Validation: en/how-to/reuse-auth-and-validation.md
       - Security Confidence: en/how-to/security-confidence.md
+      - Scale Runtime Daemons: en/how-to/scale-runtime-daemons.md
       - Platform Runtime Plumbing: en/how-to/platform-runtime-plumbing.md
       - Data Access Patterns: en/how-to/data-access-patterns.md
       - Bigger App Structure: en/how-to/bigger-app-structure.md
@@ -139,6 +140,7 @@ nav:
       - CLI Reference: en/reference/cli.md
       - HTTP API: en/reference/http-api.md
       - Runtime Contract: en/reference/runtime-contract.md
+      - Runtime Coercion Patterns: en/reference/runtime-coercion-patterns.md
       - External Links: en/reference/external-links.md
       - Builtin Functions: en/reference/builtin-functions.md
       - PHP Template: en/reference/php-template.md
@@ -194,6 +196,7 @@ nav:
       - Autenticación: es/como-hacer/autenticacion.md
       - Reutilizar Auth y Validación: es/como-hacer/reutilizar-auth-y-validacion.md
       - "Checklist de seguridad": es/como-hacer/checklist-seguridad-produccion.md
+      - Escalar daemons de runtime: es/como-hacer/escalar-daemons-runtime.md
       - Plomería Runtime-Plataforma: es/como-hacer/plomeria-runtime-plataforma.md
       - Patrones de Acceso a Datos: es/como-hacer/patrones-de-acceso-a-datos.md
       - Estructura App Grande: es/como-hacer/estructura-app-grande.md
@@ -221,6 +224,7 @@ nav:
       - CLI Reference: es/referencia/cli-reference.md
       - API HTTP: es/referencia/api-http.md
       - Contrato Runtime: es/referencia/contrato-runtime.md
+      - Patrones de coerción runtime: es/referencia/patrones-coercion-runtime.md
       - Enlaces Externos: es/referencia/enlaces-externos.md
       - Funciones de Ejemplo: es/referencia/funciones-ejemplo.md
       - Plantilla PHP: es/referencia/plantilla-php.md

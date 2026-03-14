@@ -11,7 +11,16 @@ services:
       - ./examples/functions:/app/srv/fn/functions
     environment:
       FN_RUNTIMES: ${FN_RUNTIMES:-python,node,php,lua}
+      FN_RUNTIME_DAEMONS: ${FN_RUNTIME_DAEMONS:-}
       FN_RUNTIME_SOCKETS: ${FN_RUNTIME_SOCKETS:-}
+      FN_OPENRESTY_BIN: ${FN_OPENRESTY_BIN:-}
+      FN_PYTHON_BIN: ${FN_PYTHON_BIN:-}
+      FN_NODE_BIN: ${FN_NODE_BIN:-}
+      FN_NPM_BIN: ${FN_NPM_BIN:-}
+      FN_PHP_BIN: ${FN_PHP_BIN:-}
+      FN_COMPOSER_BIN: ${FN_COMPOSER_BIN:-}
+      FN_CARGO_BIN: ${FN_CARGO_BIN:-}
+      FN_GO_BIN: ${FN_GO_BIN:-}
       FN_UI_ENABLED: ${FN_UI_ENABLED:-0}
       FN_CONSOLE_API_ENABLED: ${FN_CONSOLE_API_ENABLED:-1}
       FN_CONSOLE_WRITE_ENABLED: ${FN_CONSOLE_WRITE_ENABLED:-0}

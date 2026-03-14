@@ -38,6 +38,24 @@ _RUNTIME_POOLS_LOCK = threading.Lock()
 _RUNTIME_POOL_REAPER_STARTED = False
 
 
+def _resolve_command(env_name: str, default: str) -> str:
+    configured = str(os.environ.get(env_name, "")).strip()
+    if configured:
+        if "/" in configured or "\\" in configured:
+            candidate = Path(configured)
+            if candidate.is_file() and os.access(str(candidate), os.X_OK):
+                return str(candidate)
+            raise RuntimeError(f"{env_name} is not executable: {configured}")
+        resolved = shutil.which(configured)
+        if resolved:
+            return resolved
+        raise RuntimeError(f"{env_name} not found in PATH: {configured}")
+    resolved = shutil.which(default)
+    if resolved:
+        return resolved
+    raise RuntimeError(f"{default} not found in PATH")
+
+
 def _bool_env(name: str, default: bool) -> bool:
     raw = os.environ.get(name)
     if raw is None or raw == "":
@@ -134,8 +152,9 @@ def _ensure_composer_deps(handler_path: Path) -> None:
     if not composer_json.is_file():
         return
 
-    composer = shutil.which("composer")
-    if not composer:
+    try:
+        composer = _resolve_command("FN_COMPOSER_BIN", "composer")
+    except RuntimeError:
         return
 
     lock_file = fn_dir / "composer.lock"
@@ -317,7 +336,8 @@ def _strict_open_basedir(fn_dir: Path) -> str:
 
 
 def _run_php_handler(handler_path: Path, event: Dict[str, Any], timeout_ms: int) -> Dict[str, Any]:
-    cmd = ["php", "-d", "display_errors=0", "-d", "log_errors=0"]
+    php_bin = _resolve_command("FN_PHP_BIN", "php")
+    cmd = [php_bin, "-d", "display_errors=0", "-d", "log_errors=0"]
     if STRICT_FS:
         cmd.extend(["-d", f"open_basedir={_strict_open_basedir(handler_path.parent)}"])
     cmd.extend([str(WORKER_FILE), str(handler_path)])

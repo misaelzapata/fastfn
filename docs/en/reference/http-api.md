@@ -1,9 +1,16 @@
 # HTTP API Reference
 
 
-> Verified status as of **March 10, 2026**.
-> Runtime note: FastFN auto-installs function-local dependencies from `requirements.txt` / `package.json`; host runtimes are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
+> Verified status as of **March 13, 2026**.
+> Runtime note: FastFN resolves dependencies and build steps per function: Python uses `requirements.txt`, Node uses `package.json`, PHP installs from `composer.json` when present, and Rust handlers are built with `cargo`. Host runtimes/tools are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
 Formal reference for public and internal endpoints.
+
+## Quick View
+
+- Complexity: Reference
+- Typical time: 15-30 minutes
+- Use this when: you need exact endpoint contracts or status-code behavior
+- Outcome: reproducible API calls for public routes and `/_fn/*` operations
 
 ## Conventions
 
@@ -75,6 +82,18 @@ You can map additional public routes per function in `fn.config.json`:
 
 After reload/discovery, calling `/api/node-echo` invokes that function.
 
+### Debug headers (opt-in)
+
+When a function enables debug headers, responses can include:
+
+- `X-Fn-Runtime`
+- `X-Fn-Runtime-Routing`
+- `X-Fn-Runtime-Socket-Index`
+- `X-Fn-Worker-Pool-Max-Workers`
+- `X-Fn-Worker-Pool-Max-Queue`
+
+This is useful when you want to confirm which runtime handled a request and whether traffic is rotating across multiple sockets.
+
 ## Path operation configuration (FastFN equivalents)
 
 FastFN does not use decorator-based path operation objects like FastAPI. Configuration is distributed between file routes and `fn.config.json`.
@@ -104,6 +123,38 @@ Non-1:1 note: if you need deep OpenAPI customization per operation, keep FastFN 
 - `GET /_fn/jobs/<id>`
 - `DELETE /_fn/jobs/<id>`
 - `GET /_fn/jobs/<id>/result`
+
+#### `GET /_fn/health`
+
+Returns a runtime and route snapshot for the current process.
+
+Example:
+
+```bash
+curl -sS http://127.0.0.1:8080/_fn/health | jq '.runtimes'
+```
+
+Simplified shape:
+
+```json
+{
+  "python": {
+    "routing": "round_robin",
+    "health": { "up": true, "reason": "ok" },
+    "sockets": [
+      { "index": 1, "uri": "unix:/tmp/fastfn/fn-python-1.sock", "up": true, "reason": "ok" },
+      { "index": 2, "uri": "unix:/tmp/fastfn/fn-python-2.sock", "up": true, "reason": "ok" }
+    ]
+  }
+}
+```
+
+Use it to confirm:
+
+- enabled runtimes
+- runtime routing mode (`single` or `round_robin`)
+- per-socket health
+- route conflict counts and function state summaries
 
 ### CRUD and configuration
 
@@ -281,3 +332,39 @@ Validation command:
 ```bash
 curl -sS 'http://127.0.0.1:8080/openapi.json' | jq '.paths | keys'
 ```
+
+## Validation
+
+Run this smoke sequence:
+
+```bash
+curl -i -sS 'http://127.0.0.1:8080/_fn/health'
+curl -sS 'http://127.0.0.1:8080/_fn/catalog' | jq '{mapped_routes, mapped_route_conflicts}'
+curl -sS 'http://127.0.0.1:8080/openapi.json' | jq '.paths | keys | length'
+```
+
+Expected:
+
+- health returns `200`
+- catalog returns mapped routes and deterministic conflict data
+- OpenAPI paths count is non-zero for public projects
+
+## Troubleshooting
+
+- If `/_fn/*` returns `401/403`, check admin token and console-access flags.
+- If OpenAPI is empty, verify that at least one public route exists and is discoverable.
+- If a route responds `405`, verify `invoke.methods` in function config.
+- If route calls return `503`, verify runtime socket health in `/_fn/health`.
+
+## Next step
+Continue with [Run and test](../how-to/run-and-test.md) to validate this contract end-to-end in local/CI flows.
+
+## Related links
+- [Run and test](../how-to/run-and-test.md)
+- [Zero-config routing](../how-to/zero-config-routing.md)
+- [Platform runtime plumbing](../how-to/platform-runtime-plumbing.md)
+- [Function specification](./function-spec.md)
+- [Runtime contract](./runtime-contract.md)
+- [Built-in functions](./builtin-functions.md)
+- [Architecture](../explanation/architecture.md)
+- [Get help](../how-to/get-help.md)

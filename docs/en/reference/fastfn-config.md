@@ -1,37 +1,43 @@
 # `fastfn.json` Reference
 
+> Verified status as of **March 13, 2026**.
+> Runtime note: FastFN resolves dependencies and build steps per function: Python uses `requirements.txt`, Node uses `package.json`, PHP installs from `composer.json` when present, and Rust handlers are built with `cargo`. Host runtimes and tools are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
 
-> Verified status as of **March 10, 2026**.
-> Runtime note: FastFN auto-installs function-local dependencies from `requirements.txt` / `package.json`; host runtimes are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
-`fastfn.json` is the default CLI config file.
+`fastfn.json` is the default CLI config file. FastFN reads it from the current directory unless you pass `--config`.
 
-FastFN looks for this file in the current directory when you run commands like `fastfn dev` or `fastfn run`.
+## Quick View
 
-## Supported Keys
+- Complexity: Reference
+- Typical time: 10-20 minutes
+- Use this when: you want one place to define default directories, routing behavior, runtime daemon counts, or host binaries
+- Outcome: reproducible local and CI behavior without long command lines
 
-| Key | Type | Description |
+## Supported keys
+
+| Key | Type | What it controls |
 | --- | --- | --- |
 | `functions-dir` | `string` | Default functions root when no directory is passed to CLI commands. |
-| `public-base-url` | `string` | Canonical public base URL used in generated OpenAPI `servers[0].url`. |
-| `openapi-include-internal` | `boolean` | Controls if internal/admin endpoints (`/_fn/*`) are listed in OpenAPI/Swagger. Does not disable the endpoints themselves. Default `false`. |
-| `force-url` | `boolean` | Global opt-in to allow config/policy routes to override already-mapped URLs. Default `false`. Prefer setting `invoke.force-url` per function instead. |
-| `domains` | `array` | Domains used by `fastfn doctor domains` for DNS/TLS/HTTP diagnostics. |
+| `public-base-url` | `string` | Canonical public URL used in generated OpenAPI `servers[0].url`. |
+| `openapi-include-internal` | `boolean` | Whether internal `/_fn/*` endpoints appear in OpenAPI and Swagger. |
+| `force-url` | `boolean` | Global opt-in that allows config-based routes to replace an already mapped URL. |
+| `domains` | `array` | Domain checks used by `fastfn doctor domains`. |
+| `runtime-daemons` | `object` or `string` | How many daemon instances to launch per external runtime. |
+| `runtime-binaries` | `object` or `string` | Which host executable FastFN should use for each runtime or tool. |
 
 Notes:
-- Preferred keys use kebab-case: `functions-dir`, `public-base-url`.
-- Compatibility aliases are still accepted: `functions_dir`, `functionsDir`, `public_base_url`, `publicBaseUrl`.
-- OpenAPI internal visibility aliases are also accepted: `openapi_include_internal`, `openapi.include_internal`, `swagger-include-admin`.
-- `domains` is for `fastfn doctor domains` checks only. It does not enforce inbound host routing by itself.
-- To restrict inbound hosts per function, use `invoke.allow_hosts` in each `fn.config.json`.
-- You can also opt-in globally via `force-url` or the CLI flag `--force-url` (unsafe; use sparingly).
 
-## Example 1: Local Dev Default Directory
+- Preferred keys use kebab-case.
+- Compatibility aliases are still accepted for older projects.
+- `domains` only affects `fastfn doctor domains`; it does not block inbound hosts by itself.
+- `runtime-daemons` applies to external runtimes (`node`, `python`, `php`, `rust`, `go`). `lua` runs in-process, so a daemon count for `lua` is ignored.
+
+## Example 1: Default functions directory
 
 `fastfn.json`
 
 ```json
 {
-  "functions-dir": "examples/functions/next-style"
+  "functions-dir": "functions"
 }
 ```
 
@@ -42,148 +48,174 @@ fastfn dev
 ```
 
 Expected behavior:
-- FastFN uses `examples/functions/next-style` automatically.
 
-## Example 2: Native Production-Like Run with Public Domain
+- FastFN uses `functions/` automatically.
+
+## Example 2: Scale runtime daemons
 
 `fastfn.json`
 
 ```json
 {
   "functions-dir": "functions",
-  "public-base-url": "https://api.example.com"
+  "runtime-daemons": {
+    "node": 3,
+    "python": 3,
+    "php": 2,
+    "rust": 2
+  }
 }
 ```
 
 Run:
 
 ```bash
-FN_HOST_PORT=8080 fastfn run --native
-```
-
-Validate OpenAPI server URL:
-
-```bash
-curl -sS http://127.0.0.1:8080/_fn/openapi.json | jq -r '.servers[0].url'
-# https://api.example.com
-```
-
-## Example 3: Domain from Reverse Proxy Headers
-
-If `public-base-url` is not set, FastFN derives OpenAPI URL from request headers:
-- `X-Forwarded-Proto`
-- `X-Forwarded-Host`
-- fallback: request `Host`
-
-Test:
-
-```bash
-curl -sS \
-  -H 'X-Forwarded-Proto: https' \
-  -H 'X-Forwarded-Host: api.proxy.example' \
-  http://127.0.0.1:8080/_fn/openapi.json | jq -r '.servers[0].url'
-# https://api.proxy.example
-```
-
-## Example 4: Domains Block for Doctor
-
-`fastfn.json`
-
-```json
-{
-  "domains": [
-    "api.example.com",
-    {
-      "domain": "www.example.com",
-      "expected-target": "lb.example.net",
-      "enforce-https": true
-    }
-  ]
-}
-```
-
-Run:
-
-```bash
-fastfn doctor domains
-fastfn doctor domains --json
-```
-
-`domains` entries support:
-- string form: `"api.example.com"`
-- object form:
-  - `domain` (required)
-  - `expected-target` (optional, accepts IP or CNAME)
-  - `enforce-https` (optional, default `true`)
-
-## Example 5: Show Internal/Admin Endpoints in Swagger (Without Disabling APIs)
-
-`fastfn.json`
-
-```json
-{
-  "functions-dir": "examples/functions/next-style",
-  "openapi-include-internal": true
-}
-```
-
-Run:
-
-```bash
-fastfn dev
+FN_RUNTIMES=node,python,php,rust fastfn dev --native
 ```
 
 Validate:
 
 ```bash
-curl -sS http://127.0.0.1:8080/_fn/openapi.json | jq '.paths | has("/_fn/health")'
-# true
+curl -sS http://127.0.0.1:8080/_fn/health | jq '.runtimes'
 ```
 
-To hide internal/admin endpoints from Swagger again, set it to `false` (or remove the key).
+What to expect:
+
+- `node`, `python`, `php`, and `rust` show a `routing` mode.
+- When a runtime has more than one socket, `routing` is `round_robin`.
+- `sockets` lists each daemon instance separately.
+
+String form is also supported:
+
+```json
+{
+  "runtime-daemons": "node=3,python=3,php=2,rust=2"
+}
+```
+
+## Example 3: Choose host binaries
+
+`fastfn.json`
+
+```json
+{
+  "runtime-binaries": {
+    "python": "python3.12",
+    "node": "node20",
+    "php": "php8.3",
+    "composer": "composer",
+    "cargo": "cargo",
+    "openresty": "/opt/homebrew/bin/openresty"
+  }
+}
+```
+
+Important detail:
+
+- FastFN chooses one executable per key.
+- All daemon instances for that runtime use the same configured executable.
+- Multi-daemon routing does not mean mixed versions inside the same runtime group.
+
+Supported binary keys:
+
+| Key | Env override | Used for |
+| --- | --- | --- |
+| `openresty` | `FN_OPENRESTY_BIN` | OpenResty in native mode or inside the Docker container entrypoint. |
+| `docker` | `FN_DOCKER_BIN` | Docker CLI used by `fastfn dev` and `fastfn doctor`. |
+| `python` | `FN_PYTHON_BIN` | Python runtime daemon and Python-based launchers used by PHP, Rust, and Go daemons. |
+| `node` | `FN_NODE_BIN` | Node runtime daemon process. |
+| `npm` | `FN_NPM_BIN` | Node dependency installation. |
+| `php` | `FN_PHP_BIN` | PHP worker execution inside the PHP daemon. |
+| `composer` | `FN_COMPOSER_BIN` | PHP dependency installation. |
+| `cargo` | `FN_CARGO_BIN` | Rust builds. |
+| `go` | `FN_GO_BIN` | Go builds used by the Go daemon. |
+
+If you only need a temporary override, the environment variables above work without editing `fastfn.json`.
+
+## Example 4: Explicit socket map (advanced override)
+
+`FN_RUNTIME_SOCKETS` can override generated sockets completely.
+
+Example:
+
+```bash
+export FN_RUNTIME_SOCKETS='{"node":["unix:/tmp/fastfn/node-1.sock","unix:/tmp/fastfn/node-2.sock"],"python":"unix:/tmp/fastfn/python.sock"}'
+fastfn dev --native functions
+```
+
+Rules:
+
+- A runtime value can be a string or an array.
+- If `FN_RUNTIME_SOCKETS` is set, it wins over `runtime-daemons` and `FN_RUNTIME_DAEMONS`.
+- Use this only when you need full control over socket locations.
+
+## Example 5: Public base URL and internal OpenAPI
+
+`fastfn.json`
+
+```json
+{
+  "functions-dir": "functions",
+  "public-base-url": "https://api.example.com",
+  "openapi-include-internal": true
+}
+```
+
+Validate:
+
+```bash
+curl -sS http://127.0.0.1:8080/_fn/openapi.json | jq '{server: .servers[0].url, has_health: (.paths | has("/_fn/health"))}'
+```
 
 ## Precedence
 
-1. CLI flag `--config` (explicit file path).
-2. `fastfn.json` in current directory.
-3. `fastfn.toml` (fallback only).
+Config file lookup:
 
-For URL resolution in OpenAPI:
-1. `FN_PUBLIC_BASE_URL` env var (or `public-base-url` from `fastfn.json`).
-2. `X-Forwarded-Proto` + `X-Forwarded-Host`.
-3. Request scheme + `Host`.
+1. `--config <path>`
+2. `./fastfn.json`
+3. `./fastfn.toml`
 
-## Security Note
+Runtime daemon wiring:
 
-FastFN blocks direct HTTP access to local config files:
-- `/fastfn.json` returns `404`.
-- `/fastfn.toml` returns `404`.
+1. `FN_RUNTIME_SOCKETS`
+2. `FN_RUNTIME_DAEMONS`
+3. `runtime-daemons`
+4. Default: one daemon per external runtime
 
-## Config Precedence Diagram
+Binary selection:
 
-```mermaid
-flowchart TD
-  A["Environment variables"] --> D["Effective runtime config"]
-  B["fastfn.json"] --> D
-  C["fn.config.json"] --> D
+1. `FN_*_BIN` environment variable for that key
+2. `runtime-binaries`
+3. FastFN default lookup candidates (`python3` then `python`, `node`, `php`, `cargo`, and so on)
+
+OpenAPI base URL:
+
+1. `FN_PUBLIC_BASE_URL`
+2. `public-base-url`
+3. `X-Forwarded-Proto` + `X-Forwarded-Host`
+4. Request scheme + `Host`
+
+## Validation
+
+Smoke test:
+
+```bash
+curl -sS http://127.0.0.1:8080/_fn/health | jq '.runtimes'
+curl -sS http://127.0.0.1:8080/_fn/openapi.json | jq '.servers[0].url'
 ```
 
-## Contract
+## Troubleshooting
 
-Defines expected request/response shape, configuration fields, and behavioral guarantees.
+- If native mode says a runtime is missing, set the matching `FN_*_BIN` variable or `runtime-binaries`.
+- If a runtime shows `up=false`, check the `sockets` list in `/_fn/health` first.
+- If counts in `runtime-daemons` appear ignored, confirm you are scaling an external runtime, not `lua`.
+- If socket locations do not match the generated pattern, look for `FN_RUNTIME_SOCKETS` in your environment.
 
-## End-to-End Example
+## Related links
 
-Use the examples in this page as canonical templates for implementation and testing.
-
-## Edge Cases
-
-- Missing configuration fallbacks
-- Route conflicts and precedence
-- Runtime-specific nuances
-
-## See also
-
-- [Function Specification](function-spec.md)
-- [HTTP API Reference](http-api.md)
-- [Run and Test Checklist](../how-to/run-and-test.md)
+- [Function specification](function-spec.md)
+- [HTTP API reference](http-api.md)
+- [Architecture](../explanation/architecture.md)
+- [Performance benchmarks](../explanation/performance-benchmarks.md)
+- [Scale runtime daemons](../how-to/scale-runtime-daemons.md)
+- [Run and test](../how-to/run-and-test.md)

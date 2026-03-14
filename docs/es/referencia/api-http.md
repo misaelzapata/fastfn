@@ -1,9 +1,16 @@
 # Referencia HTTP
 
 
-> Estado verificado al **10 de marzo de 2026**.
-> Nota de runtime: FastFN auto-instala dependencias locales por función desde `requirements.txt` / `package.json`; en `fastfn dev --native` necesitas runtimes instalados en host, mientras que `fastfn dev` depende de Docker daemon activo.
+> Estado verificado al **13 de marzo de 2026**.
+> Nota de runtime: FastFN resuelve dependencias y build por función según el runtime: Python usa `requirements.txt`, Node usa `package.json`, PHP instala desde `composer.json` cuando existe, y Rust compila handlers con `cargo`. En `fastfn dev --native` necesitas runtimes y herramientas del host; `fastfn dev` depende de un daemon de Docker activo.
 Referencia formal de endpoints publicos e internos.
+
+## Vista rápida
+
+- Complejidad: Referencia
+- Tiempo típico: 15-30 minutos
+- Úsala cuando: necesitas contrato exacto de endpoints y comportamiento por código de estado
+- Resultado: llamadas reproducibles para rutas públicas y operaciones `/_fn/*`
 
 ## Convenciones
 
@@ -75,6 +82,18 @@ Endpoints mapeados opcionales por funcion desde `fn.config.json`:
 
 Despues de recargar/discovery, llamar `/api/node-echo` invoca esa funcion.
 
+### Debug headers (opt-in)
+
+Cuando una función habilita debug headers, la respuesta puede incluir:
+
+- `X-Fn-Runtime`
+- `X-Fn-Runtime-Routing`
+- `X-Fn-Runtime-Socket-Index`
+- `X-Fn-Worker-Pool-Max-Workers`
+- `X-Fn-Worker-Pool-Max-Queue`
+
+Sirven para confirmar qué runtime manejó la request y si el tráfico está rotando entre varios sockets.
+
 ## Configuración de operaciones (equivalencias en FastFN)
 
 FastFN no usa objetos de operación por decoradores como FastAPI. La configuración vive entre rutas por archivo y `fn.config.json`.
@@ -104,6 +123,38 @@ Nota no-1:1: si necesitas customización OpenAPI profunda por operación, usa Fa
 - `GET /_fn/jobs/<id>`
 - `DELETE /_fn/jobs/<id>`
 - `GET /_fn/jobs/<id>/result`
+
+#### `GET /_fn/health`
+
+Devuelve un snapshot del estado actual de runtimes y rutas.
+
+Ejemplo:
+
+```bash
+curl -sS http://127.0.0.1:8080/_fn/health | jq '.runtimes'
+```
+
+Forma simplificada:
+
+```json
+{
+  "python": {
+    "routing": "round_robin",
+    "health": { "up": true, "reason": "ok" },
+    "sockets": [
+      { "index": 1, "uri": "unix:/tmp/fastfn/fn-python-1.sock", "up": true, "reason": "ok" },
+      { "index": 2, "uri": "unix:/tmp/fastfn/fn-python-2.sock", "up": true, "reason": "ok" }
+    ]
+  }
+}
+```
+
+Sirve para confirmar:
+
+- runtimes habilitados
+- modo de routing (`single` o `round_robin`)
+- salud por socket
+- cantidad de conflictos de rutas y resumen de estado de funciones
 
 ### CRUD y configuracion
 
@@ -281,3 +332,39 @@ Comando de validacion:
 ```bash
 curl -sS 'http://127.0.0.1:8080/openapi.json' | jq '.paths | keys'
 ```
+
+## Validación
+
+Ejecuta este smoke sequence:
+
+```bash
+curl -i -sS 'http://127.0.0.1:8080/_fn/health'
+curl -sS 'http://127.0.0.1:8080/_fn/catalog' | jq '{mapped_routes, mapped_route_conflicts}'
+curl -sS 'http://127.0.0.1:8080/openapi.json' | jq '.paths | keys | length'
+```
+
+Esperado:
+
+- health responde `200`
+- catálogo devuelve rutas y conflictos de forma determinística
+- OpenAPI tiene paths > 0 para proyectos con rutas públicas
+
+## Troubleshooting
+
+- Si `/_fn/*` responde `401/403`, revisa token admin y flags de acceso a consola.
+- Si OpenAPI sale vacío, verifica que exista al menos una ruta pública discoverable.
+- Si una ruta devuelve `405`, valida `invoke.methods` en `fn.config.json`.
+- Si una ruta devuelve `503`, revisa salud de sockets/runtime en `/_fn/health`.
+
+## Siguiente paso
+Continúa con [Ejecutar y probar](../como-hacer/ejecutar-y-probar.md) para validar este contrato de punta a punta en local/CI.
+
+## Enlaces relacionados
+- [Ejecutar y probar](../como-hacer/ejecutar-y-probar.md)
+- [Zero-config routing](../como-hacer/zero-config-routing.md)
+- [Plomería runtime/plataforma](../como-hacer/plomeria-runtime-plataforma.md)
+- [Especificación de funciones](./especificacion-funciones.md)
+- [Contrato runtime](./contrato-runtime.md)
+- [Funciones de ejemplo](./funciones-ejemplo.md)
+- [Arquitectura](../explicacion/arquitectura.md)
+- [Obtener ayuda](../como-hacer/obtener-ayuda.md)

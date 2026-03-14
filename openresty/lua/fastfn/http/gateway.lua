@@ -133,15 +133,77 @@ end
 
 local function map_runtime_error(runtime, err_code, err_msg)
   local status, message = utils.map_runtime_error(err_code)
-  if err_code == "connect_error" then
-    routes_mod.set_runtime_health(runtime, false, err_msg)
-  end
 
   if err_code and err_code ~= "timeout" and err_code ~= "connect_error" and err_code ~= "invalid_response" then
     message = message .. ": " .. tostring(err_msg or err_code)
   end
 
   return status, json_error(message)
+end
+
+local function call_external_runtime(runtime, runtime_cfg, request_payload, timeout_ms)
+  local tried = {}
+  local get_sockets = type(routes_mod.get_runtime_sockets) == "function"
+    and routes_mod.get_runtime_sockets
+    or function(_runtime, cfg)
+      if type(cfg) == "table" and type(cfg.socket) == "string" and cfg.socket ~= "" then
+        return { cfg.socket }
+      end
+      return {}
+    end
+  local pick_socket = type(routes_mod.pick_runtime_socket) == "function"
+    and routes_mod.pick_runtime_socket
+    or function(_runtime, cfg)
+      if type(cfg) == "table" and type(cfg.socket) == "string" and cfg.socket ~= "" then
+        return cfg.socket, 1, "single"
+      end
+      return nil, nil, "single", "runtime unavailable"
+    end
+  local set_socket_health = type(routes_mod.set_runtime_socket_health) == "function"
+    and routes_mod.set_runtime_socket_health
+    or function() return true end
+  local sockets = get_sockets(runtime, runtime_cfg)
+  local attempts = 0
+  local max_attempts = #sockets > 1 and 2 or 1
+  local last_code, last_msg, last_meta
+
+  while attempts < max_attempts do
+    local socket_uri, socket_index, routing, pick_err = pick_socket(runtime, runtime_cfg, tried)
+    if not socket_uri then
+      if last_code then
+        return nil, last_code, last_msg, last_meta
+      end
+      return nil, "connect_error", pick_err or "runtime unavailable", nil
+    end
+
+    local meta = {
+      routing = routing or ((#sockets > 1) and "round_robin" or "single"),
+      socket_index = socket_index,
+      socket_uri = socket_uri,
+    }
+    local resp, err_code, err_msg = client.call_unix(socket_uri, request_payload, timeout_ms)
+    if resp then
+      set_socket_health(runtime, socket_index, socket_uri, true, "ok")
+      routes_mod.set_runtime_health(runtime, true, "ok")
+      return resp, nil, nil, meta
+    end
+
+    last_code, last_msg, last_meta = err_code, err_msg, meta
+    if err_code ~= "connect_error" then
+      return nil, err_code, err_msg, meta
+    end
+
+    tried[socket_index] = true
+    set_socket_health(runtime, socket_index, socket_uri, false, err_msg or "connect_error")
+    local ok_rt, reason_rt = routes_mod.check_runtime_health(runtime, runtime_cfg)
+    routes_mod.set_runtime_health(runtime, ok_rt, ok_rt and (reason_rt or "ok") or reason_rt)
+    if not ok_rt then
+      return nil, err_code, err_msg, meta
+    end
+    attempts = attempts + 1
+  end
+
+  return nil, last_code, last_msg, last_meta
 end
 
 local function write_response(status, headers, body)
@@ -693,7 +755,7 @@ local ok, run_err = xpcall(function()
     event.secrets = secrets_map
   end
 
-  local resp, err_code, err_msg
+  local resp, err_code, err_msg, dispatch_meta
   if routes_mod.runtime_is_in_process(runtime, runtime_cfg) then
     resp, err_code, err_msg = lua_runtime.call({
       fn = fn_name,
@@ -701,7 +763,7 @@ local ok, run_err = xpcall(function()
       event = event,
     })
   else
-    resp, err_code, err_msg = client.call_unix(runtime_cfg.socket, {
+    resp, err_code, err_msg, dispatch_meta = call_external_runtime(runtime, runtime_cfg, {
       fn = fn_name,
       version = requested_version,
       event = event,
@@ -793,6 +855,10 @@ if policy.include_debug_headers == true then
   result.headers["X-Fn-Latency-Ms"] = tostring(latency_ms)
   result.headers["X-Fn-Worker-Pool-Max-Workers"] = tostring(pool_max_workers)
   result.headers["X-Fn-Worker-Pool-Max-Queue"] = tostring(pool_max_queue)
+  if type(dispatch_meta) == "table" then
+    result.headers["X-Fn-Runtime-Routing"] = tostring(dispatch_meta.routing or "single")
+    result.headers["X-Fn-Runtime-Socket-Index"] = tostring(dispatch_meta.socket_index or 1)
+  end
   if type(result.stdout) == "string" and result.stdout ~= "" then
     result.headers["X-Fn-Stdout"] = result.stdout:sub(1, 4096)
   end

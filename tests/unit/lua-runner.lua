@@ -9371,7 +9371,24 @@ local function test_routes_runtime_config_and_init_edge_paths()
         assert_true(type(cfg) == "table", "routes.get_config")
         assert_true(type(cfg.runtimes) == "table" and cfg.runtimes.node ~= nil, "routes.get_config runtimes")
         assert_eq(((cfg.runtimes.node or {}).socket), "unix:/tmp/custom-node.sock", "runtime socket map")
+        assert_eq((((cfg.runtimes.node or {}).sockets or {})[1]), "unix:/tmp/custom-node.sock", "runtime sockets list single")
         assert_true(cfg.runtimes.lua and cfg.runtimes.lua.in_process == true, "lua in-process runtime")
+      end)
+
+      with_env({
+        FN_FUNCTIONS_ROOT = functions_root,
+        FN_RUNTIMES = "node,python,lua",
+        FN_RUNTIME_SOCKETS = cjson.encode({
+          node = { "unix:/tmp/node-1.sock", "unix:/tmp/node-2.sock", "unix:/tmp/node-3.sock" },
+          python = "unix:/tmp/python.sock",
+        }),
+      }, function()
+        reset_shared_dict(cache)
+        local cfg = routes.get_config()
+        assert_eq(((cfg.runtimes.node or {}).routing), "round_robin", "runtime routing set for multi-socket")
+        assert_eq(#(((cfg.runtimes.node or {}).sockets or {})), 3, "runtime sockets list count")
+        assert_eq((((cfg.runtimes.node or {}).sockets or {})[2]), "unix:/tmp/node-2.sock", "runtime sockets list second")
+        assert_eq(((cfg.runtimes.python or {}).routing), "single", "single socket routing")
       end)
 
       with_env({
@@ -9428,6 +9445,33 @@ local function test_routes_runtime_config_and_init_edge_paths()
       assert_true(type(health_missing_err) == "string" and health_missing_err:find("runtime config missing", 1, true) ~= nil, "check_runtime_health missing cfg err")
       local health_inproc_ok = routes.check_runtime_health("lua", { in_process = true })
       assert_eq(health_inproc_ok, true, "check_runtime_health lua in-process")
+      routes.set_runtime_socket_health("node", 1, "unix:/tmp/node-1.sock", true, "ok")
+      routes.set_runtime_socket_health("node", 2, "unix:/tmp/node-2.sock", true, "ok")
+      routes.set_runtime_socket_health("node", 3, "unix:/tmp/node-3.sock", false, "down")
+      local picked1_uri, picked1_idx, picked1_routing = routes.pick_runtime_socket("node", {
+        socket = "unix:/tmp/node-1.sock",
+        sockets = { "unix:/tmp/node-1.sock", "unix:/tmp/node-2.sock", "unix:/tmp/node-3.sock" },
+        timeout_ms = 2500,
+        routing = "round_robin",
+      })
+      local picked2_uri, picked2_idx = routes.pick_runtime_socket("node", {
+        socket = "unix:/tmp/node-1.sock",
+        sockets = { "unix:/tmp/node-1.sock", "unix:/tmp/node-2.sock", "unix:/tmp/node-3.sock" },
+        timeout_ms = 2500,
+        routing = "round_robin",
+      })
+      assert_eq(picked1_routing, "round_robin", "pick_runtime_socket routing")
+      assert_true((picked1_idx == 1 and picked1_uri == "unix:/tmp/node-1.sock") or (picked1_idx == 2 and picked1_uri == "unix:/tmp/node-2.sock"), "pick_runtime_socket first healthy socket")
+      assert_true((picked2_idx == 1 and picked2_uri == "unix:/tmp/node-1.sock") or (picked2_idx == 2 and picked2_uri == "unix:/tmp/node-2.sock"), "pick_runtime_socket second healthy socket")
+      assert_true(picked1_idx ~= picked2_idx, "pick_runtime_socket rotates between healthy sockets")
+      local picked_ex_uri, picked_ex_idx = routes.pick_runtime_socket("node", {
+        socket = "unix:/tmp/node-1.sock",
+        sockets = { "unix:/tmp/node-1.sock", "unix:/tmp/node-2.sock", "unix:/tmp/node-3.sock" },
+        timeout_ms = 2500,
+        routing = "round_robin",
+      }, { [picked1_idx] = true, [picked2_idx] = true })
+      assert_eq(picked_ex_uri, nil, "pick_runtime_socket no candidates when all healthy sockets excluded")
+      assert_eq(picked_ex_idx, nil, "pick_runtime_socket nil index when excluded")
 
       local host_from_ngx, auth_from_ngx = resolve_request_host_values(nil, nil)
       assert_eq(host_from_ngx, "localhost", "resolve_request_host_values uses ngx.var.host")
@@ -9475,6 +9519,8 @@ local function test_routes_runtime_config_and_init_edge_paths()
       local health = routes.health_snapshot()
       assert_true(type(health) == "table", "health_snapshot returns table")
       assert_true(tonumber(((health.functions or {}).summary or {}).warm or 0) >= 1, "health snapshot warm summary")
+      assert_true(type((((health.runtimes or {}).node or {}).sockets)) == "table", "health snapshot runtime sockets")
+      assert_true((((health.runtimes or {}).node or {}).routing) ~= nil, "health snapshot runtime routing")
       assert_true(type(routes.health_json()) == "string", "health_json string")
 
       cache:set("catalog:raw", cjson.encode({

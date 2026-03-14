@@ -1596,6 +1596,55 @@ local function detect_socket_base_dir()
   return "/tmp/fastfn"
 end
 
+local function normalize_runtime_socket_uri(raw)
+  if type(raw) ~= "string" then
+    return nil
+  end
+  local uri = raw:gsub("^%s+", ""):gsub("%s+$", "")
+  if uri == "" then
+    return nil
+  end
+  return uri
+end
+
+local function normalize_runtime_socket_list(runtime, raw_value, socket_base)
+  if runtime == "lua" then
+    return { "inprocess:lua" }
+  end
+
+  local sockets = {}
+  local seen = {}
+  local function add_socket(candidate)
+    local uri = normalize_runtime_socket_uri(candidate)
+    if not uri or seen[uri] then
+      return
+    end
+    seen[uri] = true
+    sockets[#sockets + 1] = uri
+  end
+
+  if type(raw_value) == "table" then
+    for _, candidate in ipairs(raw_value) do
+      add_socket(candidate)
+    end
+  else
+    add_socket(raw_value)
+  end
+
+  if #sockets == 0 then
+    sockets[1] = "unix:" .. socket_base .. "/fn-" .. runtime .. ".sock"
+  end
+  return sockets
+end
+
+local function runtime_socket_status_key(runtime, socket_index, field)
+  return "rt:" .. runtime .. ":sock:" .. tostring(socket_index) .. ":" .. field
+end
+
+local function runtime_rr_key(runtime)
+  return "rt:" .. runtime .. ":rr"
+end
+
 load_runtime_config = function(force)
   if not force then
     local raw = CACHE:get("runtime:config")
@@ -1611,12 +1660,12 @@ load_runtime_config = function(force)
   local runtime_names = split_csv(os.getenv("FN_RUNTIMES") or "")
   if #runtime_names == 0 then
     for _, runtime_dir in ipairs(list_dirs(functions_root)) do
-      local runtime_name = basename(runtime_dir)
-      if runtime_name
+      local runtime_name = basename(runtime_dir) or ""
+      local known_runtime = runtime_name ~= ""
         and runtime_name:match("^[a-zA-Z0-9_-]+$")
         and KNOWN_RUNTIMES[runtime_name]
         and not EXPERIMENTAL_RUNTIMES[runtime_name]
-      then
+      if known_runtime then
         runtime_names[#runtime_names + 1] = runtime_name
       end
     end
@@ -1644,14 +1693,19 @@ load_runtime_config = function(force)
       if runtime == "lua" then
         runtimes[runtime] = {
           socket = "inprocess:lua",
+          sockets = { "inprocess:lua" },
           timeout_ms = runtime_timeout_ms,
           in_process = true,
+          routing = "in_process",
         }
       else
-        local socket = socket_map[runtime] or ("unix:" .. socket_base .. "/fn-" .. runtime .. ".sock")
+        local sockets = normalize_runtime_socket_list(runtime, socket_map[runtime], socket_base)
+        local socket = sockets[1]
         runtimes[runtime] = {
           socket = socket,
+          sockets = sockets,
           timeout_ms = runtime_timeout_ms,
+          routing = (#sockets > 1) and "round_robin" or "single",
         }
       end
     end
@@ -1704,10 +1758,38 @@ function M.get_runtime_order()
   return cfg.runtime_order or {}
 end
 
+function M.get_runtime_sockets(runtime, runtime_cfg)
+  local cfg = runtime_cfg or M.get_runtime_config(runtime)
+  if type(cfg) ~= "table" then
+    return {}
+  end
+  if type(cfg.sockets) == "table" and #cfg.sockets > 0 then
+    return cfg.sockets
+  end
+  if type(cfg.socket) == "string" and cfg.socket ~= "" then
+    return { cfg.socket }
+  end
+  return {}
+end
+
 function M.set_runtime_health(runtime, up, reason)
   CACHE:set("rt:" .. runtime .. ":up", up and 1 or 0)
   CACHE:set("rt:" .. runtime .. ":ts", ngx.now())
   CACHE:set("rt:" .. runtime .. ":reason", reason or "ok")
+end
+
+function M.set_runtime_socket_health(runtime, socket_index, socket_uri, up, reason)
+  local idx = tonumber(socket_index)
+  if not runtime or not idx or idx < 1 then
+    return false
+  end
+  CACHE:set(runtime_socket_status_key(runtime, idx, "up"), up and 1 or 0)
+  CACHE:set(runtime_socket_status_key(runtime, idx, "ts"), ngx.now())
+  CACHE:set(runtime_socket_status_key(runtime, idx, "reason"), reason or "ok")
+  if type(socket_uri) == "string" and socket_uri ~= "" then
+    CACHE:set(runtime_socket_status_key(runtime, idx, "uri"), socket_uri)
+  end
+  return true
 end
 
 function M.runtime_is_up(runtime)
@@ -1718,14 +1800,52 @@ function M.runtime_is_up(runtime)
   return up == 1
 end
 
-function M.runtime_status(runtime)
+function M.runtime_socket_status(runtime, socket_index, socket_uri)
+  local idx = tonumber(socket_index)
+  if not runtime or not idx or idx < 1 then
+    return nil
+  end
+
+  local up = CACHE:get(runtime_socket_status_key(runtime, idx, "up"))
+  local ts = CACHE:get(runtime_socket_status_key(runtime, idx, "ts"))
+  local reason = CACHE:get(runtime_socket_status_key(runtime, idx, "reason"))
+  local uri = socket_uri or CACHE:get(runtime_socket_status_key(runtime, idx, "uri"))
+  if up == nil then
+    return {
+      index = idx,
+      uri = uri,
+      up = nil,
+      ts = ts,
+      reason = reason,
+    }
+  end
+  return {
+    index = idx,
+    uri = uri,
+    up = up == 1,
+    ts = ts,
+    reason = reason,
+  }
+end
+
+function M.runtime_socket_statuses(runtime, runtime_cfg)
+  local sockets = M.get_runtime_sockets(runtime, runtime_cfg)
+  local out = {}
+  for idx, socket_uri in ipairs(sockets) do
+    out[#out + 1] = M.runtime_socket_status(runtime, idx, socket_uri)
+  end
+  return out
+end
+
+function M.runtime_status(runtime, runtime_cfg)
   local up = CACHE:get("rt:" .. runtime .. ":up")
   local ts = CACHE:get("rt:" .. runtime .. ":ts")
   local reason = CACHE:get("rt:" .. runtime .. ":reason")
+  local sockets = M.runtime_socket_statuses(runtime, runtime_cfg)
   if up == nil then
-    return { up = nil, ts = ts, reason = reason }
+    return { up = nil, ts = ts, reason = reason, sockets = sockets }
   end
-  return { up = up == 1, ts = ts, reason = reason }
+  return { up = up == 1, ts = ts, reason = reason, sockets = sockets }
 end
 
 function M.check_runtime_socket(socket_uri, timeout_ms)
@@ -1753,12 +1873,37 @@ end
 function M.check_runtime_health(runtime, runtime_cfg)
   local cfg = runtime_cfg or M.get_runtime_config(runtime)
   if M.runtime_is_in_process(runtime, cfg) then
-    return true, "in-process"
+    M.set_runtime_socket_health(runtime, 1, "inprocess:lua", true, "in-process")
+    return true, "in-process", M.runtime_socket_statuses(runtime, cfg)
   end
   if type(cfg) ~= "table" then
-    return false, "runtime config missing"
+    return false, "runtime config missing", {}
   end
-  return M.check_runtime_socket(cfg.socket, cfg.timeout_ms or 250)
+
+  local sockets = M.get_runtime_sockets(runtime, cfg)
+  if #sockets == 0 then
+    return false, "missing runtime socket", {}
+  end
+
+  local statuses = {}
+  local any_up = false
+  local reason = nil
+  for idx, socket_uri in ipairs(sockets) do
+    local ok, socket_reason = M.check_runtime_socket(socket_uri, cfg.timeout_ms or 250)
+    M.set_runtime_socket_health(runtime, idx, socket_uri, ok, ok and (socket_reason or "ok") or socket_reason)
+    statuses[#statuses + 1] = M.runtime_socket_status(runtime, idx, socket_uri)
+    if ok then
+      any_up = true
+    end
+    if not reason and socket_reason then
+      reason = socket_reason
+    end
+  end
+
+  if any_up then
+    return true, "ok", statuses
+  end
+  return false, reason or "runtime unavailable", statuses
 end
 
 function M.healthcheck_once(cfg)
@@ -1767,6 +1912,65 @@ function M.healthcheck_once(cfg)
     local ok, reason = M.check_runtime_health(runtime, rt_cfg)
     M.set_runtime_health(runtime, ok, ok and (reason or "ok") or reason)
   end
+end
+
+function M.pick_runtime_socket(runtime, runtime_cfg, excluded)
+  local cfg = runtime_cfg or M.get_runtime_config(runtime)
+  if M.runtime_is_in_process(runtime, cfg) then
+    return nil, nil, "in_process", "runtime is in-process"
+  end
+  if type(cfg) ~= "table" then
+    return nil, nil, "single", "runtime config missing"
+  end
+
+  local sockets = M.get_runtime_sockets(runtime, cfg)
+  if #sockets == 0 then
+    return nil, nil, "single", "missing runtime socket"
+  end
+
+  local excluded_map = type(excluded) == "table" and excluded or {}
+  local candidates = {}
+  for idx, socket_uri in ipairs(sockets) do
+    if not excluded_map[idx] then
+      local status = M.runtime_socket_status(runtime, idx, socket_uri)
+      if status and status.up ~= false then
+        candidates[#candidates + 1] = {
+          index = idx,
+          uri = socket_uri,
+        }
+      end
+    end
+  end
+
+  if #candidates == 0 then
+    local ok = M.check_runtime_health(runtime, cfg)
+    if ok then
+      for idx, socket_uri in ipairs(sockets) do
+        if not excluded_map[idx] then
+          local status = M.runtime_socket_status(runtime, idx, socket_uri)
+          if status and status.up == true then
+            candidates[#candidates + 1] = {
+              index = idx,
+              uri = socket_uri,
+            }
+          end
+        end
+      end
+    end
+  end
+
+  if #candidates == 0 then
+    return nil, nil, (cfg.routing or "single"), "runtime unavailable"
+  end
+
+  if #candidates == 1 then
+    return candidates[1].uri, candidates[1].index, (cfg.routing or "single")
+  end
+
+  local rr = CACHE:incr(runtime_rr_key(runtime), 1, 0)
+  local pos = (rr % #candidates) + 1
+  local picked = candidates[pos]
+  return picked.uri, picked.index, "round_robin"
 end
 
 function M.discover_functions(force)
@@ -1794,10 +1998,10 @@ function M.discover_functions(force)
   }
 
   local function same_target(a, runtime, fn_name, version)
-    if type(a) ~= "table" then
-      return false
-    end
-    return a.runtime == runtime and a.fn_name == fn_name and (a.version or nil) == (version or nil)
+    return type(a) == "table"
+      and a.runtime == runtime
+      and a.fn_name == fn_name
+      and (a.version or nil) == (version or nil)
   end
 
   local function methods_overlap(a, b)
@@ -1886,13 +2090,13 @@ function M.discover_functions(force)
       end
     end
 
-    if next(to_remove) ~= nil then
-      local filtered = {}
-      for _, existing in ipairs(current_list) do
-        if not to_remove[existing] then
-          filtered[#filtered + 1] = existing
-        end
+    local filtered = {}
+    for _, existing in ipairs(current_list) do
+      if not to_remove[existing] then
+        filtered[#filtered + 1] = existing
       end
+    end
+    if next(to_remove) ~= nil then
       current_list = filtered
       catalog.mapped_routes[route] = current_list
     end
@@ -1969,16 +2173,14 @@ function M.discover_functions(force)
   end
 
   local function should_skip_runtime_named_root_dir(sub_dir, sub_name)
-    if not runtime_dirs[sub_name] then
-      return false
-    end
-    -- If a runtime-named root directory exposes file-based or manifest routes
-    -- (for example next-style/php/get.export.php), keep it in zero-config scan.
-    if runtime_root_exposes_routes(sub_dir, sub_name, 0) then
+    local is_runtime_root = runtime_dirs[sub_name] == true
+    if is_runtime_root and runtime_root_exposes_routes(sub_dir, sub_name, 0) then
+      -- If a runtime-named root directory exposes file-based or manifest routes
+      -- (for example next-style/php/get.export.php), keep it in zero-config scan.
       return false
     end
     -- Otherwise treat it as runtime-scoped compatibility layout and skip here.
-    return true
+    return is_runtime_root
   end
 
 	  local function discover_zero_config_dir(abs_dir, rel_dir, depth)
@@ -2497,8 +2699,10 @@ function M.health_snapshot()
   for runtime, rt_cfg in pairs(cfg.runtimes or {}) do
     out.runtimes[runtime] = {
       socket = rt_cfg.socket,
+      sockets = M.runtime_socket_statuses(runtime, rt_cfg),
+      routing = rt_cfg.routing or ((type(rt_cfg.sockets) == "table" and #rt_cfg.sockets > 1) and "round_robin" or "single"),
       timeout_ms = rt_cfg.timeout_ms,
-      health = M.runtime_status(runtime),
+      health = M.runtime_status(runtime, rt_cfg),
     }
   end
 

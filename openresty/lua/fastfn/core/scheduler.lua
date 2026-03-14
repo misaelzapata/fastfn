@@ -167,10 +167,6 @@ local function scheduler_persist_interval_seconds()
   return math.floor(v)
 end
 
-local function table_is_object(v)
-  return type(v) == "table" and next(v) ~= nil
-end
-
 local function should_block_runtime(runtime, runtime_cfg)
   local up = routes.runtime_is_up(runtime)
   if up ~= true then
@@ -179,6 +175,63 @@ local function should_block_runtime(runtime, runtime_cfg)
     return not ok
   end
   return false
+end
+
+local function call_external_runtime(runtime, runtime_cfg, request_payload, timeout_ms)
+  local tried = {}
+  local get_sockets = type(routes.get_runtime_sockets) == "function"
+    and routes.get_runtime_sockets
+    or function(_runtime, cfg)
+      if type(cfg) == "table" and type(cfg.socket) == "string" and cfg.socket ~= "" then
+        return { cfg.socket }
+      end
+      return {}
+    end
+  local pick_socket = type(routes.pick_runtime_socket) == "function"
+    and routes.pick_runtime_socket
+    or function(_runtime, cfg)
+      if type(cfg) == "table" and type(cfg.socket) == "string" and cfg.socket ~= "" then
+        return cfg.socket, 1, "single"
+      end
+      return nil, nil, "single", "runtime unavailable"
+    end
+  local set_socket_health = type(routes.set_runtime_socket_health) == "function"
+    and routes.set_runtime_socket_health
+    or function() return true end
+  local sockets = get_sockets(runtime, runtime_cfg)
+  local attempts = 0
+  local max_attempts = #sockets > 1 and 2 or 1
+  local last_code, last_msg
+
+  while attempts < max_attempts do
+    local socket_uri, socket_index = pick_socket(runtime, runtime_cfg, tried)
+    if not socket_uri then
+      return nil, last_code or "connect_error", last_msg or "runtime unavailable"
+    end
+
+    local resp, err_code, err_msg = client.call_unix(socket_uri, request_payload, timeout_ms)
+    if resp then
+      set_socket_health(runtime, socket_index, socket_uri, true, "ok")
+      routes.set_runtime_health(runtime, true, "ok")
+      return resp, nil, nil
+    end
+
+    last_code, last_msg = err_code, err_msg
+    if err_code ~= "connect_error" then
+      return nil, err_code, err_msg
+    end
+
+    tried[socket_index] = true
+    set_socket_health(runtime, socket_index, socket_uri, false, err_msg or "connect_error")
+    local ok_rt, reason_rt = routes.check_runtime_health(runtime, runtime_cfg)
+    routes.set_runtime_health(runtime, ok_rt, ok_rt and (reason_rt or "ok") or reason_rt)
+    if not ok_rt then
+      return nil, err_code, err_msg
+    end
+    attempts = attempts + 1
+  end
+
+  return nil, last_code, last_msg
 end
 
 local function pick_policy_method(methods)
@@ -254,6 +307,27 @@ local function scheduler_worker_pool_context(policy)
   }
 end
 
+local function build_trigger_context(schedule, trigger, trigger_meta)
+  local out = {
+    type = trigger,
+    every_seconds = tonumber(schedule.every_seconds) or nil,
+  }
+  if type(schedule.cron) == "string" and schedule.cron ~= "" then
+    out.cron = schedule.cron
+  end
+  if type(schedule.timezone) == "string" and schedule.timezone ~= "" and schedule.timezone:lower() ~= "local" then
+    out.timezone = schedule.timezone
+  end
+  if type(trigger_meta) == "table" then
+    for k, v in pairs(trigger_meta) do
+      if out[k] == nil then
+        out[k] = v
+      end
+    end
+  end
+  return out
+end
+
 local function run_scheduled_invocation(runtime, name, version, schedule, policy, trigger_type, trigger_meta)
   local rt_cfg = routes.get_runtime_config(runtime)
   if not rt_cfg then
@@ -327,26 +401,7 @@ local function run_scheduled_invocation(runtime, name, version, schedule, policy
         max_concurrency = tonumber(policy.max_concurrency) or 0,
         max_body_bytes = max_body_bytes,
         worker_pool = scheduler_worker_pool_context(policy),
-        trigger = (function()
-          local out = {
-            type = trigger,
-            every_seconds = tonumber(schedule.every_seconds) or nil,
-          }
-          if type(schedule.cron) == "string" and schedule.cron ~= "" then
-            out.cron = schedule.cron
-          end
-          if type(schedule.timezone) == "string" and schedule.timezone ~= "" and schedule.timezone:lower() ~= "local" then
-            out.timezone = schedule.timezone
-          end
-          if type(trigger_meta) == "table" then
-            for k, v in pairs(trigger_meta) do
-              if out[k] == nil then
-                out[k] = v
-              end
-            end
-          end
-          return out
-        end)(),
+        trigger = build_trigger_context(schedule, trigger, trigger_meta),
         user = type(schedule.context) == "table" and schedule.context or nil,
       },
     }
@@ -358,7 +413,7 @@ local function run_scheduled_invocation(runtime, name, version, schedule, policy
         event = event,
       })
     end
-    return client.call_unix(rt_cfg.socket, {
+    return call_external_runtime(runtime, rt_cfg, {
       fn = name,
       version = version,
       event = event,
@@ -385,9 +440,6 @@ local function run_scheduled_invocation(runtime, name, version, schedule, policy
       " mapped_status=", tostring(status),
       " mapped_msg=", tostring(message)
     )
-    if err_code == "connect_error" then
-      routes.set_runtime_health(runtime, false, err_msg)
-    end
     return status, message
   end
 
@@ -523,10 +575,7 @@ local function cron_field(raw, min_v, max_v, names, allow_sunday_7)
       base = trim(base)
       if base == "*" or base == "?" then
         for v = min_v, max_v, step_n do
-          local ok, err = add_value(v)
-          if not ok then
-            return nil, err
-          end
+          set[v] = true
         end
       else
         local a_raw, b_raw = base:match("^(.+)%-(.+)$")
@@ -1203,8 +1252,7 @@ local function tick_once()
               if retry_attempt ~= nil then
                 CACHE:delete(retry_attempt_key)
               end
-              retry_due = nil
-              retry_attempt = nil
+              retry_due, retry_attempt = nil, nil
             end
 
             if retry_due ~= nil then
@@ -1269,8 +1317,7 @@ local function tick_once()
               if retry_attempt ~= nil then
                 CACHE:delete(retry_attempt_key)
               end
-              retry_due = nil
-              retry_attempt = nil
+              retry_due, retry_attempt = nil, nil
             end
 
             if retry_due ~= nil then

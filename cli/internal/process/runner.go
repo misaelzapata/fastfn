@@ -32,7 +32,7 @@ func ensurePortAvailable(hostPort string) error {
 }
 
 func ensureSocketPathAvailable(socketPath string) error {
-	info, err := os.Stat(socketPath)
+	info, err := socketStatFn(socketPath)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
@@ -43,13 +43,13 @@ func ensureSocketPathAvailable(socketPath string) error {
 		return fmt.Errorf("runtime socket path exists but is not a unix socket: %s", socketPath)
 	}
 
-	conn, dialErr := net.DialTimeout("unix", socketPath, 200*time.Millisecond)
+	conn, dialErr := socketDialTimeoutFn("unix", socketPath, 200*time.Millisecond)
 	if dialErr == nil {
 		_ = conn.Close()
 		return fmt.Errorf("runtime socket already in use: %s", socketPath)
 	}
 
-	if rmErr := os.Remove(socketPath); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {
+	if rmErr := socketRemoveFn(socketPath); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {
 		return fmt.Errorf("failed to remove stale runtime socket %s: %w", socketPath, rmErr)
 	}
 	return nil
@@ -58,13 +58,54 @@ func ensureSocketPathAvailable(socketPath string) error {
 var nativeDefaultRuntimes = []string{"python", "node", "php", "lua"}
 
 var nativeRuntimeRequirements = map[string][]string{
-	"python": {"python3"},
+	"python": {"python"},
 	"node":   {"node"},
-	"php":    {"php"},
+	"php":    {"python", "php"},
 	"lua":    {},
-	"rust":   {"python3", "cargo"},
-	"go":     {"python3", "go"},
+	"rust":   {"python", "cargo"},
+	"go":     {"python", "go"},
 }
+
+type nativeServiceManager interface {
+	AddServiceWithOptions(name, command string, args []string, env []string, dir string, opts ServiceOptions)
+	StartAll() error
+	StopAll()
+	Done() <-chan struct{}
+}
+
+var (
+	socketStatFn             = os.Stat
+	socketDialTimeoutFn      = net.DialTimeout
+	socketRemoveFn           = os.Remove
+	checkDependenciesFn      = CheckDependencies
+	runtimeExtractFn         = runtime.Extract
+	generateNativeConfigFn   = GenerateNativeConfig
+	mkdirAllFn               = os.MkdirAll
+	chmodFn                  = os.Chmod
+	removeAllFn              = os.RemoveAll
+	lookPathFn               = exec.LookPath
+	startHotReloadWatcherFn  = StartHotReloadWatcher
+	ensurePortAvailableFn    = ensurePortAvailable
+	ensureSocketPathAvailFn  = ensureSocketPathAvailable
+	writeNativeSessionFn     = WriteNativeSession
+	clearNativeSessionForPID = ClearNativeSessionForPID
+	notifySignalFn           = signal.Notify
+	newNativeManagerFn       = func() nativeServiceManager { return NewManager() }
+	awaitNativeStopFn        = func(pm nativeServiceManager) error {
+		sigChan := make(chan os.Signal, 1)
+		notifySignalFn(sigChan, os.Interrupt, syscall.SIGTERM)
+		select {
+		case <-sigChan:
+			fmt.Println("\nStopping services...")
+			pm.StopAll()
+			return nil
+		case <-pm.Done():
+			fmt.Println("\nCritical service stopped; shutting down...")
+			pm.StopAll()
+			return fmt.Errorf("native services stopped unexpectedly; see logs above")
+		}
+	}
+)
 
 func parseRequestedRuntimes(raw string) []string {
 	seen := map[string]bool{}
@@ -116,10 +157,7 @@ func selectNativeRuntimes(rawRequested string, hasCommand map[string]bool) ([]st
 	}
 
 	if len(selected) == 0 {
-		if explicit {
-			return nil, warnings, fmt.Errorf("no compatible runtimes enabled (FN_RUNTIMES=%q)", rawRequested)
-		}
-		return nil, warnings, fmt.Errorf("no compatible runtimes available on this machine (need at least one of: python3, node, php, lua)")
+		return nil, warnings, fmt.Errorf("no compatible runtimes enabled (FN_RUNTIMES=%q)", rawRequested)
 	}
 
 	return selected, warnings, nil
@@ -133,16 +171,16 @@ func RunNative(cfg RunConfig) error {
 	}
 
 	// 1. Check Dependencies
-	if err := CheckDependencies(); err != nil {
+	if err := checkDependenciesFn(); err != nil {
 		return err
 	}
 
 	// 2. Extract Embedded Runtime Assets
-	runtimeDir, err := runtime.Extract()
+	runtimeDir, err := runtimeExtractFn()
 	if err != nil {
 		return fmt.Errorf("failed to extract runtime assets: %w", err)
 	}
-	defer os.RemoveAll(runtimeDir) // Cleanup temp dir on exit
+	defer removeAllFn(runtimeDir) // Cleanup temp dir on exit
 	fmt.Printf("Runtime extracted to: %s\n", runtimeDir)
 
 	hostPort := os.Getenv("FN_HOST_PORT")
@@ -153,12 +191,12 @@ func RunNative(cfg RunConfig) error {
 	if err != nil || portNum < 1 || portNum > 65535 {
 		return fmt.Errorf("invalid FN_HOST_PORT %q", hostPort)
 	}
-	if err := ensurePortAvailable(hostPort); err != nil {
+	if err := ensurePortAvailableFn(hostPort); err != nil {
 		return err
 	}
 
 	// 3. Generate Nginx Config
-	nginxConf, err := GenerateNativeConfig(runtimeDir, hostPort)
+	nginxConf, err := generateNativeConfigFn(runtimeDir, hostPort)
 	if err != nil {
 		return fmt.Errorf("failed to generate nginx config: %w", err)
 	}
@@ -169,88 +207,90 @@ func RunNative(cfg RunConfig) error {
 	// Native mode runs OpenResty directly on the host. Keep runtime temp dirs
 	// consistent with the Docker stack (/tmp/fastfn/*) and ensure the parent
 	// exists before OpenResty starts (it will create subdirectories itself).
-	if err := os.MkdirAll("/tmp/fastfn", 0o777); err != nil {
+	if err := mkdirAllFn("/tmp/fastfn", 0o777); err != nil {
 		return fmt.Errorf("failed to create /tmp/fastfn: %w", err)
 	}
-	_ = os.Chmod("/tmp/fastfn", 0o1777)
+	_ = chmodFn("/tmp/fastfn", 0o1777)
 
-	socketDir := filepath.Join(runtimeDir, "sockets")
-	if err := os.MkdirAll(socketDir, 0755); err != nil {
+	socketDir := filepath.Join("/tmp/fastfn", fmt.Sprintf("s-%d", os.Getpid()))
+	if err := removeAllFn(socketDir); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("failed to clear native socket dir %s: %w", socketDir, err)
+	}
+	if err := mkdirAllFn(socketDir, 0755); err != nil {
 		return err
 	}
-	socketByRuntime := map[string]string{
-		"python": filepath.Join(socketDir, "fn-python.sock"),
-		"node":   filepath.Join(socketDir, "fn-node.sock"),
-		"php":    filepath.Join(socketDir, "fn-php.sock"),
-		"rust":   filepath.Join(socketDir, "fn-rust.sock"),
-		"go":     filepath.Join(socketDir, "fn-go.sock"),
-	}
+	defer func() {
+		if err := removeAllFn(socketDir); err != nil && !errors.Is(err, os.ErrNotExist) {
+			fmt.Printf("Warning: failed to remove native socket dir %s: %v\n", socketDir, err)
+		}
+	}()
 
-	pythonCmd := "python3"
-	nodeCmd := "node"
-	phpCmd := "php"
-	goCmd := "go"
-	hasPython := false
-	hasNode := false
-	hasPHP := false
-	hasGo := false
-	hasCargo := false
-
-	if resolved, err := exec.LookPath("python3"); err == nil {
-		pythonCmd = resolved
-		hasPython = true
+	binaries := map[string]BinaryResolution{}
+	hasBinary := map[string]bool{
+		"lua": true,
 	}
-	if resolved, err := exec.LookPath("node"); err == nil {
-		nodeCmd = resolved
-		hasNode = true
+	resolveIfAvailable := func(key string) error {
+		resolution, err := ResolveConfiguredBinary(key)
+		if err != nil {
+			hasBinary[key] = false
+			if envVar, ok := BinaryEnvVarName(key); ok && strings.TrimSpace(os.Getenv(envVar)) != "" {
+				return err
+			}
+			return nil
+		}
+		binaries[key] = resolution
+		hasBinary[key] = true
+		return nil
 	}
-	if resolved, err := exec.LookPath("php"); err == nil {
-		phpCmd = resolved
-		hasPHP = true
-	}
-	if resolved, err := exec.LookPath("go"); err == nil {
-		goCmd = resolved
-		hasGo = true
-	}
-	if _, err := exec.LookPath("cargo"); err == nil {
-		hasCargo = true
+	for _, key := range []string{"openresty", "python", "node", "php", "composer", "cargo", "go"} {
+		if err := resolveIfAvailable(key); err != nil {
+			return err
+		}
 	}
 
 	rawRequested := strings.TrimSpace(os.Getenv("FN_RUNTIMES"))
-	runtimes, warnings, err := selectNativeRuntimes(rawRequested, map[string]bool{
-		"python3": hasPython,
-		"node":    hasNode,
-		"php":     hasPHP,
-		"lua":     true,
-		"cargo":   hasCargo,
-		"go":      hasGo,
-	})
+	runtimes, warnings, err := selectNativeRuntimes(rawRequested, hasBinary)
 	if err != nil {
 		return err
 	}
 	for _, message := range warnings {
 		fmt.Printf("Warning: %s\n", message)
 	}
+	runtimeDaemonCounts, daemonWarnings, err := resolveRuntimeDaemonCounts(runtimes, strings.TrimSpace(os.Getenv("FN_RUNTIME_DAEMONS")))
+	if err != nil {
+		return err
+	}
+	for _, message := range daemonWarnings {
+		fmt.Printf("Warning: %s\n", message)
+	}
+	runtimeSockets := runtimeSocketURIsByRuntime(socketDir, runtimes, runtimeDaemonCounts)
+	runtimeSocketMapJSON, err := encodeRuntimeSocketMap(runtimeSockets)
+	if err != nil {
+		return fmt.Errorf("failed to encode runtime socket map: %w", err)
+	}
 
 	selected := map[string]bool{}
 	for _, rt := range runtimes {
 		selected[rt] = true
 	}
-	for runtimeName, socketPath := range socketByRuntime {
+	for runtimeName, socketURIs := range runtimeSockets {
 		if !selected[runtimeName] {
 			continue
 		}
-		if err := ensureSocketPathAvailable(socketPath); err != nil {
-			return err
+		for _, socketURI := range socketURIs {
+			socketPath := strings.TrimPrefix(socketURI, "unix:")
+			if err := ensureSocketPathAvailFn(socketPath); err != nil {
+				return err
+			}
 		}
 	}
 
 	runtimesDir := filepath.Join(runtimeDir, "srv", "fn", "runtimes")
 	logsDir := filepath.Join(runtimeDir, "openresty", "logs")
-	if err := os.MkdirAll(logsDir, 0755); err != nil {
+	if err := mkdirAllFn(logsDir, 0755); err != nil {
 		return err
 	}
-	if err := WriteNativeSession(NativeSession{
+	if err := writeNativeSessionFn(NativeSession{
 		RuntimeDir: runtimeDir,
 		LogsDir:    logsDir,
 		LaunchPID:  os.Getpid(),
@@ -258,7 +298,7 @@ func RunNative(cfg RunConfig) error {
 		fmt.Printf("Warning: failed to write native session metadata: %v\n", err)
 	} else {
 		defer func() {
-			if err := ClearNativeSessionForPID(os.Getpid()); err != nil {
+			if err := clearNativeSessionForPID(os.Getpid()); err != nil {
 				fmt.Printf("Warning: failed to clear native session metadata: %v\n", err)
 			}
 		}()
@@ -276,24 +316,32 @@ func RunNative(cfg RunConfig) error {
 	baseEnv := []string{
 		"FN_FUNCTIONS_ROOT=" + cfg.FnDir,
 		"FN_SOCKET_BASE_DIR=" + socketDir,
-		"FN_PY_SOCKET=" + socketByRuntime["python"],
-		"FN_NODE_SOCKET=" + socketByRuntime["node"],
-		"FN_PHP_SOCKET=" + socketByRuntime["php"],
-		"FN_RUST_SOCKET=" + socketByRuntime["rust"],
-		"FN_GO_SOCKET=" + socketByRuntime["go"],
+		"FN_PY_SOCKET=" + strings.TrimPrefix(firstRuntimeSocket(runtimeSockets["python"]), "unix:"),
+		"FN_NODE_SOCKET=" + strings.TrimPrefix(firstRuntimeSocket(runtimeSockets["node"]), "unix:"),
+		"FN_PHP_SOCKET=" + strings.TrimPrefix(firstRuntimeSocket(runtimeSockets["php"]), "unix:"),
+		"FN_RUST_SOCKET=" + strings.TrimPrefix(firstRuntimeSocket(runtimeSockets["rust"]), "unix:"),
+		"FN_GO_SOCKET=" + strings.TrimPrefix(firstRuntimeSocket(runtimeSockets["go"]), "unix:"),
 		"FN_RUNTIMES=" + strings.Join(runtimes, ","),
+		"FN_RUNTIME_SOCKETS=" + runtimeSocketMapJSON,
 		"FN_HOT_RELOAD=" + reloadVal,
 		"FN_HOT_RELOAD_INTERVAL=2",
 		"FN_HTTP_VERIFY_TLS=" + verifyTLS,
 		"LUA_PATH=" + filepath.Join(runtimeDir, "openresty", "lua", "?.lua") + ";" + filepath.Join(runtimeDir, "openresty", "lua", "?", "init.lua") + ";;",
 		"LUA_CPATH=;;", // Default
 	}
+	for _, key := range []string{"python", "node", "php", "composer", "cargo", "go", "openresty"} {
+		resolution, ok := binaries[key]
+		if !ok {
+			continue
+		}
+		baseEnv = append(baseEnv, resolution.EnvVar+"="+resolution.Path)
+	}
 	if v := strings.TrimSpace(os.Getenv("FN_FORCE_URL")); v != "" {
 		baseEnv = append(baseEnv, "FN_FORCE_URL="+v)
 	}
 
 	// 5. Initialize Process Manager
-	pm := NewManager()
+	pm := newNativeManagerFn()
 
 	// 6. Register Services
 	runtimeServiceOptions := ServiceOptions{
@@ -305,7 +353,11 @@ func RunNative(cfg RunConfig) error {
 		},
 	}
 	openrestyDir := filepath.Join(runtimeDir, "openresty")
-	pm.AddServiceWithOptions("openresty", "openresty", []string{
+	openrestyCommand := BinaryConfiguredCommand("openresty")
+	if resolution, ok := binaries["openresty"]; ok {
+		openrestyCommand = resolution.Path
+	}
+	pm.AddServiceWithOptions("openresty", openrestyCommand, []string{
 		"-e", "/dev/stderr",
 		"-p", openrestyDir,
 		"-c", filepath.Base(nginxConf),
@@ -313,33 +365,49 @@ func RunNative(cfg RunConfig) error {
 	}, baseEnv, openrestyDir, runtimeServiceOptions)
 
 	if selected["python"] {
-		pm.AddServiceWithOptions("python", pythonCmd, []string{
-			filepath.Join(runtimesDir, "python-daemon.py"),
-		}, baseEnv, runtimesDir, runtimeServiceOptions)
+		for idx, socketURI := range runtimeSockets["python"] {
+			count := len(runtimeSockets["python"])
+			pm.AddServiceWithOptions(runtimeServiceName("python", idx+1, count), binaries["python"].Path, []string{
+				filepath.Join(runtimesDir, "python-daemon.py"),
+			}, runtimeServiceEnv(baseEnv, "python", socketURI, idx+1, count), runtimesDir, runtimeServiceOptions)
+		}
 	}
 
 	if selected["node"] {
-		pm.AddServiceWithOptions("node", nodeCmd, []string{
-			filepath.Join(runtimesDir, "node-daemon.js"),
-		}, baseEnv, runtimesDir, runtimeServiceOptions)
+		for idx, socketURI := range runtimeSockets["node"] {
+			count := len(runtimeSockets["node"])
+			pm.AddServiceWithOptions(runtimeServiceName("node", idx+1, count), binaries["node"].Path, []string{
+				filepath.Join(runtimesDir, "node-daemon.js"),
+			}, runtimeServiceEnv(baseEnv, "node", socketURI, idx+1, count), runtimesDir, runtimeServiceOptions)
+		}
 	}
 
 	if selected["php"] {
-		pm.AddServiceWithOptions("php", phpCmd, []string{
-			filepath.Join(runtimesDir, "php-daemon.py"),
-		}, baseEnv, runtimesDir, runtimeServiceOptions)
+		for idx, socketURI := range runtimeSockets["php"] {
+			count := len(runtimeSockets["php"])
+			pm.AddServiceWithOptions(runtimeServiceName("php", idx+1, count), binaries["python"].Path, []string{
+				filepath.Join(runtimesDir, "php-daemon.py"),
+			}, runtimeServiceEnv(baseEnv, "php", socketURI, idx+1, count), runtimesDir, runtimeServiceOptions)
+		}
 	}
 
 	if selected["rust"] {
-		pm.AddServiceWithOptions("rust", pythonCmd, []string{
-			filepath.Join(runtimesDir, "rust-daemon.py"),
-		}, baseEnv, runtimesDir, runtimeServiceOptions)
+		for idx, socketURI := range runtimeSockets["rust"] {
+			count := len(runtimeSockets["rust"])
+			pm.AddServiceWithOptions(runtimeServiceName("rust", idx+1, count), binaries["python"].Path, []string{
+				filepath.Join(runtimesDir, "rust-daemon.py"),
+			}, runtimeServiceEnv(baseEnv, "rust", socketURI, idx+1, count), runtimesDir, runtimeServiceOptions)
+		}
 	}
 
 	if selected["go"] {
-		pm.AddServiceWithOptions("go", pythonCmd, []string{
-			filepath.Join(runtimesDir, "go-daemon.py"),
-		}, append(baseEnv, "FN_GO_BIN="+goCmd), runtimesDir, runtimeServiceOptions)
+		for idx, socketURI := range runtimeSockets["go"] {
+			count := len(runtimeSockets["go"])
+			env := runtimeServiceEnv(baseEnv, "go", socketURI, idx+1, count)
+			pm.AddServiceWithOptions(runtimeServiceName("go", idx+1, count), binaries["python"].Path, []string{
+				filepath.Join(runtimesDir, "go-daemon.py"),
+			}, env, runtimesDir, runtimeServiceOptions)
+		}
 	}
 
 	// 7. Start All
@@ -351,7 +419,7 @@ func RunNative(cfg RunConfig) error {
 	// 7b. Optional Watcher (Hot Reload)
 	if cfg.Watch {
 		reloadURL := fmt.Sprintf("http://localhost:%s/_fn/reload", hostPort)
-		watcher, err := StartHotReloadWatcher(cfg.FnDir, reloadURL, func(format string, args ...interface{}) {
+		watcher, err := startHotReloadWatcherFn(cfg.FnDir, reloadURL, func(format string, args ...interface{}) {
 			fmt.Printf(format+"\n", args...)
 		})
 		if err == nil {
@@ -365,17 +433,5 @@ func RunNative(cfg RunConfig) error {
 	fmt.Printf("\nFastFN is running at http://localhost:%s\n", hostPort)
 	fmt.Println("Logs are streaming below. Press Ctrl+C to stop.")
 
-	// 8. Wait for Interrupt
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	select {
-	case <-sigChan:
-		fmt.Println("\nStopping services...")
-		pm.StopAll()
-		return nil
-	case <-pm.Done():
-		fmt.Println("\nCritical service stopped; shutting down...")
-		pm.StopAll()
-		return fmt.Errorf("native services stopped unexpectedly; see logs above")
-	}
+	return awaitNativeStopFn(pm)
 }

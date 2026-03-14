@@ -479,6 +479,63 @@ local function runtime_is_down(runtime, rt_cfg)
   return false
 end
 
+local function call_external_runtime(runtime, runtime_cfg, request_payload, timeout_ms)
+  local tried = {}
+  local get_sockets = type(routes.get_runtime_sockets) == "function"
+    and routes.get_runtime_sockets
+    or function(_runtime, cfg)
+      if type(cfg) == "table" and type(cfg.socket) == "string" and cfg.socket ~= "" then
+        return { cfg.socket }
+      end
+      return {}
+    end
+  local pick_socket = type(routes.pick_runtime_socket) == "function"
+    and routes.pick_runtime_socket
+    or function(_runtime, cfg)
+      if type(cfg) == "table" and type(cfg.socket) == "string" and cfg.socket ~= "" then
+        return cfg.socket, 1, "single"
+      end
+      return nil, nil, "single", "runtime unavailable"
+    end
+  local set_socket_health = type(routes.set_runtime_socket_health) == "function"
+    and routes.set_runtime_socket_health
+    or function() return true end
+  local sockets = get_sockets(runtime, runtime_cfg)
+  local attempts = 0
+  local max_attempts = #sockets > 1 and 2 or 1
+  local last_code, last_msg
+
+  while attempts < max_attempts do
+    local socket_uri, socket_index = pick_socket(runtime, runtime_cfg, tried)
+    if not socket_uri then
+      return nil, last_code or "connect_error", last_msg or "runtime unavailable"
+    end
+
+    local resp, err_code, err_msg = client.call_unix(socket_uri, request_payload, timeout_ms)
+    if resp then
+      set_socket_health(runtime, socket_index, socket_uri, true, "ok")
+      routes.set_runtime_health(runtime, true, "ok")
+      return resp, nil, nil
+    end
+
+    last_code, last_msg = err_code, err_msg
+    if err_code ~= "connect_error" then
+      return nil, err_code, err_msg
+    end
+
+    tried[socket_index] = true
+    set_socket_health(runtime, socket_index, socket_uri, false, err_msg or "connect_error")
+    local ok_rt, reason_rt = routes.check_runtime_health(runtime, runtime_cfg)
+    routes.set_runtime_health(runtime, ok_rt, ok_rt and (reason_rt or "ok") or reason_rt)
+    if not ok_rt then
+      return nil, err_code, err_msg
+    end
+    attempts = attempts + 1
+  end
+
+  return nil, last_code, last_msg
+end
+
 local function invoke_one(spec)
   local name = spec.name
   local runtime = spec.runtime
@@ -562,7 +619,7 @@ local function invoke_one(spec)
   if routes.runtime_is_in_process(runtime, runtime_cfg) then
     resp, err_code, err_msg = lua_runtime.call(request_payload)
   else
-    resp, err_code, err_msg = client.call_unix(runtime_cfg.socket, request_payload, timeout_ms)
+    resp, err_code, err_msg = call_external_runtime(runtime, runtime_cfg, request_payload, timeout_ms)
   end
 
   limits.release(CONC, fn_key)

@@ -3,13 +3,17 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"sort"
+	"strconv"
 	"strings"
 
+	"github.com/misaelzapata/fastfn/cli/internal/process"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 var cfgFile string
+var exitFn = os.Exit
 
 var rootCmd = &cobra.Command{
 	Use:   "fastfn",
@@ -46,7 +50,7 @@ Main commands:
 
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		os.Exit(1)
+		exitFn(1)
 	}
 }
 
@@ -77,7 +81,7 @@ func initConfig() {
 	if err := viper.ReadInConfig(); err != nil {
 		if cfgFile != "" {
 			fmt.Fprintf(os.Stderr, "Error: failed to read config file %q: %v\n", cfgFile, err)
-			os.Exit(1)
+			exitFn(1)
 		}
 	}
 }
@@ -97,6 +101,139 @@ func configuredFunctionsDir() string {
 
 func configuredPublicBaseURL() string {
 	return configuredString("public-base-url", "public_base_url", "publicBaseUrl")
+}
+
+func configuredRuntimeDaemons() (string, bool) {
+	if raw := configuredString("runtime-daemons", "runtime_daemons", "runtimeDaemons"); raw != "" {
+		return raw, true
+	}
+
+	for _, key := range []string{"runtime-daemons", "runtime_daemons", "runtimeDaemons"} {
+		raw := viper.Get(key)
+		if raw == nil {
+			continue
+		}
+		if value, ok := normalizeRuntimeDaemonConfigValue(raw); ok {
+			return value, true
+		}
+	}
+
+	for _, key := range []string{"runtime.daemons", "runtime-daemons.daemons"} {
+		raw := viper.Get(key)
+		if raw == nil {
+			continue
+		}
+		if value, ok := normalizeRuntimeDaemonConfigValue(raw); ok {
+			return value, true
+		}
+	}
+
+	return "", false
+}
+
+func configuredRuntimeBinaries() (map[string]string, bool) {
+	for _, key := range []string{"runtime-binaries", "runtime_binaries", "runtimeBinaries"} {
+		raw := viper.Get(key)
+		if raw == nil {
+			continue
+		}
+		if value, ok := process.NormalizeBinaryConfigValue(raw); ok {
+			return value, true
+		}
+	}
+
+	for _, key := range []string{"runtime.binaries", "runtime-binaries.binaries"} {
+		raw := viper.Get(key)
+		if raw == nil {
+			continue
+		}
+		if value, ok := process.NormalizeBinaryConfigValue(raw); ok {
+			return value, true
+		}
+	}
+
+	return nil, false
+}
+
+func normalizeRuntimeDaemonConfigValue(raw any) (string, bool) {
+	if raw == nil {
+		return "", false
+	}
+	if s, ok := raw.(string); ok {
+		value := strings.TrimSpace(s)
+		return value, value != ""
+	}
+
+	var source map[string]any
+	switch typed := raw.(type) {
+	case map[string]any:
+		source = typed
+	case map[any]any:
+		source = map[string]any{}
+		for key, value := range typed {
+			source[strings.TrimSpace(fmt.Sprint(key))] = value
+		}
+	default:
+		return "", false
+	}
+
+	if len(source) == 0 {
+		return "", false
+	}
+
+	order := []string{"node", "python", "php", "rust", "go", "lua"}
+	seen := map[string]bool{}
+	parts := make([]string, 0, len(source))
+	appendPart := func(runtimeName string) {
+		if seen[runtimeName] {
+			return
+		}
+		rawCount, ok := source[runtimeName]
+		if !ok {
+			return
+		}
+		var count int
+		switch value := rawCount.(type) {
+		case int:
+			count = value
+		case int64:
+			count = int(value)
+		case float64:
+			count = int(value)
+		case string:
+			parsed, err := strconv.Atoi(strings.TrimSpace(value))
+			if err != nil {
+				return
+			}
+			count = parsed
+		default:
+			return
+		}
+		if count < 1 {
+			return
+		}
+		seen[runtimeName] = true
+		parts = append(parts, fmt.Sprintf("%s=%d", runtimeName, count))
+	}
+
+	for _, runtimeName := range order {
+		appendPart(runtimeName)
+	}
+	extras := make([]string, 0)
+	for runtimeName := range source {
+		if !seen[runtimeName] {
+			extras = append(extras, runtimeName)
+		}
+	}
+	sort.Strings(extras)
+	for _, runtimeName := range extras {
+		appendPart(runtimeName)
+	}
+
+	if len(parts) == 0 {
+		return "", false
+	}
+	return strings.Join(parts, ","), true
 }
 
 func configuredBool(keys ...string) (bool, bool) {
@@ -161,6 +298,42 @@ func applyConfiguredForceURL(onApplied func(value bool)) {
 		_ = os.Setenv("FN_FORCE_URL", boolEnvValue(forceURL))
 		if onApplied != nil {
 			onApplied(forceURL)
+		}
+	}
+}
+
+func applyConfiguredRuntimeDaemons(onApplied func(value string)) {
+	if strings.TrimSpace(os.Getenv("FN_RUNTIME_DAEMONS")) != "" {
+		return
+	}
+	if value, ok := configuredRuntimeDaemons(); ok {
+		_ = os.Setenv("FN_RUNTIME_DAEMONS", value)
+		if onApplied != nil {
+			onApplied(value)
+		}
+	}
+}
+
+func applyConfiguredRuntimeBinaries(onApplied func(envVar, value string)) {
+	configured, ok := configuredRuntimeBinaries()
+	if !ok || len(configured) == 0 {
+		return
+	}
+
+	envVars := make([]string, 0, len(configured))
+	for envVar := range configured {
+		envVars = append(envVars, envVar)
+	}
+	sort.Strings(envVars)
+
+	for _, envVar := range envVars {
+		if strings.TrimSpace(os.Getenv(envVar)) != "" {
+			continue
+		}
+		value := configured[envVar]
+		_ = os.Setenv(envVar, value)
+		if onApplied != nil {
+			onApplied(envVar, value)
 		}
 	}
 }

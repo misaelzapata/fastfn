@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/misaelzapata/fastfn/cli/internal/process"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -80,6 +81,13 @@ type netDomainProber struct {
 	client *http.Client
 }
 
+type tlsProbeConn interface {
+	SetDeadline(t time.Time) error
+	HandshakeContext(ctx context.Context) error
+	ConnectionState() tls.ConnectionState
+	Close() error
+}
+
 var (
 	doctorJSON bool
 	doctorFix  bool
@@ -87,6 +95,23 @@ var (
 	doctorDomains        []string
 	doctorExpectedTarget string
 	doctorEnforceHTTPS   bool
+	doctorTLSPort        = "443"
+	doctorGOOS           = runtime.GOOS
+	doctorGOARCH         = runtime.GOARCH
+
+	runGeneralDoctorChecksFn = runGeneralDoctorChecks
+	printDoctorReportFn      = printDoctorReport
+	resolveDomainTargetsFn   = resolveDoctorDomainTargets
+	runDomainDoctorChecksFn  = runDomainDoctorChecks
+	newNetDomainProberFn     = newNetDomainProber
+	dialTLSProbeConnFn       = func(host string) (tlsProbeConn, error) {
+		addr := net.JoinHostPort(host, doctorTLSPort)
+		dialer := &net.Dialer{}
+		return tls.DialWithDialer(dialer, "tcp", addr, &tls.Config{
+			MinVersion: tls.VersionTLS12,
+			ServerName: host,
+		})
+	}
 )
 
 var doctorCmd = &cobra.Command{
@@ -104,8 +129,8 @@ Use 'fastfn doctor domains' for domain-specific checks (DNS/TLS/HTTP).`,
   fastfn doctor domains --domain api.example.com
   fastfn doctor domains --domain api.example.com --json`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		report := runGeneralDoctorChecks(doctorFix)
-		if err := printDoctorReport(report, doctorJSON); err != nil {
+		report := runGeneralDoctorChecksFn(doctorFix)
+		if err := printDoctorReportFn(report, doctorJSON); err != nil {
 			return err
 		}
 		if report.Summary.Fail > 0 {
@@ -133,12 +158,12 @@ Checks include:
   fastfn doctor domains --domain api.example.com --expected-target lb.example.net
   fastfn doctor domains --json`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		targets, err := resolveDoctorDomainTargets(doctorDomains, doctorExpectedTarget, doctorEnforceHTTPS)
+		targets, err := resolveDomainTargetsFn(doctorDomains, doctorExpectedTarget, doctorEnforceHTTPS)
 		if err != nil {
 			return err
 		}
-		report := runDomainDoctorChecks(context.Background(), targets, newNetDomainProber(8*time.Second))
-		if err := printDoctorReport(report, doctorJSON); err != nil {
+		report := runDomainDoctorChecksFn(context.Background(), targets, newNetDomainProberFn(8*time.Second))
+		if err := printDoctorReportFn(report, doctorJSON); err != nil {
 			return err
 		}
 		if report.Summary.Fail > 0 {
@@ -181,12 +206,7 @@ func (p *netDomainProber) LookupCNAME(ctx context.Context, host string) (string,
 }
 
 func (p *netDomainProber) TLSInfo(ctx context.Context, host string) (tlsProbeResult, error) {
-	addr := net.JoinHostPort(host, "443")
-	dialer := &net.Dialer{}
-	conn, err := tls.DialWithDialer(dialer, "tcp", addr, &tls.Config{
-		MinVersion: tls.VersionTLS12,
-		ServerName: host,
-	})
+	conn, err := dialTLSProbeConnFn(host)
 	if err != nil {
 		return tlsProbeResult{}, err
 	}
@@ -236,13 +256,13 @@ func runGeneralDoctorChecks(applyFix bool) doctorReport {
 	checks := make([]doctorCheck, 0, 12)
 	now := time.Now().UTC().Format(time.RFC3339)
 
-	checks = append(checks, checkExecutable("docker", []string{"--version"}, "docker.cli", "Docker CLI"))
-	checks = append(checks, checkExecutable("docker", []string{"compose", "version"}, "docker.compose", "Docker Compose plugin"))
+	checks = append(checks, checkConfiguredExecutable("docker", []string{"--version"}, "docker.cli", "Docker CLI"))
+	checks = append(checks, checkConfiguredExecutable("docker", []string{"compose", "version"}, "docker.compose", "Docker Compose plugin"))
 	checks = append(checks, checkDockerDaemon())
-	checks = append(checks, checkExecutable("python3", []string{"--version"}, "runtime.python", "Python runtime"))
-	checks = append(checks, checkExecutable("node", []string{"--version"}, "runtime.node", "Node runtime"))
-	checks = append(checks, checkExecutable("go", []string{"version"}, "runtime.go", "Go runtime"))
-	checks = append(checks, checkExecutable("openresty", []string{"-v"}, "runtime.openresty", "OpenResty runtime"))
+	checks = append(checks, checkConfiguredExecutable("python", []string{"--version"}, "runtime.python", "Python runtime"))
+	checks = append(checks, checkConfiguredExecutable("node", []string{"--version"}, "runtime.node", "Node runtime"))
+	checks = append(checks, checkConfiguredExecutable("go", []string{"version"}, "runtime.go", "Go runtime"))
+	checks = append(checks, checkConfiguredExecutable("openresty", []string{"-v"}, "runtime.openresty", "OpenResty runtime"))
 	checks = append(checks, checkPlatform())
 
 	configCheck, fixed := checkConfigFile(applyFix)
@@ -682,15 +702,15 @@ func statusPrefix(s doctorStatus) string {
 func installHintForBinary(bin string) string {
 	switch bin {
 	case "openresty":
-		if runtime.GOOS == "darwin" {
+		if doctorGOOS == "darwin" {
 			return "Install OpenResty (Homebrew: brew install openresty) and ensure it is in PATH"
 		}
-		if runtime.GOOS == "linux" {
+		if doctorGOOS == "linux" {
 			return "Install OpenResty and ensure it is in PATH (Homebrew/Linuxbrew: brew install openresty; apt install openresty; dnf install openresty; or OpenResty official repo packages)"
 		}
 		return "Install OpenResty and ensure it is in PATH"
 	case "docker":
-		switch runtime.GOOS {
+		switch doctorGOOS {
 		case "darwin":
 			return "Install Docker Desktop (Homebrew: brew install --cask docker) and ensure docker is in PATH"
 		case "linux":
@@ -736,15 +756,58 @@ func checkExecutable(bin string, versionArgs []string, id, label string) doctorC
 	}
 }
 
+func checkConfiguredExecutable(binaryKey string, versionArgs []string, id, label string) doctorCheck {
+	resolution, err := process.ResolveConfiguredBinary(binaryKey)
+	if err != nil {
+		command := process.BinaryConfiguredCommand(binaryKey)
+		envVar, _ := process.BinaryEnvVarName(binaryKey)
+		message := fmt.Sprintf("%s not found in PATH", label)
+		if envVar != "" && strings.TrimSpace(os.Getenv(envVar)) != "" {
+			message = fmt.Sprintf("%s override %s=%q is invalid", label, envVar, os.Getenv(envVar))
+		}
+		return doctorCheck{
+			ID:      id,
+			Status:  doctorStatusWarn,
+			Message: message,
+			Hint:    installHintForBinary(command),
+			Details: map[string]string{
+				"error": err.Error(),
+			},
+		}
+	}
+	cmd := exec.Command(resolution.Path, versionArgs...)
+	out, err := cmd.CombinedOutput()
+	version := strings.TrimSpace(string(out))
+	if version == "" {
+		version = "found at " + resolution.Path
+	}
+	status := doctorStatusOK
+	msg := fmt.Sprintf("%s available", label)
+	if err != nil {
+		status = doctorStatusWarn
+		msg = fmt.Sprintf("%s found but version probe failed", label)
+	}
+	return doctorCheck{
+		ID:      id,
+		Status:  status,
+		Message: msg,
+		Details: map[string]string{
+			"path":    resolution.Path,
+			"version": version,
+		},
+	}
+}
+
 func checkDockerDaemon() doctorCheck {
-	if _, err := exec.LookPath("docker"); err != nil {
+	dockerBin, err := process.ResolveConfiguredBinary("docker")
+	if err != nil {
 		return doctorCheck{
 			ID:      "docker.daemon",
 			Status:  doctorStatusWarn,
 			Message: "Docker daemon check skipped (docker CLI not found)",
 		}
 	}
-	cmd := exec.Command("docker", "info", "--format", "{{.ServerVersion}}")
+	cmd := exec.Command(dockerBin.Path, "info", "--format", "{{.ServerVersion}}")
 	out, err := cmd.CombinedOutput()
 	output := strings.TrimSpace(string(out))
 	lower := strings.ToLower(output)
@@ -773,19 +836,19 @@ func checkDockerDaemon() doctorCheck {
 }
 
 func checkPlatform() doctorCheck {
-	supported := (runtime.GOOS == "linux" || runtime.GOOS == "darwin") &&
-		(runtime.GOARCH == "amd64" || runtime.GOARCH == "arm64")
+	supported := (doctorGOOS == "linux" || doctorGOOS == "darwin") &&
+		(doctorGOARCH == "amd64" || doctorGOARCH == "arm64")
 	if supported {
 		return doctorCheck{
 			ID:      "system.platform",
 			Status:  doctorStatusOK,
-			Message: fmt.Sprintf("Platform supported (%s/%s)", runtime.GOOS, runtime.GOARCH),
+			Message: fmt.Sprintf("Platform supported (%s/%s)", doctorGOOS, doctorGOARCH),
 		}
 	}
 	return doctorCheck{
 		ID:      "system.platform",
 		Status:  doctorStatusWarn,
-		Message: fmt.Sprintf("Platform not in primary support matrix (%s/%s)", runtime.GOOS, runtime.GOARCH),
+		Message: fmt.Sprintf("Platform not in primary support matrix (%s/%s)", doctorGOOS, doctorGOARCH),
 		Hint:    "Preferred platforms: linux/darwin with amd64/arm64",
 	}
 }

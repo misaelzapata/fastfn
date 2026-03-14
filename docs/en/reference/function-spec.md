@@ -1,8 +1,8 @@
 # Function Specification
 
 
-> Verified status as of **March 10, 2026**.
-> Runtime note: FastFN auto-installs function-local dependencies from `requirements.txt` / `package.json`; host runtimes are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
+> Verified status as of **March 13, 2026**.
+> Runtime note: FastFN resolves dependencies and build steps per function: Python uses `requirements.txt`, Node uses `package.json`, PHP installs from `composer.json` when present, and Rust handlers are built with `cargo`. Host runtimes/tools are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
 ## Quick Start
 
 The easiest way to conform to this spec is using the CLI:
@@ -58,6 +58,39 @@ Common setup:
 
 In portable (Docker) mode, FastFN mounts your functions directory into the container.
 That internal container path is not part of the public API surface and is usually not needed.
+
+## Runtime process wiring
+
+Global runtime wiring lives outside `fn.config.json`.
+
+The main controls are:
+
+- `FN_RUNTIMES` to enable runtimes
+- `runtime-daemons` or `FN_RUNTIME_DAEMONS` to choose daemon counts per external runtime
+- `FN_RUNTIME_SOCKETS` to pass an explicit socket map
+- `runtime-binaries` or `FN_*_BIN` to choose the host executable used for each runtime or tool
+
+Important rules:
+
+- `lua` runs in-process, so daemon counts for `lua` are ignored.
+- `FN_RUNTIME_SOCKETS` can use either a string or an array per runtime.
+- If `FN_RUNTIME_SOCKETS` is set, it wins over generated sockets from `runtime-daemons`.
+- FastFN chooses one executable per binary key. If you run three Python daemons, all three use the same configured `FN_PYTHON_BIN`.
+
+Example:
+
+```json
+{
+  "runtime-daemons": {
+    "node": 3,
+    "python": 3
+  },
+  "runtime-binaries": {
+    "python": "python3.12",
+    "node": "node20"
+  }
+}
+```
 
 ## Recommended layout (file routes)
 
@@ -216,11 +249,12 @@ For cross-runtime parity, prefer explicit envelope responses in docs/examples.
 
 ## Dependency management (auto-install)
 
-FastFN installs dependencies **per function directory** by default, with autonomous inference for Python/Node.
+FastFN resolves dependencies or build steps **per function directory** by default, with autonomous inference for Python/Node.
 
 Resolution model:
 
-- Dependency files are function-local (`python/<fn>/requirements.txt`, `node/<fn>/package.json`, `php/<fn>/composer.json`).
+- Python/Node/PHP use function-local dependency files (`requirements.txt`, `package.json`, `composer.json`).
+- Rust handlers are built with `cargo` inside a per-function `.rust-build/` workspace.
 - FastFN does **not** scan repo root dependency files automatically.
 - For reusable shared installs across many functions, use packs via `shared_deps`.
 - Runtime writes transparent state to `<function_dir>/.fastfn-deps-state.json`.
@@ -284,10 +318,19 @@ Toggle:
 
 - `FN_AUTO_PHP_DEPS=0` disables Composer auto-install.
 
+### Rust (build step in this phase)
+
+Behavior:
+
+- FastFN builds Rust handlers with `cargo build --release`.
+- The runtime prepares a per-function `.rust-build/` workspace and compiles the handler there.
+- No import-based inference is performed for Rust in this phase.
+- Native mode requires `cargo` in `PATH`.
+
 ### Strict errors and transparency
 
 - Unresolved inferred imports (when strict mode is on) return actionable runtime errors.
-- Install failures include short actionable tails from pip/npm/composer output.
+- Install or build failures include short actionable tails from pip/npm/composer/cargo output.
 - Console API `GET /_fn/function` exposes `metadata.dependency_resolution` for current state.
 
 ```mermaid
@@ -298,7 +341,7 @@ flowchart LR
   C -- "Yes (Py/Node)" --> E["Infer imports and write manifest"]
   E --> D
   D --> F["Write .fastfn-deps-state.json + lock info"]
-  F --> G["Invoke handler"]
+  F --> G["Invoke handler / build Rust binary"]
 ```
 
 ### Shared dependency packs (`shared_deps`)
@@ -398,12 +441,62 @@ The `keep_warm` configuration instructs the runtime scheduler to periodically ve
 
 ### Worker Pool
 
-For runtimes with subprocess worker pools (Python and Node; PHP and Lua use runtime-native execution models), `worker_pool` configures the persistent subprocess pool.
+`worker_pool` is the simplest way to control one function without changing routes.
 
-- `enabled`: Use persistent workers instead of one-shot processes.
-- `max_workers`: Maximum number of subprocesses to spawn.
-- `idle_ttl_seconds`: How long a worker stays alive without requests.
-- `queue_timeout_ms`: How long to wait for a worker to become available before returning `overflow_status` (default 500).
+Important model detail:
+
+- `worker_pool` is **per function**.
+- `runtime-daemons` is **per runtime** and lives in `fastfn.json` or environment variables, not in `fn.config.json`.
+- OpenResty/Lua enforces `worker_pool.max_workers`, `max_queue`, and queue timeouts **before** the request enters the runtime.
+- After the request is admitted, the gateway selects a healthy runtime socket. If the runtime has more than one socket, selection is `round_robin`.
+
+Example:
+
+```json
+{
+  "worker_pool": {
+    "enabled": true,
+    "max_workers": 3,
+    "max_queue": 6,
+    "queue_timeout_ms": 5000,
+    "idle_ttl_seconds": 300,
+    "overflow_status": 429
+  }
+}
+```
+
+Core fields:
+
+- `enabled`: Turn pool-based execution on for this function.
+- `max_workers`: Maximum active executions admitted for this function.
+- `max_queue`: Extra queued requests allowed after all workers are busy.
+- `queue_timeout_ms`: How long a queued request can wait before returning `overflow_status`.
+- `idle_ttl_seconds`: How long idle workers stay around before cleanup.
+- `overflow_status`: Status to return on queue overflow or timeout (`429` or `503`).
+- `min_warm`: Keep some runtime workers pre-created when the runtime supports it.
+
+Current runtime behavior:
+
+| Runtime | Multi-daemon routing | Runtime-internal fan-out |
+|---|---|---|
+| Node | supported | also uses child workers inside `node-daemon.js` |
+| Python | supported | request handling still depends on the Python daemon behavior |
+| PHP | supported | runtime dispatch happens through the PHP launcher |
+| Rust | supported | runtime dispatch happens through the compiled binary launcher |
+| Lua | not applicable | runs in-process inside OpenResty |
+
+Observed native benchmark on **March 13, 2026** (`6` concurrent requests to a `200ms` sleep handler, local host, `1` vs `3` runtime daemons):
+
+- Node: `267.2ms` -> `232.4ms` (`13.0%` faster)
+- Python: `1281.9ms` -> `447.4ms` (`65.1%` faster)
+- PHP: `629.4ms` -> `862.5ms` (`37.0%` slower)
+- Rust: `384.6ms` -> `417.7ms` (`8.6%` slower)
+
+Raw artifact:
+
+- `tests/stress/results/2026-03-13-runtime-daemon-scaling-native.json`
+
+Use those numbers as a reminder to measure your own workload before enabling extra daemons everywhere.
 
 ### Invoke adapter (Beta)
 

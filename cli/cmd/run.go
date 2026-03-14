@@ -12,6 +12,10 @@ import (
 
 var runNativeMode bool
 var runForceURL bool
+var runProcessRunner = process.RunNative
+var runFatalf = log.Fatalf
+var runFatal = log.Fatal
+var runAbsFn = filepath.Abs
 
 func resolveRunTargetDir(args []string) string {
 	if len(args) > 0 {
@@ -43,6 +47,12 @@ At the moment, production mode is supported through --native.`,
 		applyConfiguredForceURL(func(forceURL bool) {
 			fmt.Printf("Using force-url from config: %t\n", forceURL)
 		})
+		applyConfiguredRuntimeDaemons(func(value string) {
+			fmt.Printf("Using runtime-daemons from config: %s\n", value)
+		})
+		applyConfiguredRuntimeBinaries(func(envVar, value string) {
+			fmt.Printf("Using runtime binary from config: %s=%s\n", envVar, value)
+		})
 		if runForceURL {
 			_ = os.Setenv("FN_FORCE_URL", "1")
 			fmt.Println("force-url enabled (will allow config/policy routes to override existing URLs)")
@@ -50,9 +60,9 @@ At the moment, production mode is supported through --native.`,
 
 		targetDir := resolveRunTargetDir(args)
 
-		absPath, err := filepath.Abs(targetDir)
+		absPath, err := runAbsFn(targetDir)
 		if err != nil {
-			log.Fatalf("Failed to resolve path: %v", err)
+			runFatalf("Failed to resolve path: %v", err)
 		}
 		if os.Getenv("FN_PUBLIC_BASE_URL") == "" {
 			if baseURL := configuredPublicBaseURL(); baseURL != "" {
@@ -61,24 +71,24 @@ At the moment, production mode is supported through --native.`,
 			}
 		}
 		if _, err := os.Stat(absPath); os.IsNotExist(err) {
-			log.Fatalf("Directory not found: %s", absPath)
+			runFatalf("Directory not found: %s", absPath)
 		}
 
 		if runNativeMode {
 			fmt.Println("Starting FastFN in PRODUCTION (Native) mode...")
 			fmt.Printf("Functions root: %s\n", absPath)
 
-			err := process.RunNative(process.RunConfig{
+			err := runProcessRunner(process.RunConfig{
 				FnDir:     absPath,
 				HotReload: false,
 				VerifyTLS: true,
 				Watch:     false,
 			})
 			if err != nil {
-				log.Fatalf("Native run failed: %v", err)
+				runFatalf("Native run failed: %v", err)
 			}
 		} else {
-			log.Fatal("Docker production mode currently requires building an image. Use --native to run bare metal production.")
+			runFatal("Docker production mode currently requires building an image. Use --native to run bare metal production.")
 		}
 	},
 }

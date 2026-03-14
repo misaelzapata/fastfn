@@ -236,7 +236,7 @@ end
 
 local function default_handler_template(runtime)
   if runtime == "python" then
-    return [[import json
+    local tpl = [[import json
 
 
 def handler(event):
@@ -247,9 +247,10 @@ def handler(event):
         "body": json.dumps({"query": query}, separators=(",", ":")),
     }
 ]]
+    return tpl
   end
   if runtime == "node" then
-    return [[exports.handler = async (event) => {
+    local tpl = [[exports.handler = async (event) => {
   const query = event.query || {};
   return {
     status: 200,
@@ -258,9 +259,10 @@ def handler(event):
   };
 };
 ]]
+    return tpl
   end
   if runtime == "php" then
-    return [[<?php
+    local tpl = [[<?php
 
 function handler(array $event): array
 {
@@ -272,9 +274,10 @@ function handler(array $event): array
     ];
 }
 ]]
+    return tpl
   end
   if runtime == "lua" then
-    return [[local cjson = require("cjson.safe")
+    local tpl = [[local cjson = require("cjson.safe")
 
 function handler(event)
     local query = (type(event) == "table" and event.query) or {}
@@ -285,9 +288,10 @@ function handler(event)
     }
 end
 ]]
+    return tpl
   end
   if runtime == "rust" then
-    return [[use serde_json::{json, Value};
+    local tpl = [[use serde_json::{json, Value};
 
 pub fn handler(event: Value) -> Value {
     let query = event.get("query").cloned().unwrap_or_else(|| json!({}));
@@ -298,9 +302,10 @@ pub fn handler(event: Value) -> Value {
     })
 }
 ]]
+    return tpl
   end
   if runtime == "go" then
-    return [[package main
+    local tpl = [[package main
 
 import "encoding/json"
 
@@ -322,6 +327,7 @@ func handler(event map[string]interface{}) map[string]interface{} {
     }
 }
 ]]
+    return tpl
   end
   return ""
 end
@@ -343,13 +349,6 @@ local function normalize_methods_for_create(raw)
     out = { "GET" }
   end
   return out
-end
-
-local function table_is_empty(tbl)
-  if type(tbl) ~= "table" then
-    return true
-  end
-  return next(tbl) == nil
 end
 
 local function env_enabled(name, default_value)
@@ -1496,8 +1495,6 @@ local function normalize_env_payload(payload)
         updates[k] = { value = v }
       elseif v == cjson.null then
         updates[k] = { delete = true }
-      elseif v == nil then
-        -- no-op
       else
         return nil, "env values must be string|number|boolean|null or {value,is_secret}"
       end
@@ -1559,11 +1556,29 @@ function M.catalog()
   for _, runtime in ipairs(sorted_keys(catalog.runtimes or {})) do
     local rt_cfg = (cfg.runtimes or {})[runtime] or {}
     local rt_src = (catalog.runtimes or {})[runtime] or { functions = {} }
+    local runtime_socket_statuses = type(routes.runtime_socket_statuses) == "function"
+      and routes.runtime_socket_statuses
+      or function(_runtime, cfg_value)
+        if type(cfg_value) == "table" and type(cfg_value.socket) == "string" and cfg_value.socket ~= "" then
+          return {
+            {
+              index = 1,
+              uri = cfg_value.socket,
+              up = nil,
+              ts = nil,
+              reason = nil,
+            },
+          }
+        end
+        return {}
+      end
 
     local rt_out = {
       socket = rt_cfg.socket,
+      sockets = runtime_socket_statuses(runtime, rt_cfg),
+      routing = rt_cfg.routing or ((type(rt_cfg.sockets) == "table" and #rt_cfg.sockets > 1) and "round_robin" or "single"),
       timeout_ms = rt_cfg.timeout_ms,
-      health = routes.runtime_status(runtime),
+      health = routes.runtime_status(runtime, rt_cfg),
       functions = {},
     }
 
@@ -1774,9 +1789,6 @@ function M.function_detail(runtime, name, version, include_code)
   local configured_mapped_routes = type(invoke.mapped_routes) == "table" and invoke.mapped_routes or {}
   local effective_mapped_routes = merge_unique_routes(configured_mapped_routes, mapped_public_routes)
   local effective_public_routes = merge_unique_routes(invoke.public_routes or {}, mapped_public_routes)
-  if #effective_public_routes == 0 then
-    effective_public_routes = { route }
-  end
   -- Keep invoke.mapped_routes as "configured routes" (from fn.config.json). The
   -- effective/public mappings are exposed separately to avoid mixing operator
   -- intent with current routing state.
@@ -2521,9 +2533,7 @@ function M.read_function_file(runtime, name, rel_path, version)
   if not target then return nil, terr end
 
   local abs = target.fn_dir .. "/" .. rel_path
-  if not path_is_under(target.fn_dir, abs) then
-    return nil, "path outside function directory"
-  end
+  if not path_is_under(target.fn_dir, abs) then return nil, "path outside function directory" end
   if is_symlink(abs) then
     return nil, "symlink not allowed"
   end
@@ -2561,9 +2571,7 @@ function M.write_function_file(runtime, name, rel_path, content, version)
   if not target then return nil, terr end
 
   local abs = target.fn_dir .. "/" .. rel_path
-  if not path_is_under(target.fn_dir, abs) then
-    return nil, "path outside function directory"
-  end
+  if not path_is_under(target.fn_dir, abs) then return nil, "path outside function directory" end
   if is_symlink(abs) then
     return nil, "symlink not allowed"
   end
@@ -2598,9 +2606,7 @@ function M.delete_function_file(runtime, name, rel_path, version)
   if not target then return nil, terr end
 
   local abs = target.fn_dir .. "/" .. rel_path
-  if not path_is_under(target.fn_dir, abs) then
-    return nil, "path outside function directory"
-  end
+  if not path_is_under(target.fn_dir, abs) then return nil, "path outside function directory" end
   if is_symlink(abs) then
     return nil, "symlink not allowed"
   end

@@ -72,6 +72,24 @@ fn main() {
 """
 
 
+def _resolve_command(env_name: str, default: str) -> str:
+    configured = str(os.environ.get(env_name, "")).strip()
+    if configured:
+        if "/" in configured or "\\" in configured:
+            candidate = Path(configured)
+            if candidate.is_file() and os.access(str(candidate), os.X_OK):
+                return str(candidate)
+            raise RuntimeError(f"{env_name} is not executable: {configured}")
+        resolved = shutil.which(configured)
+        if resolved:
+            return resolved
+        raise RuntimeError(f"{env_name} not found in PATH: {configured}")
+    resolved = shutil.which(default)
+    if resolved:
+        return resolved
+    raise RuntimeError(f"{default} not found in PATH")
+
+
 def _read_function_env(handler_path: Path) -> Dict[str, str]:
     env_path = handler_path.with_name("fn.env.json")
     if not env_path.is_file():
@@ -252,9 +270,7 @@ def _normalize_response(resp: Any) -> Dict[str, Any]:
 
 
 def _ensure_rust_binary(handler_path: Path) -> Path:
-    cargo = shutil.which("cargo")
-    if cargo is None:
-        raise RuntimeError("cargo not found in PATH")
+    cargo = _resolve_command("FN_CARGO_BIN", "cargo")
 
     cache_key = str(handler_path)
     source_mtime = handler_path.stat().st_mtime_ns
@@ -640,5 +656,4 @@ def main() -> None:
             threading.Thread(target=_serve_conn, args=(conn,), daemon=True).start()
 
 
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__": main()

@@ -1,8 +1,8 @@
 # Especificación de funciones
 
 
-> Estado verificado al **10 de marzo de 2026**.
-> Nota de runtime: FastFN auto-instala dependencias locales por función desde `requirements.txt` / `package.json`; en `fastfn dev --native` necesitas runtimes instalados en host, mientras que `fastfn dev` depende de Docker daemon activo.
+> Estado verificado al **13 de marzo de 2026**.
+> Nota de runtime: FastFN resuelve dependencias y build por función según el runtime: Python usa `requirements.txt`, Node usa `package.json`, PHP instala desde `composer.json` cuando existe, y Rust compila handlers con `cargo`. En `fastfn dev --native` necesitas runtimes y herramientas del host; `fastfn dev` depende de un daemon de Docker activo.
 ## Nombres y rutas
 
 - nombre (flat): `^[a-zA-Z0-9_-]+$`
@@ -56,6 +56,39 @@ Precedencia de runtime (cuando hay colisiones):
 
 - Si el mismo nombre existe en varios runtimes, `/<name>` usa el primer runtime en `FN_RUNTIMES`.
 - Si `FN_RUNTIMES` no está definido, usa orden alfabético de carpetas runtime.
+
+## Cableado de procesos runtime
+
+El cableado global de runtimes vive fuera de `fn.config.json`.
+
+Controles principales:
+
+- `FN_RUNTIMES` para habilitar runtimes
+- `runtime-daemons` o `FN_RUNTIME_DAEMONS` para definir counts por runtime externo
+- `FN_RUNTIME_SOCKETS` para pasar un mapa explícito de sockets
+- `runtime-binaries` o `FN_*_BIN` para elegir el ejecutable del host usado por cada runtime o herramienta
+
+Reglas importantes:
+
+- `lua` corre dentro de OpenResty, así que los counts para `lua` se ignoran.
+- `FN_RUNTIME_SOCKETS` acepta string o array por runtime.
+- Si defines `FN_RUNTIME_SOCKETS`, gana sobre los sockets generados desde `runtime-daemons`.
+- FastFN elige un ejecutable por clave. Si ejecutas tres daemons de Python, los tres usan el mismo `FN_PYTHON_BIN`.
+
+Ejemplo:
+
+```json
+{
+  "runtime-daemons": {
+    "node": 3,
+    "python": 3
+  },
+  "runtime-binaries": {
+    "python": "python3.12",
+    "node": "node20"
+  }
+}
+```
 
 ## Archivos de codigo
 
@@ -261,6 +294,74 @@ Notas:
 - Los configs por versión (por ejemplo `mi-fn/v2/fn.config.json`) no pueden \"tomar\" una URL existente por sí solos; usa `FN_FORCE_URL=1` si necesitas que una ruta versionada gane.
 - Override global: setea `FN_FORCE_URL=1` (o `fastfn dev --force-url`) para tratar todas las rutas config/policy como forced.
 
+### `keep_warm`
+
+La configuración `keep_warm` indica al scheduler que mantenga la función cargada y lista.
+
+- `enabled`: activa el scheduler de keep-warm.
+- `min_warm`: cantidad mínima a mantener caliente.
+- `ping_every_seconds`: intervalo entre heartbeats.
+- `idle_ttl_seconds`: cuánto tiempo puede quedar ociosa antes de enfriarse.
+
+### `worker_pool`
+
+`worker_pool` es la forma más simple de controlar una función sin cambiar sus rutas.
+
+Detalle importante del modelo:
+
+- `worker_pool` es **por función**.
+- `runtime-daemons` es **por runtime** y vive en `fastfn.json` o en variables de entorno, no en `fn.config.json`.
+- OpenResty/Lua aplica `worker_pool.max_workers`, `max_queue` y timeouts de cola **antes** de entrar al runtime.
+- Después de admitir la request, el gateway elige un socket sano del runtime. Si el runtime tiene más de un socket, la selección es `round_robin`.
+
+Ejemplo:
+
+```json
+{
+  "worker_pool": {
+    "enabled": true,
+    "max_workers": 3,
+    "max_queue": 6,
+    "queue_timeout_ms": 5000,
+    "idle_ttl_seconds": 300,
+    "overflow_status": 429
+  }
+}
+```
+
+Campos principales:
+
+- `enabled`: activa la ejecución con pool para esa función.
+- `max_workers`: máximo de ejecuciones activas admitidas para la función.
+- `max_queue`: requests extra permitidas en cola cuando todos los workers están ocupados.
+- `queue_timeout_ms`: cuánto puede esperar una request en cola antes de devolver `overflow_status`.
+- `idle_ttl_seconds`: cuánto tiempo permanecen vivos los workers ociosos antes de limpiarse.
+- `overflow_status`: estado de respuesta al desbordar cola o agotar espera (`429` o `503`).
+- `min_warm`: mantiene algunos workers ya creados cuando el runtime lo soporta.
+
+Comportamiento actual por runtime:
+
+| Runtime | Routing multi-daemon | Fan-out interno del runtime |
+|---|---|---|
+| Node | soportado | además usa workers hijos dentro de `node-daemon.js` |
+| Python | soportado | la ejecución sigue dependiendo del comportamiento del daemon Python |
+| PHP | soportado | el despacho sucede mediante el lanzador PHP |
+| Rust | soportado | el despacho sucede mediante el binario compilado |
+| Lua | no aplica | corre dentro de OpenResty |
+
+Benchmark native observado el **13 de marzo de 2026** (`6` requests concurrentes a un handler con `sleep(200ms)` en host local, `1` vs `3` runtime daemons):
+
+- Node: `267.2ms` -> `232.4ms` (`13.0%` más rápido)
+- Python: `1281.9ms` -> `447.4ms` (`65.1%` más rápido)
+- PHP: `629.4ms` -> `862.5ms` (`37.0%` más lento)
+- Rust: `384.6ms` -> `417.7ms` (`8.6%` más lento)
+
+Artefacto crudo:
+
+- `tests/stress/results/2026-03-13-runtime-daemon-scaling-native.json`
+
+La lectura práctica es simple: conviene medir tu propia carga antes de activar más daemons en todos los runtimes.
+
 ### `invoke.adapter` (Beta)
 
 Usa `invoke.adapter` cuando quieras portar handlers existentes con cambios mínimos.
@@ -292,11 +393,12 @@ Después el handler puede devolver `{ "proxy": { ... } }`. Ver el contrato compl
 
 ## Gestion de dependencias (auto-install + inferencia)
 
-FastFN instala dependencias por carpeta de funcion y agrega inferencia autonoma para Python/Node.
+FastFN resuelve dependencias o build por carpeta de función y agrega inferencia autónoma para Python/Node.
 
 Modelo de resolucion:
 
-- Cada funcion usa manifiestos locales (`requirements.txt`, `package.json`, `composer.json`).
+- Python, Node y PHP usan manifiestos locales por función (`requirements.txt`, `package.json`, `composer.json`).
+- Los handlers Rust se compilan con `cargo` dentro de un workspace `.rust-build/` por función.
 - FastFN no busca automaticamente dependencias en la raiz del repo.
 - Para reutilizacion entre muchas funciones, usa `shared_deps`.
 - El runtime deja trazabilidad en `<function_dir>/.fastfn-deps-state.json`.
@@ -352,10 +454,19 @@ Toggles:
 - No hay inferencia por imports en PHP en esta fase.
 - `FN_AUTO_PHP_DEPS=0` desactiva auto-install de Composer.
 
+### Rust (build en esta fase)
+
+Comportamiento:
+
+- FastFN compila handlers Rust con `cargo build --release`.
+- El runtime prepara un workspace `.rust-build/` por función y compila el handler allí.
+- No hay inferencia por imports para Rust en esta fase.
+- El modo native requiere `cargo` en `PATH`.
+
 ### Errores estrictos y transparencia
 
 - Si la inferencia no resuelve imports (con strict activo), la invocacion falla con error accionable.
-- Los fallos de install muestran un tail corto de pip/npm/composer para debug rapido.
+- Los fallos de install o build muestran un tail corto de pip/npm/composer/cargo para debug rapido.
 - `GET /_fn/function` expone `metadata.dependency_resolution`.
 
 ```mermaid
@@ -366,7 +477,7 @@ flowchart LR
   C -- "Si (Py/Node)" --> E["Inferir imports y escribir manifiesto"]
   E --> D
   D --> F["Escribir .fastfn-deps-state.json + lock info"]
-  F --> G["Ejecutar handler"]
+  F --> G["Ejecutar handler / compilar binario Rust"]
 ```
 
 ## Packs de dependencias compartidas (`shared_deps`)

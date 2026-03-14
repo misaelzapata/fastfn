@@ -1,39 +1,45 @@
 # Architecture
 
+> Verified status as of **March 13, 2026**.
+> Runtime note: FastFN resolves dependencies and build steps per function: Python uses `requirements.txt`, Node uses `package.json`, PHP installs from `composer.json` when present, and Rust handlers are built with `cargo`. Host runtimes and tools are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
 
-> Verified status as of **March 10, 2026**.
-> Runtime note: FastFN auto-installs function-local dependencies from `requirements.txt` / `package.json`; host runtimes are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
+## Quick View
+
+- Complexity: Advanced
+- Typical time: 20-35 minutes
+- Use this when: you want to understand where routing, queueing, socket selection, and runtime execution happen
+- Outcome: a practical model for debugging health, scaling, and request flow
+
 ## Design goals
 
-The platform optimizes for three things at once:
+FastFN keeps the platform simple in three ways:
 
-1. fast local development
-2. per-function operational control
-3. low operational complexity
+1. one HTTP edge
+2. filesystem-driven discovery
+3. per-function control without a large control plane
 
-That is why it keeps OpenResty as the single HTTP edge and uses language runtimes over Unix sockets.
+That is why OpenResty stays at the edge and language runtimes sit behind Unix sockets.
 
 ## Mental model
 
-FastFN optimizes for fast local development and low operational complexity by keeping OpenResty as the single HTTP edge.
-
 ```mermaid
-graph LR
-    Client((HTTP Client)) -->|Request| Gateway[OpenResty Gateway]
-    Gateway -->|Unix Socket| Runtime[Python/Node/PHP/Rust]
-    Runtime -->|Execute| Handler(Your Function)
-    Handler -->|Response| Runtime
-    Runtime -->|Unix Socket| Gateway
-    Gateway -->|Response| Client
+flowchart LR
+  A["HTTP client"] --> B["OpenResty gateway"]
+  B --> C["Route and policy checks"]
+  C --> D["Worker-pool admission"]
+  D --> E["Runtime socket selection"]
+  E --> F["Node / Python / PHP / Rust daemon"]
+  F --> G["Function handler"]
+  G --> F
+  F --> B
+  B --> A
 ```
 
-In Docker, everything runs in one `openresty` service, including runtime processes.
+In Docker mode, the same stack runs inside the `openresty` service. In native mode, the CLI starts OpenResty and the runtime daemons directly on the host.
 
-## Filesystem discovery (configurable)
+## Discovery and route map
 
-There is no static `routes.json`. Functions are discovered from a filesystem root (your "functions directory").
-
-Recommended convention: create a `functions/` directory at the repo root and point FastFN to it.
+FastFN does not keep a static `routes.json` as the source of truth. It discovers functions from a functions directory and builds the route map at runtime.
 
 Common ways to set the functions directory:
 
@@ -41,103 +47,101 @@ Common ways to set the functions directory:
 - `fastfn.json` -> `"functions-dir": "functions"`
 - `FN_FUNCTIONS_ROOT=/absolute/path/to/functions`
 
-Runtime list is also configurable:
+Runtime order is also configurable:
 
-- `FN_RUNTIMES` (CSV, e.g. `python,node,php,rust`)
+- `FN_RUNTIMES=python,node,php,rust`
 
-Socket mapping is configurable:
+If the same public route exists in more than one runtime, the first enabled runtime wins unless you explicitly force a takeover with config.
 
-- `FN_RUNTIME_SOCKETS` (JSON map runtime -> socket URI)
-- `FN_SOCKET_BASE_DIR` (base dir when map is not provided)
+## Runtime routing
 
-Route collision precedence:
+FastFN treats runtimes in two groups:
 
-- If the same function name exists in multiple runtimes, `/<name>` resolves to the first runtime in `FN_RUNTIMES`.
-- If `FN_RUNTIMES` is not set, it uses alphabetical order of runtime folders.
+- `lua` runs in-process inside OpenResty.
+- `node`, `python`, `php`, `rust`, and `go` run behind Unix sockets.
 
-## Per-function policy
+When a runtime has one daemon, the gateway uses one socket. When it has multiple daemons, the gateway keeps a socket list and selects a healthy socket with `round_robin`.
 
-`fn.config.json` can define:
+Configuration knobs:
 
-- `invoke.methods`
-- `timeout_ms`
-- `max_concurrency`
-- `max_body_bytes`
+- `runtime-daemons` or `FN_RUNTIME_DAEMONS` for daemon counts
+- `FN_RUNTIME_SOCKETS` for an explicit socket map
+- `FN_SOCKET_BASE_DIR` for generated socket locations
 
-This avoids rigid global behavior and keeps control near each function owner.
+Important rules:
 
-## Uniform runtime contract
+- `FN_RUNTIME_SOCKETS` wins over generated socket counts.
+- `lua` ignores daemon counts because it does not run as an external daemon.
+- Health is tracked per socket, not only per runtime.
+- `/_fn/health` exposes both the aggregate runtime health and the socket list.
 
-All runtimes share one protocol:
+## Concurrency knobs: what each one does
 
-- request: `{ fn, version, event }`
-- response: `{ status, headers, body }`
+FastFN has two different scaling layers and they solve different problems.
 
-That keeps the gateway language-agnostic.
+| Knob | Scope | Where it applies | What it does |
+| --- | --- | --- | --- |
+| `runtime-daemons` | global per runtime | startup wiring | adds more daemon processes and sockets for a runtime |
+| `worker_pool.*` | per function | gateway admission and queueing | limits active executions and queue length before the runtime call |
+| runtime internals | runtime-specific | inside each daemon | child workers, process reuse, build and install behavior |
 
-## Security model
+Practical reading:
 
-Built-in controls include:
+- Use `runtime-daemons` when you want more routing targets for a runtime.
+- Use `worker_pool` when you want per-function backpressure and queue control.
+- Measure both together on real traffic; they are complementary, not interchangeable.
 
-- path traversal protection
-- symlink escape prevention for code/config writes
-- secret masking (`fn.env.json` with `is_secret=true`) in the console
-- console permissions via flags (`ui/api/write/local_only`)
-- strict per-function filesystem sandbox enabled by default (`FN_STRICT_FS=1`)
+## Choosing binaries
 
-## Known tradeoffs
+In native mode, FastFN can choose the executable used for each runtime or tool through `runtime-binaries` or `FN_*_BIN` environment variables.
 
-- higher latency than pure embedded Lua for some workloads
-- filesystem discovery requires folder structure discipline
-- public auth is function-level by default (not centralized)
+Examples:
 
-The tradeoff is intentional: strong local velocity plus practical control.
+- `FN_PYTHON_BIN`
+- `FN_NODE_BIN`
+- `FN_PHP_BIN`
+- `FN_CARGO_BIN`
+- `FN_COMPOSER_BIN`
+- `FN_OPENRESTY_BIN`
 
-## Throughput model and scaling reality
+One important detail:
 
-FastFN throughput is the product of both layers:
+- FastFN chooses one executable per key.
+- If you run three Python daemons, all three use the same configured `FN_PYTHON_BIN`.
+- Multi-daemon routing is not a mixed-version runtime pool.
 
-- OpenResty/Nginx (network edge, connection handling, request parsing)
-- runtime execution capacity (Node/Python/PHP/Lua/Rust/Go workers and handler cost)
+## Health, failover, and errors
 
-Adding more workers can increase throughput, but only until the next bottleneck:
+Startup and request flow are designed to fail clearly:
 
-- CPU saturation
-- runtime dependency overhead (cold/warm behavior, package loading)
-- per-function limits (`max_concurrency`, `worker_pool.max_workers`, `worker_pool.max_queue`)
-- downstream I/O latency (DB, external APIs)
+- Native mode checks that the host port is free before boot.
+- Runtime socket paths are checked before startup and stale sockets are removed.
+- Health checks run per runtime and per socket.
+- If one socket goes down, the gateway can skip it and keep using healthy sockets.
+- If every socket for a runtime is down, requests fail with `503 runtime unavailable`.
 
-In other words: worker count helps when runtime capacity is the bottleneck, but does not bypass hard limits at the gateway, network, or external dependencies.
+When `include_debug_headers=true`, function responses can include:
 
-## Future work and technical debt
+- `X-Fn-Runtime-Routing`
+- `X-Fn-Runtime-Socket-Index`
 
-Current architecture is production-capable, but these are active optimization fronts:
+These are useful when you want to confirm that traffic is rotating across sockets.
 
-- adaptive worker-pool autosizing per function based on observed latency/error rates
-- better backpressure defaults (queue timeout and overflow strategy by traffic profile)
-- lower IPC overhead in hot paths (framing/serialization improvements)
-- stronger runtime parity for advanced pool behavior across all runtimes
-- clearer, first-class observability for queue wait time vs execution time
-- benchmark matrix standardization (same workload shape across runtimes, reproducible profiles)
+## Tradeoffs
 
-These are not blockers for normal usage; they are the next layer for higher percentile performance under burst traffic.
+This model is intentionally simple, but it is not magic:
 
-## Problem
+- More daemons can help CPU-bound or blocked runtimes, but they can also add overhead.
+- Queueing at the gateway improves control, not raw speed by itself.
+- Unix sockets keep the local stack predictable, but they still add a hop compared with in-process Lua.
 
-What operational or developer pain this topic solves.
+That is why FastFN publishes raw benchmark artifacts and recommends measuring your own workload before raising daemon counts across the board.
 
-## Mental Model
+## Related links
 
-How to reason about this feature in production-like environments.
-
-## Design Decisions
-
-- Why this behavior exists
-- Tradeoffs accepted
-- When to choose alternatives
-
-## See also
-
-- [Function Specification](../reference/function-spec.md)
-- [HTTP API Reference](../reference/http-api.md)
-- [Run and Test Checklist](../how-to/run-and-test.md)
+- [Function specification](../reference/function-spec.md)
+- [Global config](../reference/fastfn-config.md)
+- [HTTP API reference](../reference/http-api.md)
+- [Scale runtime daemons](../how-to/scale-runtime-daemons.md)
+- [Run and test](../how-to/run-and-test.md)
+- [Performance benchmarks](./performance-benchmarks.md)

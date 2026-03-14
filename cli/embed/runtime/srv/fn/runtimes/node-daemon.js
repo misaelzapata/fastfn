@@ -9,6 +9,7 @@ const { AsyncLocalStorage } = require("async_hooks");
 const SOCKET_PATH = process.env.FN_NODE_SOCKET || "/tmp/fastfn/fn-node.sock";
 const MAX_FRAME_BYTES = Number(process.env.FN_MAX_FRAME_BYTES || 2 * 1024 * 1024);
 const HOT_RELOAD = !["0", "false", "off", "no"].includes(String(process.env.FN_HOT_RELOAD || "1").toLowerCase());
+const NPM_BIN = String(process.env.FN_NPM_BIN || "npm");
 const AUTO_NODE_DEPS = !["0", "false", "off", "no"].includes(String(process.env.FN_AUTO_NODE_DEPS || "1").toLowerCase());
 const AUTO_INFER_NODE_DEPS = !["0", "false", "off", "no"].includes(String(process.env.FN_AUTO_INFER_NODE_DEPS || "1").toLowerCase());
 const AUTO_INFER_WRITE_MANIFEST = !["0", "false", "off", "no"].includes(String(process.env.FN_AUTO_INFER_WRITE_MANIFEST || "1").toLowerCase());
@@ -887,7 +888,7 @@ function ensureNodeDependenciesInDir(fnDir) {
   const mode = String((depsResolutionState.get(fnDir) || {}).mode || "manifest");
   logDepsEvent("deps_install_start", { runtime: "node", fn_dir: fnDir, mode });
 
-  const runNpm = (npmArgs) => childProcess.spawnSync("npm", npmArgs, {
+  const runNpm = (npmArgs) => childProcess.spawnSync(NPM_BIN, npmArgs, {
     cwd: fnDir,
     stdio: ["ignore", "pipe", "pipe"],
     timeout: 180000,
@@ -966,7 +967,7 @@ function runNpmAsync(fnDir, npmArgs, timeoutMs = 180000) {
   return new Promise((resolve) => {
     let stderr = "";
     let timedOut = false;
-    const child = childProcess.spawn("npm", npmArgs, {
+    const child = childProcess.spawn(NPM_BIN, npmArgs, {
       cwd: fnDir,
       stdio: ["ignore", "ignore", "pipe"],
     });
