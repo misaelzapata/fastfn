@@ -201,30 +201,28 @@ def test_run_php_handler_and_direct_request_paths() -> None:
     old_resolve = php_daemon._resolve_handler_path
     old_deps = php_daemon._ensure_composer_deps
     old_env = php_daemon._read_function_env
-    old_run = php_daemon._run_php_handler
+    old_run_prepared = php_daemon._run_prepared_request_persistent
     try:
         php_daemon._resolve_handler_path = lambda *_a, **_k: Path("/tmp/unit.php")
         php_daemon._ensure_composer_deps = lambda _p: None
         php_daemon._read_function_env = lambda _p: {"FN_ENV": "1", "UNIT_PROCESS_ENV": "yes"}
         seen = {}
-        previous_unit_env = os.environ.get("UNIT_PROCESS_ENV")
 
-        def fake_run(_path, event, timeout_ms):
+        def fake_run(_pool_key, _path, event, timeout_ms, settings):
             seen["event"] = event
             seen["timeout_ms"] = timeout_ms
-            seen["process_env"] = os.environ.get("UNIT_PROCESS_ENV")
+            seen["settings"] = settings
             return {"status": 200, "headers": {}, "body": "ok"}
 
-        php_daemon._run_php_handler = fake_run
+        php_daemon._run_prepared_request_persistent = fake_run
         resp = php_daemon._handle_request_direct(
             {"fn": "demo", "event": {"env": {"A": "2"}, "context": {"timeout_ms": 100}}}
         )
         assert resp["status"] == 200
         assert seen["event"]["env"]["A"] == "2"
         assert seen["event"]["env"]["FN_ENV"] == "1"
-        assert seen["process_env"] == "yes"
         assert seen["timeout_ms"] == 350
-        assert os.environ.get("UNIT_PROCESS_ENV") == previous_unit_env
+        assert seen["settings"]["max_workers"] == 1
 
         try:
             php_daemon._handle_request_direct({"fn": "", "event": {}})
@@ -236,7 +234,7 @@ def test_run_php_handler_and_direct_request_paths() -> None:
         php_daemon._resolve_handler_path = old_resolve
         php_daemon._ensure_composer_deps = old_deps
         php_daemon._read_function_env = old_env
-        php_daemon._run_php_handler = old_run
+        php_daemon._run_prepared_request_persistent = old_run_prepared
 
 
 def test_pool_and_serve_conn_paths() -> None:
@@ -265,8 +263,8 @@ def test_pool_and_serve_conn_paths() -> None:
 
     old_enabled = php_daemon.ENABLE_RUNTIME_WORKER_POOL
     old_direct = php_daemon._handle_request_direct
-    old_ensure_pool = php_daemon._ensure_runtime_pool
-    old_submit = php_daemon._submit_runtime_pool_request
+    old_prepare = php_daemon._prepare_request
+    old_run_prepared = php_daemon._run_prepared_request_persistent
     try:
         php_daemon._handle_request_direct = lambda _req: {"status": 200, "headers": {}, "body": "direct"}
         php_daemon.ENABLE_RUNTIME_WORKER_POOL = False
@@ -274,13 +272,8 @@ def test_pool_and_serve_conn_paths() -> None:
         assert direct_resp["body"] == "direct"
 
         php_daemon.ENABLE_RUNTIME_WORKER_POOL = True
-        php_daemon._ensure_runtime_pool = lambda *_a, **_k: {"executor": object()}
-
-        class SlowFuture:
-            def result(self, timeout=None):  # noqa: ARG002
-                raise FutureTimeoutError()
-
-        php_daemon._submit_runtime_pool_request = lambda *_a, **_k: SlowFuture()
+        php_daemon._prepare_request = lambda _req: (Path("/tmp/demo.php"), {}, 260)
+        php_daemon._run_prepared_request_persistent = lambda *_a, **_k: {"status": 504, "headers": {}, "body": "timeout"}
         timeout_resp = php_daemon._handle_request_with_pool(
             {"fn": "demo", "event": {"context": {"timeout_ms": 10, "worker_pool": {"enabled": True, "max_workers": 1}}}}
         )
@@ -288,8 +281,8 @@ def test_pool_and_serve_conn_paths() -> None:
     finally:
         php_daemon.ENABLE_RUNTIME_WORKER_POOL = old_enabled
         php_daemon._handle_request_direct = old_direct
-        php_daemon._ensure_runtime_pool = old_ensure_pool
-        php_daemon._submit_runtime_pool_request = old_submit
+        php_daemon._prepare_request = old_prepare
+        php_daemon._run_prepared_request_persistent = old_run_prepared
 
     old_read = php_daemon._read_frame
     old_handle = php_daemon._handle_request_with_pool
@@ -1021,7 +1014,7 @@ def test_php_worker_has_reflection_param_injection() -> None:
         "worker must check handler param count"
     assert "$params" in content, \
         "worker must extract params from event"
-    assert "handler($event, $params)" in content, \
+    assert "$handlerName($event, $params)" in content or "handler($event, $params)" in content, \
         "worker must pass params as second arg when handler accepts it"
 
 
@@ -1029,26 +1022,28 @@ def test_php_handle_request_passes_params_through() -> None:
     """Params in event should be passed through to the PHP handler."""
     old_resolve = php_daemon._resolve_handler_path
     old_env = php_daemon._read_function_env
-    old_run = php_daemon._run_php_handler
+    old_run_prepared = php_daemon._run_prepared_request_persistent
     seen = {}
     try:
         php_daemon._resolve_handler_path = lambda *_a, **_k: Path("/tmp/handler.php")
         php_daemon._read_function_env = lambda _p: {}
 
-        def fake_run(_handler_path, event, timeout_ms, **_kw):
+        def fake_run(_pool_key, _handler_path, event, timeout_ms, settings):
             seen["event"] = event
+            seen["settings"] = settings
             return {"status": 200, "headers": {}, "body": "ok"}
 
-        php_daemon._run_php_handler = fake_run
+        php_daemon._run_prepared_request_persistent = fake_run
         resp = php_daemon._handle_request_direct(
             {"fn": "demo", "event": {"params": {"id": "42"}}}
         )
         assert resp["status"] == 200
         assert seen["event"]["params"]["id"] == "42"
+        assert seen["settings"]["max_workers"] == 1
     finally:
         php_daemon._resolve_handler_path = old_resolve
         php_daemon._read_function_env = old_env
-        php_daemon._run_php_handler = old_run
+        php_daemon._run_prepared_request_persistent = old_run_prepared
 
 
 def main() -> None:

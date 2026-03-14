@@ -80,13 +80,20 @@ Raw artifact:
 - `tests/stress/results/2026-03-14-runtime-daemon-scaling-native.json`
 - `tests/stress/results/2026-03-14-runtime-daemon-scaling-docker.json`
 
+Follow-up check after removing per-request PHP process spawning:
+
+- PHP native quick check: `1 daemon = 802.2ms`, `3 daemons = 625.9ms`
+- improvement: `22.0%`
+- artifact: `tests/stress/results/2026-03-14-php-persistent-check.json`
+- practical meaning: the earlier native PHP regression no longer represents the current runtime path
+
 ## How to read these numbers
 
 This benchmark is useful because it shows real tradeoffs instead of one blanket story:
 
 - adding daemons helped Python strongly in both modes
 - adding daemons helped Node a little in both modes
-- PHP reacted differently between native and Docker
+- PHP originally reacted differently between native and Docker, but the follow-up run improved after removing per-request spawning inside the PHP daemon
 - Rust improved in both modes, but the Docker gain was small enough to treat as workload-dependent
 
 The practical conclusion is simple:
@@ -137,7 +144,8 @@ curl -sS http://127.0.0.1:8080/_fn/health | jq '.runtimes'
 
 - If one runtime looks much slower than expected, inspect `/_fn/health` first and confirm all sockets are up.
 - If results vary too much between runs, increase warmup and repeats.
-- If PHP or Rust get slower with more daemons, verify that the extra process overhead is not larger than the handler cost.
+- If Rust gets slower with more daemons, verify that the extra process overhead is not larger than the handler cost.
+- If PHP gets slower again, check first that the runtime is still using persistent PHP workers and not falling back to a one-shot execution path.
 - If Node or Python do not improve, confirm that the extra daemon count is really active in `/_fn/health`.
 
 ## Next step

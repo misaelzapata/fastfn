@@ -4,11 +4,16 @@ declare(strict_types=1);
 
 function emit_error(string $message, int $status = 500): void
 {
-    echo json_encode([
+    echo json_encode(error_response($message, $status), JSON_UNESCAPED_SLASHES);
+}
+
+function error_response(string $message, int $status = 500): array
+{
+    return [
         'status' => $status,
         'headers' => ['Content-Type' => 'application/json'],
         'body' => json_encode(['error' => $message], JSON_UNESCAPED_SLASHES),
-    ], JSON_UNESCAPED_SLASHES);
+    ];
 }
 
 function current_status_code(): int
@@ -243,6 +248,141 @@ function to_csv(mixed $value): string
     return csv_line([$value]);
 }
 
+function frame_read($stream): ?string
+{
+    $header = '';
+    while (strlen($header) < 4) {
+        $chunk = fread($stream, 4 - strlen($header));
+        if ($chunk === false || $chunk === '') {
+            return null;
+        }
+        $header .= $chunk;
+    }
+
+    $unpacked = unpack('Nlength', $header);
+    $length = is_array($unpacked) && array_key_exists('length', $unpacked) ? (int) $unpacked['length'] : 0;
+    if ($length <= 0) {
+        return null;
+    }
+
+    $payload = '';
+    while (strlen($payload) < $length) {
+        $chunk = fread($stream, $length - strlen($payload));
+        if ($chunk === false || $chunk === '') {
+            return null;
+        }
+        $payload .= $chunk;
+    }
+    return $payload;
+}
+
+function frame_write($stream, array $payload): void
+{
+    $encoded = json_encode($payload, JSON_UNESCAPED_SLASHES);
+    if (!is_string($encoded)) {
+        $encoded = json_encode(error_response('failed to encode runtime response', 500), JSON_UNESCAPED_SLASHES);
+        if (!is_string($encoded)) {
+            $encoded = '{"status":500,"headers":{"Content-Type":"application/json"},"body":"{\"error\":\"failed to encode runtime response\"}"}';
+        }
+    }
+    fwrite($stream, pack('N', strlen($encoded)) . $encoded);
+    fflush($stream);
+}
+
+function restore_runtime_env(array &$appliedEnv): void
+{
+    foreach ($appliedEnv as $key => $meta) {
+        if (!is_string($key) || !is_array($meta)) {
+            continue;
+        }
+        $present = ($meta['present'] ?? false) === true;
+        $value = isset($meta['value']) ? (string) $meta['value'] : '';
+        if ($present) {
+            putenv($key . '=' . $value);
+            $_ENV[$key] = $value;
+            $_SERVER[$key] = $value;
+        } else {
+            putenv($key);
+            unset($_ENV[$key], $_SERVER[$key]);
+        }
+    }
+    $appliedEnv = [];
+}
+
+function apply_runtime_env(array $rawEnv, array &$appliedEnv): void
+{
+    restore_runtime_env($appliedEnv);
+    foreach ($rawEnv as $key => $value) {
+        if (!is_string($key) || trim($key) === '') {
+            continue;
+        }
+        if (is_array($value) || is_object($value)) {
+            continue;
+        }
+        $current = getenv($key);
+        $appliedEnv[$key] = [
+            'present' => $current !== false,
+            'value' => $current !== false ? (string) $current : '',
+        ];
+        $stringValue = (string) $value;
+        putenv($key . '=' . $stringValue);
+        $_ENV[$key] = $stringValue;
+        $_SERVER[$key] = $stringValue;
+    }
+}
+
+function invoke_handler_file(string $handlerPath, array $event, int &$requestCounter): array
+{
+    $runtimeHeaders = [];
+    $runtimeStatus = 200;
+    header_remove();
+    http_response_code(200);
+    unset($GLOBALS['FASTFN_STATUS'], $GLOBALS['FASTFN_HEADERS']);
+
+    ob_start();
+    $requestCounter++;
+    $namespace = '__FastFnReq' . $requestCounter;
+
+    $loader = 'namespace ' . $namespace . '; require ' . var_export($handlerPath, true) . ';';
+    eval($loader);
+
+    $capturedOutput = (string) ob_get_clean();
+    $runtimeHeaders = array_merge(runtime_headers(), read_script_headers());
+    $runtimeStatus = read_script_status() ?? current_status_code();
+
+    $handlerName = $namespace . '\\handler';
+    $hasHandler = function_exists($handlerName);
+    if ($hasHandler) {
+        $params = isset($event['params']) && is_array($event['params']) ? $event['params'] : [];
+        $rf = new ReflectionFunction($handlerName);
+        $resp = $rf->getNumberOfParameters() > 1 ? $handlerName($event, $params) : $handlerName($event);
+        if (is_array($resp) && has_contract_shape($resp)) {
+            $normalized = normalize_explicit_response($resp, $runtimeHeaders);
+            if (empty($normalized['is_base64']) && $capturedOutput !== '') {
+                $body = $normalized['body'] ?? '';
+                if (!is_string($body) || $body === '') {
+                    $normalized = normalize_magic_response(
+                        $capturedOutput,
+                        (int) ($normalized['status'] ?? 200),
+                        $normalized['headers'] ?? $runtimeHeaders
+                    );
+                }
+            }
+            return $normalized;
+        }
+
+        $magicValue = $resp;
+        if (($magicValue === null || $magicValue === '') && $capturedOutput !== '') {
+            $magicValue = $capturedOutput;
+        } elseif (is_string($magicValue) && $capturedOutput !== '') {
+            $magicValue = $capturedOutput . $magicValue;
+        }
+        return normalize_magic_response($magicValue, $runtimeStatus, $runtimeHeaders);
+    }
+
+    return normalize_magic_response($capturedOutput, $runtimeStatus, $runtimeHeaders);
+}
+
 function normalize_magic_response(mixed $value, ?int $status = null, ?array $headers = null): array
 {
     $resolvedStatus = $status;
@@ -385,6 +525,34 @@ if (!is_string($handlerPath) || $handlerPath === '' || !is_file($handlerPath)) {
     exit(0);
 }
 
+if (getenv('_FASTFN_WORKER_MODE') === 'persistent') {
+    $requestCounter = 0;
+    $appliedEnv = [];
+    while (true) {
+        $payload = frame_read(STDIN);
+        if (!is_string($payload) || $payload === '') {
+            break;
+        }
+        $event = json_decode($payload, true);
+        if (!is_array($event)) {
+            $event = [];
+        }
+        try {
+            $rawEnv = isset($event['env']) && is_array($event['env']) ? $event['env'] : [];
+            apply_runtime_env($rawEnv, $appliedEnv);
+            $normalized = invoke_handler_file($handlerPath, $event, $requestCounter);
+        } catch (Throwable $e) {
+            while (ob_get_level() > 0) {
+                ob_end_clean();
+            }
+            $normalized = error_response($e->getMessage(), 500);
+        }
+        frame_write(STDOUT, $normalized);
+    }
+    restore_runtime_env($appliedEnv);
+    exit(0);
+}
+
 $raw = stream_get_contents(STDIN);
 $event = json_decode(is_string($raw) ? $raw : '', true);
 if (!is_array($event)) {
@@ -392,50 +560,12 @@ if (!is_array($event)) {
 }
 
 try {
-    header_remove();
-    http_response_code(200);
-    ob_start();
-
-    require $handlerPath;
-
-    $hasHandler = function_exists('handler');
-    $resp = null;
-    if ($hasHandler) {
-        $params = isset($event['params']) && is_array($event['params']) ? $event['params'] : [];
-        $rf = new ReflectionFunction('handler');
-        $resp = $rf->getNumberOfParameters() > 1 ? handler($event, $params) : handler($event);
-    }
-
-    $capturedOutput = (string) ob_get_clean();
-    $runtimeHeaders = array_merge(runtime_headers(), read_script_headers());
-    $runtimeStatus = read_script_status() ?? current_status_code();
-
-    if ($hasHandler) {
-        if (is_array($resp) && has_contract_shape($resp)) {
-            $normalized = normalize_explicit_response($resp, $runtimeHeaders);
-            if (empty($normalized['is_base64']) && $capturedOutput !== '') {
-                $body = $normalized['body'] ?? '';
-                if (!is_string($body) || $body === '') {
-                    $normalized = normalize_magic_response(
-                        $capturedOutput,
-                        (int) ($normalized['status'] ?? 200),
-                        $normalized['headers'] ?? $runtimeHeaders
-                    );
-                }
-            }
-        } else {
-            $magicValue = $resp;
-            if (($magicValue === null || $magicValue === '') && $capturedOutput !== '') {
-                $magicValue = $capturedOutput;
-            } elseif (is_string($magicValue) && $capturedOutput !== '') {
-                $magicValue = $capturedOutput . $magicValue;
-            }
-            $normalized = normalize_magic_response($magicValue, $runtimeStatus, $runtimeHeaders);
-        }
-    } else {
-        $normalized = normalize_magic_response($capturedOutput, $runtimeStatus, $runtimeHeaders);
-    }
-
+    $requestCounter = 0;
+    $appliedEnv = [];
+    $rawEnv = isset($event['env']) && is_array($event['env']) ? $event['env'] : [];
+    apply_runtime_env($rawEnv, $appliedEnv);
+    $normalized = invoke_handler_file($handlerPath, $event, $requestCounter);
+    restore_runtime_env($appliedEnv);
     echo json_encode($normalized, JSON_UNESCAPED_SLASHES);
 } catch (Throwable $e) {
     while (ob_get_level() > 0) {

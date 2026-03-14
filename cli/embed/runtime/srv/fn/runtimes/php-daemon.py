@@ -2,6 +2,7 @@
 import json
 import os
 import re
+import select
 import shutil
 import socket
 import stat
@@ -12,7 +13,7 @@ import time
 from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 SOCKET_PATH = os.environ.get("FN_PHP_SOCKET", "/tmp/fastfn/fn-php.sock")
 MAX_FRAME_BYTES = int(os.environ.get("FN_MAX_FRAME_BYTES", str(2 * 1024 * 1024)))
@@ -36,6 +37,9 @@ _COMPOSER_CACHE: Dict[str, str] = {}
 _RUNTIME_POOLS: Dict[str, Dict[str, Any]] = {}
 _RUNTIME_POOLS_LOCK = threading.Lock()
 _RUNTIME_POOL_REAPER_STARTED = False
+_PERSISTENT_RUNTIME_POOLS: Dict[str, Dict[str, Any]] = {}
+_PERSISTENT_RUNTIME_POOLS_LOCK = threading.Lock()
+_PERSISTENT_RUNTIME_POOL_REAPER_STARTED = False
 
 
 def _resolve_command(env_name: str, default: str) -> str:
@@ -388,6 +392,115 @@ def _run_php_handler(handler_path: Path, event: Dict[str, Any], timeout_ms: int)
     return result
 
 
+class _PersistentPhpWorker:
+    __slots__ = ("handler_path", "proc", "lock", "_dead")
+
+    def __init__(self, handler_path: Path):
+        php_bin = _resolve_command("FN_PHP_BIN", "php")
+        cmd = [php_bin, "-d", "display_errors=0", "-d", "log_errors=0"]
+        if STRICT_FS:
+            cmd.extend(["-d", f"open_basedir={_strict_open_basedir(handler_path.parent)}"])
+        cmd.extend([str(WORKER_FILE), str(handler_path)])
+
+        env = os.environ.copy()
+        env["FN_STRICT_FS"] = "1" if STRICT_FS else "0"
+        env["_FASTFN_WORKER_MODE"] = "persistent"
+
+        self.handler_path = handler_path
+        self.lock = threading.Lock()
+        self._dead = False
+        self.proc = subprocess.Popen(
+            cmd,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            bufsize=0,
+            cwd=str(handler_path.parent),
+            env=env,
+        )
+
+    @property
+    def alive(self) -> bool:
+        return not self._dead and self.proc.poll() is None
+
+    def send_request(self, event: Dict[str, Any], timeout_ms: int) -> Dict[str, Any]:
+        timeout_s = max(1.0, float(timeout_ms) / 1000.0)
+        payload = json.dumps(event, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+        with self.lock:
+            if not self.alive:
+                raise RuntimeError("worker process is dead")
+            if self.proc.stdin is None or self.proc.stdout is None:
+                self._mark_dead()
+                raise RuntimeError("worker pipes are unavailable")
+            try:
+                self.proc.stdin.write(struct.pack("!I", len(payload)))
+                self.proc.stdin.write(payload)
+                self.proc.stdin.flush()
+
+                stdout_fd = self.proc.stdout.fileno()
+                resp_header = self._read_exact(stdout_fd, 4, timeout_s)
+                if resp_header is None:
+                    self._mark_dead()
+                    raise RuntimeError("worker closed stdout")
+                (resp_len,) = struct.unpack("!I", resp_header)
+                if resp_len <= 0 or resp_len > MAX_FRAME_BYTES:
+                    self._mark_dead()
+                    raise RuntimeError("invalid worker frame length")
+                resp_payload = self._read_exact(stdout_fd, resp_len, timeout_s)
+                if resp_payload is None:
+                    self._mark_dead()
+                    raise RuntimeError("incomplete worker response")
+                parsed = json.loads(resp_payload.decode("utf-8"))
+                if not isinstance(parsed, dict):
+                    raise RuntimeError("worker response must be an object")
+                return parsed
+            except TimeoutError:
+                self._mark_dead()
+                raise
+            except (BrokenPipeError, OSError):
+                self._mark_dead()
+                raise RuntimeError("worker pipe broken")
+
+    def _read_exact(self, fd: int, size: int, timeout_s: float) -> Optional[bytes]:
+        data = bytearray()
+        deadline = time.monotonic() + timeout_s
+        while len(data) < size:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                self._mark_dead()
+                raise TimeoutError("php worker read timeout")
+            ready, _, _ = select.select([fd], [], [], min(remaining, 1.0))
+            if not ready:
+                continue
+            chunk = os.read(fd, size - len(data))
+            if not chunk:
+                return None
+            data.extend(chunk)
+        return bytes(data)
+
+    def _mark_dead(self) -> None:
+        self._dead = True
+        try:
+            self.proc.kill()
+        except Exception:
+            pass
+
+    def shutdown(self) -> None:
+        self._dead = True
+        try:
+            if self.proc.stdin is not None:
+                self.proc.stdin.close()
+        except Exception:
+            pass
+        try:
+            self.proc.wait(timeout=2.0)
+        except Exception:
+            try:
+                self.proc.kill()
+            except Exception:
+                pass
+
+
 def _error_response(message: str, status: int = 500) -> Dict[str, Any]:
     return {
         "status": status,
@@ -400,6 +513,28 @@ def _runtime_pool_key(fn_name: Any, version: Any) -> str:
     key_fn = fn_name if isinstance(fn_name, str) and fn_name else "unknown"
     key_ver = version if isinstance(version, str) and version else "default"
     return f"{key_fn}@{key_ver}"
+
+
+def _persistent_runtime_pool_key(fn_name: Any, version: Any, handler_path: Path) -> str:
+    return f"{_runtime_pool_key(fn_name, version)}::{_handler_signature(handler_path)}"
+
+
+def _handler_signature(handler_path: Path) -> str:
+    files = [
+        handler_path,
+        handler_path.with_name("fn.env.json"),
+        handler_path.parent / "composer.json",
+        handler_path.parent / "composer.lock",
+        WORKER_FILE,
+    ]
+    parts: list[str] = []
+    for path in files:
+        if path.is_file():
+            stat_info = path.stat()
+            parts.append(f"{path.name}:{stat_info.st_mtime_ns}:{stat_info.st_size}")
+        else:
+            parts.append(f"{path.name}:missing")
+    return "|".join(parts)
 
 
 def _normalize_worker_pool_settings(req: Dict[str, Any]) -> Dict[str, Any]:
@@ -456,6 +591,16 @@ def _shutdown_runtime_pool(pool: Dict[str, Any]) -> None:
         executor.shutdown(wait=False, cancel_futures=False)
 
 
+def _shutdown_persistent_runtime_pool(pool: Dict[str, Any]) -> None:
+    workers = pool.get("workers")
+    if not isinstance(workers, list):
+        return
+    for entry in list(workers):
+        worker = entry.get("worker") if isinstance(entry, dict) else None
+        if isinstance(worker, _PersistentPhpWorker):
+            worker.shutdown()
+
+
 def _start_runtime_pool_reaper() -> None:
     global _RUNTIME_POOL_REAPER_STARTED
     if _RUNTIME_POOL_REAPER_STARTED or RUNTIME_POOL_REAPER_INTERVAL_MS <= 0:
@@ -486,6 +631,36 @@ def _start_runtime_pool_reaper() -> None:
     threading.Thread(target=_run_reaper, name="fn-php-runtime-pool-reaper", daemon=True).start()
 
 
+def _start_persistent_runtime_pool_reaper() -> None:
+    global _PERSISTENT_RUNTIME_POOL_REAPER_STARTED
+    if _PERSISTENT_RUNTIME_POOL_REAPER_STARTED or RUNTIME_POOL_REAPER_INTERVAL_MS <= 0:
+        return
+    _PERSISTENT_RUNTIME_POOL_REAPER_STARTED = True
+
+    def _run_reaper() -> None:
+        interval_s = max(0.5, float(RUNTIME_POOL_REAPER_INTERVAL_MS) / 1000.0)
+        while True:
+            time.sleep(interval_s)
+            now = time.monotonic()
+            evicted: list[Dict[str, Any]] = []
+            with _PERSISTENT_RUNTIME_POOLS_LOCK:
+                for key, pool in list(_PERSISTENT_RUNTIME_POOLS.items()):
+                    pending = int(pool.get("pending") or 0)
+                    min_warm = int(pool.get("min_warm") or 0)
+                    idle_ttl_ms = int(pool.get("idle_ttl_ms") or RUNTIME_POOL_IDLE_TTL_MS)
+                    last_used = float(pool.get("last_used") or now)
+                    if pending > 0 or min_warm > 0:
+                        continue
+                    idle_for_ms = int((now - last_used) * 1000)
+                    if idle_for_ms >= idle_ttl_ms:
+                        evicted.append(pool)
+                        _PERSISTENT_RUNTIME_POOLS.pop(key, None)
+            for pool in evicted:
+                _shutdown_persistent_runtime_pool(pool)
+
+    threading.Thread(target=_run_reaper, name="fn-php-persistent-pool-reaper", daemon=True).start()
+
+
 def _warmup_runtime_pool(pool: Dict[str, Any]) -> None:
     target = int(pool.get("min_warm") or 0)
     if target <= 0:
@@ -503,6 +678,30 @@ def _warmup_runtime_pool(pool: Dict[str, Any]) -> None:
             fut.result(timeout=1.0)
         except Exception:
             continue
+
+
+def _create_persistent_runtime_worker(pool: Dict[str, Any]) -> Dict[str, Any]:
+    worker = _PersistentPhpWorker(pool["handler_path"])
+    return {
+        "worker": worker,
+        "busy": False,
+        "last_used": time.monotonic(),
+    }
+
+
+def _warmup_persistent_runtime_pool(pool: Dict[str, Any]) -> None:
+    target = int(pool.get("min_warm") or 0)
+    if target <= 0:
+        return
+    cond = pool.get("cond")
+    if not isinstance(cond, threading.Condition):
+        return
+    with cond:
+        workers = pool.get("workers")
+        if not isinstance(workers, list):
+            return
+        while len(workers) < target and len(workers) < int(pool.get("max_workers") or 1):
+            workers.append(_create_persistent_runtime_worker(pool))
 
 
 def _ensure_runtime_pool(pool_key: str, settings: Dict[str, Any]) -> Dict[str, Any]:
@@ -541,6 +740,116 @@ def _ensure_runtime_pool(pool_key: str, settings: Dict[str, Any]) -> Dict[str, A
     return pool
 
 
+def _ensure_persistent_runtime_pool(pool_key: str, handler_path: Path, settings: Dict[str, Any]) -> Dict[str, Any]:
+    stale: Optional[Dict[str, Any]] = None
+    with _PERSISTENT_RUNTIME_POOLS_LOCK:
+        existing = _PERSISTENT_RUNTIME_POOLS.get(pool_key)
+        max_workers = max(1, int(settings.get("max_workers") or 1))
+        min_warm = int(settings.get("min_warm") or 0)
+        if min_warm < 0:
+            min_warm = 0
+        if min_warm > max_workers:
+            min_warm = max_workers
+        idle_ttl_ms = int(settings.get("idle_ttl_ms") or RUNTIME_POOL_IDLE_TTL_MS)
+
+        if existing is not None and int(existing.get("max_workers") or 0) == max_workers:
+            existing["min_warm"] = min_warm
+            existing["idle_ttl_ms"] = idle_ttl_ms
+            existing["last_used"] = time.monotonic()
+            pool = existing
+        else:
+            if existing is not None:
+                stale = existing
+            pool = {
+                "handler_path": handler_path,
+                "max_workers": max_workers,
+                "min_warm": min_warm,
+                "idle_ttl_ms": idle_ttl_ms,
+                "workers": [],
+                "pending": 0,
+                "last_used": time.monotonic(),
+            }
+            lock = threading.Lock()
+            pool["lock"] = lock
+            pool["cond"] = threading.Condition(lock)
+            _PERSISTENT_RUNTIME_POOLS[pool_key] = pool
+
+    if stale is not None:
+        _shutdown_persistent_runtime_pool(stale)
+    _start_persistent_runtime_pool_reaper()
+    _warmup_persistent_runtime_pool(pool)
+    return pool
+
+
+def _checkout_persistent_runtime_worker(pool: Dict[str, Any], acquire_timeout_ms: int) -> Dict[str, Any]:
+    cond = pool.get("cond")
+    if not isinstance(cond, threading.Condition):
+        raise RuntimeError("invalid persistent runtime pool")
+    deadline = time.monotonic() + max(0.1, float(acquire_timeout_ms) / 1000.0)
+    stale_workers: list[_PersistentPhpWorker] = []
+    with cond:
+        workers = pool.get("workers")
+        if not isinstance(workers, list):
+            raise RuntimeError("invalid persistent runtime pool workers")
+        while True:
+            alive_workers: list[Dict[str, Any]] = []
+            for entry in workers:
+                worker = entry.get("worker") if isinstance(entry, dict) else None
+                if isinstance(worker, _PersistentPhpWorker) and worker.alive:
+                    alive_workers.append(entry)
+                elif isinstance(worker, _PersistentPhpWorker):
+                    stale_workers.append(worker)
+            workers[:] = alive_workers
+
+            for entry in workers:
+                if not bool(entry.get("busy")):
+                    entry["busy"] = True
+                    pool["last_used"] = time.monotonic()
+                    for worker in stale_workers:
+                        worker.shutdown()
+                    return entry
+
+            if len(workers) < int(pool.get("max_workers") or 1):
+                entry = _create_persistent_runtime_worker(pool)
+                entry["busy"] = True
+                workers.append(entry)
+                pool["last_used"] = time.monotonic()
+                for worker in stale_workers:
+                    worker.shutdown()
+                return entry
+
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("runtime worker timeout")
+            cond.wait(timeout=min(remaining, 0.2))
+    for worker in stale_workers:
+        worker.shutdown()
+
+
+def _release_persistent_runtime_worker(pool: Dict[str, Any], entry: Dict[str, Any], discard: bool = False) -> None:
+    cond = pool.get("cond")
+    if not isinstance(cond, threading.Condition):
+        return
+    stale: Optional[_PersistentPhpWorker] = None
+    with cond:
+        workers = pool.get("workers")
+        if not isinstance(workers, list):
+            return
+        if entry in workers:
+            worker = entry.get("worker")
+            if discard or not isinstance(worker, _PersistentPhpWorker) or not worker.alive:
+                workers.remove(entry)
+                if isinstance(worker, _PersistentPhpWorker):
+                    stale = worker
+            else:
+                entry["busy"] = False
+                entry["last_used"] = time.monotonic()
+            pool["last_used"] = time.monotonic()
+            cond.notify()
+    if stale is not None:
+        stale.shutdown()
+
+
 def _submit_runtime_pool_request(pool_key: str, pool: Dict[str, Any], req: Dict[str, Any]) -> Future[Dict[str, Any]]:
     executor = pool.get("executor")
     if not isinstance(executor, ThreadPoolExecutor):
@@ -564,7 +873,7 @@ def _submit_runtime_pool_request(pool_key: str, pool: Dict[str, Any], req: Dict[
     return future
 
 
-def _handle_request_direct(req: Dict[str, Any]) -> Dict[str, Any]:
+def _prepare_request(req: Dict[str, Any]) -> tuple[Path, Dict[str, Any], int]:
     fn_name = req.get("fn")
     version = req.get("version")
     event = req.get("event", {})
@@ -592,28 +901,67 @@ def _handle_request_direct(req: Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(value, (int, float)) and value > 0:
             timeout_ms = int(value) + 250
 
-    with _patched_process_env(event_with_env.get("env", {})):
-        return _run_php_handler(path, event_with_env, timeout_ms)
+    return path, event_with_env, timeout_ms
+
+
+def _run_prepared_request_persistent(
+    pool_key: str, handler_path: Path, event: Dict[str, Any], timeout_ms: int, settings: Dict[str, Any]
+) -> Dict[str, Any]:
+    pool = _ensure_persistent_runtime_pool(pool_key, handler_path, settings)
+    acquire_timeout_ms = int(settings.get("acquire_timeout_ms") or RUNTIME_POOL_ACQUIRE_TIMEOUT_MS)
+    with _PERSISTENT_RUNTIME_POOLS_LOCK:
+        current = _PERSISTENT_RUNTIME_POOLS.get(pool_key)
+        if current is pool:
+            current["pending"] = int(current.get("pending") or 0) + 1
+            current["last_used"] = time.monotonic()
+    entry: Optional[Dict[str, Any]] = None
+    try:
+        entry = _checkout_persistent_runtime_worker(pool, acquire_timeout_ms)
+        worker = entry.get("worker")
+        if not isinstance(worker, _PersistentPhpWorker):
+            raise RuntimeError("invalid persistent worker")
+        return _normalize_response(worker.send_request(event, timeout_ms))
+    except TimeoutError:
+        if entry is not None:
+            _release_persistent_runtime_worker(pool, entry, discard=True)
+            entry = None
+        return _error_response("php handler timeout", status=504)
+    except Exception as exc:  # noqa: BLE001
+        if entry is not None:
+            _release_persistent_runtime_worker(pool, entry, discard=True)
+            entry = None
+        return _error_response(str(exc), status=500)
+    finally:
+        if entry is not None:
+            _release_persistent_runtime_worker(pool, entry)
+        with _PERSISTENT_RUNTIME_POOLS_LOCK:
+            current = _PERSISTENT_RUNTIME_POOLS.get(pool_key)
+            if current is pool:
+                current["pending"] = max(0, int(current.get("pending") or 0) - 1)
+                current["last_used"] = time.monotonic()
+
+
+def _handle_request_direct(req: Dict[str, Any]) -> Dict[str, Any]:
+    fn_name = req.get("fn")
+    version = req.get("version")
+    path, event_with_env, timeout_ms = _prepare_request(req)
+    settings = {
+        "max_workers": 1,
+        "min_warm": 0,
+        "idle_ttl_ms": RUNTIME_POOL_IDLE_TTL_MS,
+        "acquire_timeout_ms": max(timeout_ms + 250, RUNTIME_POOL_ACQUIRE_TIMEOUT_MS, 100),
+    }
+    pool_key = _persistent_runtime_pool_key(fn_name, version, path)
+    return _run_prepared_request_persistent(pool_key, path, event_with_env, timeout_ms, settings)
 
 
 def _handle_request_with_pool(req: Dict[str, Any]) -> Dict[str, Any]:
     settings = _normalize_worker_pool_settings(req)
     if not ENABLE_RUNTIME_WORKER_POOL or not settings["enabled"] or settings["max_workers"] <= 0:
         return _handle_request_direct(req)
-
-    pool_key = _runtime_pool_key(req.get("fn"), req.get("version"))
-    pool = _ensure_runtime_pool(pool_key, settings)
-    future = _submit_runtime_pool_request(pool_key, pool, req)
-
-    timeout_ms = int(settings.get("request_timeout_ms") or 0)
-    wait_seconds = max(1.0, timeout_ms / 1000.0 + 0.5) if timeout_ms > 0 else max(
-        1.0, float(settings.get("acquire_timeout_ms") or RUNTIME_POOL_ACQUIRE_TIMEOUT_MS) / 1000.0
-    )
-
-    try:
-        return future.result(timeout=wait_seconds)
-    except FutureTimeoutError:
-        return _error_response("runtime worker timeout", status=504)
+    path, event_with_env, timeout_ms = _prepare_request(req)
+    pool_key = _persistent_runtime_pool_key(req.get("fn"), req.get("version"), path)
+    return _run_prepared_request_persistent(pool_key, path, event_with_env, timeout_ms, settings)
 
 
 def _ensure_socket_dir(path: str) -> None:
