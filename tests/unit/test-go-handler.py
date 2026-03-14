@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 import importlib.util
+import io
 import json
 import os
 import socket
 import struct
 import tempfile
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -181,6 +183,19 @@ def test_resolve_go_command_uses_fn_go_bin_override() -> None:
             os.environ["FN_GO_BIN"] = previous
 
 
+def test_emit_handler_logs_writes_prefixed_output() -> None:
+    stdout_buffer = io.StringIO()
+    stderr_buffer = io.StringIO()
+    with redirect_stdout(stdout_buffer), redirect_stderr(stderr_buffer):
+        go_daemon._emit_handler_logs(
+            {"fn": "hello", "version": "v2"},
+            {"stdout": "line one", "stderr": "warn one\nwarn two"},
+        )
+    assert "[fn:hello@v2 stdout] line one" in stdout_buffer.getvalue()
+    assert "[fn:hello@v2 stderr] warn one" in stderr_buffer.getvalue()
+    assert "[fn:hello@v2 stderr] warn two" in stderr_buffer.getvalue()
+
+
 def test_ensure_go_binary_reuses_disk_metadata() -> None:
     class Proc:
         def __init__(self, returncode=0, stdout="", stderr=""):
@@ -313,6 +328,7 @@ def main() -> None:
     test_prepare_socket_path_tolerates_stat_race()
     test_build_process_env_merges_without_mutating_global_env()
     test_resolve_go_command_uses_fn_go_bin_override()
+    test_emit_handler_logs_writes_prefixed_output()
     test_ensure_go_binary_reuses_disk_metadata()
     test_handle_request_sets_process_env_from_function_env()
     test_go_wrapper_merges_params_into_event()

@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 import importlib.util
+import io
 import json
 import sys
 import tempfile
 import time
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -1422,6 +1424,20 @@ def test_python_daemon_preserves_stdout_stderr():
     assert "stderr" not in norm2
 
 
+def test_python_daemon_emits_handler_logs() -> None:
+    daemon = PYTHON_DAEMON
+    stdout_buffer = io.StringIO()
+    stderr_buffer = io.StringIO()
+    with redirect_stdout(stdout_buffer), redirect_stderr(stderr_buffer):
+        daemon._emit_handler_logs(
+            {"fn": "hello", "version": "v2"},
+            {"stdout": "line one\nline two", "stderr": "warn one"},
+        )
+    assert "[fn:hello@v2 stdout] line one" in stdout_buffer.getvalue()
+    assert "[fn:hello@v2 stdout] line two" in stdout_buffer.getvalue()
+    assert "[fn:hello@v2 stderr] warn one" in stderr_buffer.getvalue()
+
+
 def test_python_worker_event_session_passthrough():
     """event.session should be accessible from handler."""
     worker = PYTHON_WORKER
@@ -1732,6 +1748,7 @@ def main():
     test_python_worker_captures_stderr()
     test_python_worker_no_stdout_when_silent()
     test_python_daemon_preserves_stdout_stderr()
+    test_python_daemon_emits_handler_logs()
     test_python_worker_event_session_passthrough()
     # Direct params injection
     test_python_rest_product_id_direct_param()

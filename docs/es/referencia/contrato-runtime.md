@@ -2,7 +2,7 @@
 
 
 > Estado verificado al **10 de marzo de 2026**.
-> Nota de runtime: FastFN auto-instala dependencias locales por función desde `requirements.txt` / `package.json`; en `fastfn dev --native` necesitas runtimes instalados en host, mientras que `fastfn dev` depende de Docker daemon activo.
+> Nota de runtime: FastFN resuelve dependencias y build por función según el runtime: Python usa `requirements.txt`, Node usa `package.json`, PHP instala desde `composer.json` cuando existe, y Rust compila handlers con `cargo`. En `fastfn dev --native` necesitas runtimes y herramientas del host; `fastfn dev` depende de un daemon de Docker activo.
 Este documento define exactamente que envia OpenResty al handler y que debe devolver el runtime.
 
 ## 1) Transporte interno
@@ -30,6 +30,7 @@ curl -sS 'http://127.0.0.1:8080/risk-score?email=user@example.com' \
 - query string -> `event.query`
 - headers -> `event.headers`
 - body raw (string) -> `event.body`
+- cookies parseadas -> `event.session`
 - IP/UA cliente -> `event.client`
 - metadata de gateway/politica -> `event.context`
 - env por funcion -> `event.env`
@@ -55,6 +56,11 @@ curl -sS 'http://127.0.0.1:8080/risk-score?email=user@example.com' \
       "cookie": "session_id=abc123"
     },
     "body": "",
+    "session": {
+      "id": "abc123",
+      "raw": "session_id=abc123",
+      "cookies": {"session_id": "abc123"}
+    },
     "client": {"ip": "127.0.0.1", "ua": "curl/8.7.1"},
     "context": {
       "request_id": "req-1770795478241-13-311866",
@@ -98,6 +104,10 @@ curl -sS 'http://127.0.0.1:8080/risk-score?email=user@example.com' \
 | `context.max_body_bytes` | `number` | politica | limite body aplicado |
 | `context.gateway.worker_pid` | `number` | OpenResty | pid worker |
 | `context.debug.enabled` | `boolean` | politica | debug headers habilitados |
+| `session` | `object` o `null` | gateway | cookies parseadas (ver abajo) |
+| `session.id` | `string` o `null` | gateway | session id auto-detectado |
+| `session.raw` | `string` | gateway | valor crudo de `Cookie` |
+| `session.cookies` | `object` | gateway | mapa key:value de cookies |
 | `context.user` | `object` o `null` | `/_fn/invoke` | contexto custom inyectado |
 | `env` | `object` | `fn.env.json` | variables por funcion/version |
 
@@ -120,7 +130,84 @@ El handler lo recibe en:
 - `event.context.user.trace_id`
 - `event.context.user.tenant`
 
-## 6) Response del runtime (obligatorio)
+## 6) `event.session` - parseo de cookies
+
+El gateway parsea automáticamente el header `Cookie` y lo expone como `event.session`. Si el request no trae `Cookie`, entonces `event.session` es `null`.
+
+### Forma
+
+```json
+{
+  "id": "abc123",
+  "raw": "session_id=abc123; theme=dark",
+  "cookies": {
+    "session_id": "abc123",
+    "theme": "dark"
+  }
+}
+```
+
+| Campo | Descripción |
+|---|---|
+| `id` | Identificador de sesión auto-detectado. Busca `session_id`, `sessionid` y `sid` en ese orden. |
+| `raw` | Valor crudo del header `Cookie` tal como lo envía el cliente. |
+| `cookies` | Mapa key:value con todas las cookies parseadas. |
+
+### Ejemplos de uso
+
+**Python:**
+
+```python
+def handler(event):
+    session = event.get("session") or {}
+    session_id = session.get("id")
+    theme = (session.get("cookies") or {}).get("theme", "light")
+    return {"status": 200, "body": f"session={session_id}, theme={theme}"}
+```
+
+**Node:**
+
+```js
+exports.handler = async (event) => {
+  const session = event.session || {};
+  const sessionId = session.id;
+  const theme = (session.cookies || {}).theme || "light";
+  return { status: 200, body: `session=${sessionId}, theme=${theme}` };
+};
+```
+
+**Lua:**
+
+```lua
+return function(event)
+  local session = event.session or {}
+  local sid = session.id
+  local theme = (session.cookies or {}).theme or "light"
+  return { status = 200, body = "session=" .. tostring(sid) .. ", theme=" .. theme }
+end
+```
+
+**Go:**
+
+```go
+package main
+
+import "fmt"
+
+func Handler(event map[string]interface{}) map[string]interface{} {
+    session, _ := event["session"].(map[string]interface{})
+    sid, _ := session["id"].(string)
+    cookies, _ := session["cookies"].(map[string]interface{})
+    theme, _ := cookies["theme"].(string)
+    if theme == "" { theme = "light" }
+    return map[string]interface{}{
+        "status": 200,
+        "body":   fmt.Sprintf("session=%s, theme=%s", sid, theme),
+    }
+}
+```
+
+## 7) Response del runtime (obligatorio)
 
 ### Texto/JSON
 
@@ -252,7 +339,7 @@ Seguridad:
 }
 ```
 
-## 7) Tipos de respuesta soportados
+## 8) Tipos de respuesta soportados
 
 - `application/json`
 - `text/html`
@@ -261,7 +348,62 @@ Seguridad:
 
 `/_fn/invoke` envuelve respuestas no-texto en base64 para mantener salida JSON estable.
 
-## 8) Modo estricto de filesystem (por defecto)
+## 9) Captura de stdout/stderr
+
+Todos los runtimes capturan salida del handler (`print()`, `console.log()`, `eprintln!()`, etc.) y la conservan junto a la respuesta. Esto sirve para debugging en consola, Quick Test y clientes externos que necesiten una señal corta.
+
+### Como funciona
+
+| Runtime | captura stdout | captura stderr |
+|---|---|---|
+| Python | `print()`, `sys.stdout.write()` | `sys.stderr.write()` |
+| Node | `console.log()`, `console.info()`, `console.debug()` | `console.error()`, `console.warn()` |
+| Lua | `print()` | — |
+| PHP | `echo`, `print` (stdout del subprocess) | `error_log()`, `fwrite(STDERR, ...)` (stderr del subprocess) |
+| Go | `fmt.Println()` (stdout del subprocess) | `fmt.Fprintln(os.Stderr, ...)` (stderr del subprocess) |
+| Rust | `println!()` (stdout del subprocess) | `eprintln!()` (stderr del subprocess) |
+
+### Campos en la respuesta interna
+
+Cuando existe salida capturada, el runtime agrega `stdout` y `stderr` al JSON interno:
+
+```json
+{
+  "status": 200,
+  "headers": {"Content-Type": "application/json"},
+  "body": "{\"ok\":true}",
+  "stdout": "debug: procesando request\nuser_id=42",
+  "stderr": "warning: campo deprecated"
+}
+```
+
+Si no hay salida, esos campos se omiten.
+
+### Headers de debug
+
+Cuando `context.debug.enabled` es `true`, el gateway expone esa salida como headers:
+
+- `X-Fn-Stdout` — stdout capturado, truncado a 4096 bytes
+- `X-Fn-Stderr` — stderr capturado, truncado a 4096 bytes
+
+Estos headers sirven para una inspeccion rapida desde un cliente externo, pero no son la salida completa.
+
+### Quick Test y consola
+
+El endpoint `/_fn/invoke` devuelve `stdout` y `stderr` completos en JSON. El panel Quick Test de la consola los muestra en secciones separadas.
+
+### Salida completa en logs
+
+Cuando ejecutas FastFN localmente, la salida capturada del handler tambien se escribe en logs del runtime con un prefijo por funcion:
+
+```text
+[python] [fn:hello@default stdout] {'query': {'id': '42'}}
+[python] [fn:hello@default stderr] warning: falta un campo opcional
+```
+
+Usa este camino cuando necesites la salida completa. Es mas facil de leer que los headers y no trunca payloads grandes.
+
+## 10) Modo estricto de filesystem (por defecto)
 
 `fastfn` ejecuta handlers con modo estricto de filesystem habilitado por defecto:
 

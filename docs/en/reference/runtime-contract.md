@@ -2,7 +2,7 @@
 
 
 > Verified status as of **March 10, 2026**.
-> Runtime note: FastFN auto-installs function-local dependencies from `requirements.txt` / `package.json`; host runtimes are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
+> Runtime note: FastFN resolves dependencies and build steps per function: Python uses `requirements.txt`, Node uses `package.json`, PHP installs from `composer.json` when present, and Rust handlers are built with `cargo`. Host runtimes/tools are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
 This document defines exactly what OpenResty sends to handlers and what runtimes must return.
 
 ## 1) Internal transport
@@ -386,9 +386,22 @@ When `context.debug.enabled` is `true`, the gateway exposes captured output as r
 - `X-Fn-Stdout` — captured stdout (truncated to 4096 bytes)
 - `X-Fn-Stderr` — captured stderr (truncated to 4096 bytes)
 
+These headers are useful for external clients that need a quick debug signal, but they are intentionally truncated. They are not the source of truth for full output.
+
 ### Quick Test
 
 The `/_fn/invoke` endpoint returns `stdout` and `stderr` in the response JSON. The console Quick Test panel displays these in collapsible sections.
+
+### Full output in logs
+
+When you run FastFN locally, captured handler output is also written to the runtime logs with a function prefix such as:
+
+```text
+[python] [fn:hello@default stdout] {'query': {'id': '42'}}
+[python] [fn:hello@default stderr] warning: missing optional field
+```
+
+Use this path when you need the full debug stream. It is easier to read than response headers and does not truncate large payloads.
 
 ### Example
 

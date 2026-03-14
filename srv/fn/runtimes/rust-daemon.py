@@ -14,6 +14,7 @@ from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError as Futur
 from contextlib import contextmanager
 import fcntl
 import hashlib
+import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -625,6 +626,25 @@ def _error_response(message: str, status: int = 500) -> Dict[str, Any]:
     }
 
 
+def _emit_handler_logs(req: Dict[str, Any], resp: Dict[str, Any]) -> None:
+    if not isinstance(resp, dict):
+        return
+    fn_name = req.get("fn") if isinstance(req, dict) else None
+    version = req.get("version") if isinstance(req, dict) else None
+    label = str(fn_name or "unknown")
+    version_label = str(version or "default")
+
+    stdout_value = resp.get("stdout")
+    if isinstance(stdout_value, str) and stdout_value != "":
+        for line in stdout_value.splitlines():
+            print(f"[fn:{label}@{version_label} stdout] {line}", flush=True)
+
+    stderr_value = resp.get("stderr")
+    if isinstance(stderr_value, str) and stderr_value != "":
+        for line in stderr_value.splitlines():
+            print(f"[fn:{label}@{version_label} stderr] {line}", file=sys.stderr, flush=True)
+
+
 def _runtime_pool_key(fn_name: Any, version: Any) -> str:
     key_fn = fn_name if isinstance(fn_name, str) and fn_name else "unknown"
     key_ver = version if isinstance(version, str) and version else "default"
@@ -1102,6 +1122,7 @@ def _prepare_socket_path(path: str) -> None:
 
 def _serve_conn(conn: socket.socket) -> None:
     with conn:
+        req: Dict[str, Any] = {}
         try:
             req = _read_frame(conn)
             resp = _handle_request_with_pool(req)
@@ -1112,6 +1133,7 @@ def _serve_conn(conn: socket.socket) -> None:
         except Exception as exc:  # noqa: BLE001
             resp = _error_response(str(exc), status=500)
 
+        _emit_handler_logs(req, resp)
         try:
             _write_frame(conn, resp)
         except Exception:

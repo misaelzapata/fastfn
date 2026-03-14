@@ -2,12 +2,12 @@
 
 
 > Estado verificado al **10 de marzo de 2026**.
-> Nota de runtime: FastFN auto-instala dependencias locales por función desde `requirements.txt` / `package.json`; en `fastfn dev --native` necesitas runtimes instalados en host, mientras que `fastfn dev` depende de Docker daemon activo.
-## Ficha rapida
+> Nota de runtime: FastFN resuelve dependencias y build por función según el runtime: Python usa `requirements.txt`, Node usa `package.json`, PHP instala desde `composer.json` cuando existe, y Rust compila handlers con `cargo`. En `fastfn dev --native` necesitas runtimes y herramientas del host; `fastfn dev` depende de un daemon de Docker activo.
+## Vista rápida
 
 - Complejidad: Intermedia
 - Tiempo tipico: 20-40 minutos
-- Usala cuando: necesitas validar plataforma completa en local o CI
+- Úsala cuando: necesitas validar la plataforma completa en local o CI
 - Resultado: salud, ruteo, OpenAPI y tests quedan verificados
 
 
@@ -132,6 +132,8 @@ Detalles:
 
 - [Config fastfn.json](../referencia/config-fastfn.md)
 - [Especificacion de funciones](../referencia/especificacion-funciones.md)
+- [Zero-config routing](./zero-config-routing.md)
+- [Plomería runtime/plataforma](./plomeria-runtime-plataforma.md)
 
 ## Etapa 5: suites de regresion
 
@@ -174,6 +176,8 @@ Siguiente paso para hardening:
 
 - [Desplegar a produccion](./desplegar-a-produccion.md)
 - [Checklist de seguridad](./checklist-seguridad-produccion.md)
+- [Patrones de acceso a datos](./patrones-de-acceso-a-datos.md)
+- [Estructura app grande](./estructura-app-grande.md)
 
 ## Diagrama de Flujo
 
@@ -236,3 +240,42 @@ Preferir seams en:
 3. probar endpoint con curl verbose (`-i -v`)
 4. inspeccionar logs runtime por lenguaje
 5. aislar funcion minima reproducible
+
+### Leer salida de debug del handler
+
+Para una funcion como:
+
+```python
+def handler(event):
+    print(event)
+    return {"status": 200, "body": "Hello"}
+```
+
+usa estas reglas:
+
+- terminal de `fastfn dev`: `stdout`/`stderr` completos, con prefijo por funcion
+- `X-Fn-Stdout` / `X-Fn-Stderr`: utiles desde clientes externos, pero truncados
+- `/_fn/invoke`: `stdout` / `stderr` completos en JSON para flujos de consola/admin
+
+Ejemplo de linea en logs:
+
+```text
+[python] [fn:hello@default stdout] {'query': {'id': '42'}}
+```
+
+Si haces debugging desde otra app, usa headers para una verificacion rapida y los logs runtime para la salida completa.
+
+## Siguiente paso
+
+Continúa con [Desplegar a producción](./desplegar-a-produccion.md) cuando este checklist esté en verde de forma consistente en local y CI.
+
+## Enlaces relacionados
+
+- [Desplegar a producción](./desplegar-a-produccion.md)
+- [Checklist de seguridad](./checklist-seguridad-produccion.md)
+- [Zero-config routing](./zero-config-routing.md)
+- [Plomería runtime/plataforma](./plomeria-runtime-plataforma.md)
+- [Referencia API HTTP](../referencia/api-http.md)
+- [Especificación de funciones](../referencia/especificacion-funciones.md)
+- [Arquitectura](../explicacion/arquitectura.md)
+- [Obtener ayuda](./obtener-ayuda.md)

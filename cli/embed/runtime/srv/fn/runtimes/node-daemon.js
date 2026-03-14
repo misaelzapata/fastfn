@@ -2518,6 +2518,7 @@ function parseFrames(socket, onFrame) {
 
       Promise.resolve(onFrame(req))
         .then((resp) => {
+          emitHandlerLogs(req, resp);
           if (resp && typeof resp.status === "number" && resp.status >= 400) {
             let body = "";
             if (typeof resp.body === "string") {
@@ -2563,6 +2564,26 @@ function parseFrames(socket, onFrame) {
         });
     }
   });
+}
+
+function emitHandlerLogs(req, resp) {
+  if (!resp || typeof resp !== "object") return;
+  const fnName = req && req.fn ? String(req.fn) : "unknown";
+  const version = req && req.version ? String(req.version) : "default";
+
+  const stdout = typeof resp.stdout === "string" ? resp.stdout : "";
+  if (stdout) {
+    for (const line of stdout.split(/\r?\n/)) {
+      process.stdout.write(`[fn:${fnName}@${version} stdout] ${line}\n`);
+    }
+  }
+
+  const stderr = typeof resp.stderr === "string" ? resp.stderr : "";
+  if (stderr) {
+    for (const line of stderr.split(/\r?\n/)) {
+      process.stderr.write(`[fn:${fnName}@${version} stderr] ${line}\n`);
+    }
+  }
 }
 
 function main() {

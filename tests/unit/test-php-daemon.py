@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import importlib.util
+import io
 import json
 import os
 import socket
@@ -7,6 +8,7 @@ import stat
 import struct
 import tempfile
 from concurrent.futures import Future, TimeoutError as FutureTimeoutError
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -805,6 +807,17 @@ def test_additional_edge_branches() -> None:
         assert out.get("stderr") == "warn"
     finally:
         php_daemon.subprocess.run = old_run
+
+    stdout_buffer = io.StringIO()
+    stderr_buffer = io.StringIO()
+    with redirect_stdout(stdout_buffer), redirect_stderr(stderr_buffer):
+        php_daemon._emit_handler_logs(
+            {"fn": "hello", "version": "v2"},
+            {"stdout": "line one", "stderr": "warn one\nwarn two"},
+        )
+    assert "[fn:hello@v2 stdout] line one" in stdout_buffer.getvalue()
+    assert "[fn:hello@v2 stderr] warn one" in stderr_buffer.getvalue()
+    assert "[fn:hello@v2 stderr] warn two" in stderr_buffer.getvalue()
 
     # _normalize_worker_pool_settings acquire_timeout floor branch.
     old_acquire = php_daemon.RUNTIME_POOL_ACQUIRE_TIMEOUT_MS

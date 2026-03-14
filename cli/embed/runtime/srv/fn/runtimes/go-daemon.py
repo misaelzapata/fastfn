@@ -12,6 +12,7 @@ import threading
 import time
 import fcntl
 import hashlib
+import sys
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
@@ -307,6 +308,25 @@ def _write_frame(conn: socket.socket, obj: Dict[str, Any]) -> None:
         }
         payload = json.dumps(fallback, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
     conn.sendall(struct.pack("!I", len(payload)) + payload)
+
+
+def _emit_handler_logs(req: Dict[str, Any], resp: Dict[str, Any]) -> None:
+    if not isinstance(resp, dict):
+        return
+    fn_name = req.get("fn") if isinstance(req, dict) else None
+    version = req.get("version") if isinstance(req, dict) else None
+    label = str(fn_name or "unknown")
+    version_label = str(version or "default")
+
+    stdout_value = resp.get("stdout")
+    if isinstance(stdout_value, str) and stdout_value != "":
+        for line in stdout_value.splitlines():
+            print(f"[fn:{label}@{version_label} stdout] {line}", flush=True)
+
+    stderr_value = resp.get("stderr")
+    if isinstance(stderr_value, str) and stderr_value != "":
+        for line in stderr_value.splitlines():
+            print(f"[fn:{label}@{version_label} stderr] {line}", file=sys.stderr, flush=True)
 
 
 def _normalize_name(name: str) -> str:
@@ -1039,6 +1059,7 @@ def _prepare_socket_path(path: str) -> None:
 
 def _serve_conn(conn: socket.socket) -> None:
     with conn:
+        req: Dict[str, Any] = {}
         try:
             req = _read_frame(conn)
             resp = _handle_request(req)
@@ -1050,6 +1071,7 @@ def _serve_conn(conn: socket.socket) -> None:
             resp = {"status": 500, "headers": {"Content-Type": "application/json"}, "body": json.dumps({"error": str(exc)})}
         except Exception as exc:
             resp = {"status": 500, "headers": {"Content-Type": "application/json"}, "body": json.dumps({"error": f"go runtime failure: {exc}"})}
+        _emit_handler_logs(req, resp)
         try:
             _write_frame(conn, resp)
         except OSError:

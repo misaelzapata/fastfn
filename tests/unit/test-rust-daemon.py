@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 import importlib.util
+import io
 import json
 import os
 import socket
 import struct
 import tempfile
 from concurrent.futures import Future, TimeoutError as FutureTimeoutError
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -219,6 +221,17 @@ def test_run_handler_direct_pool_and_serve_conn() -> None:
         assert ok_resp["status"] == 200
     finally:
         rust_daemon.subprocess.run = old_run
+
+    stdout_buffer = io.StringIO()
+    stderr_buffer = io.StringIO()
+    with redirect_stdout(stdout_buffer), redirect_stderr(stderr_buffer):
+        rust_daemon._emit_handler_logs(
+            {"fn": "hello", "version": "v2"},
+            {"stdout": "line one", "stderr": "warn one\nwarn two"},
+        )
+    assert "[fn:hello@v2 stdout] line one" in stdout_buffer.getvalue()
+    assert "[fn:hello@v2 stderr] warn one" in stderr_buffer.getvalue()
+    assert "[fn:hello@v2 stderr] warn two" in stderr_buffer.getvalue()
 
     old_resolve = rust_daemon._resolve_handler_path
     old_binary = rust_daemon._ensure_rust_binary

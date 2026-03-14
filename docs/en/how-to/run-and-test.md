@@ -2,7 +2,7 @@
 
 
 > Verified status as of **March 10, 2026**.
-> Runtime note: FastFN auto-installs function-local dependencies from `requirements.txt` / `package.json`; host runtimes are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
+> Runtime note: FastFN resolves dependencies and build steps per function: Python uses `requirements.txt`, Node uses `package.json`, PHP installs from `composer.json` when present, and Rust handlers are built with `cargo`. Host runtimes/tools are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
 ## Quick View
 
 - Complexity: Intermediate
@@ -228,3 +228,40 @@ Prefer seams at:
 3. test endpoint with verbose curl (`-i -v`)
 4. inspect runtime logs by language
 5. isolate minimal repro function
+
+### Read handler debug output
+
+For a function like:
+
+```python
+def handler(event):
+    print(event)
+    return {"status": 200, "body": "Hello"}
+```
+
+use these rules:
+
+- `fastfn dev` terminal logs: full `stdout`/`stderr`, with function prefixes
+- `X-Fn-Stdout` / `X-Fn-Stderr`: useful from external clients, but truncated
+- `/_fn/invoke`: full `stdout` / `stderr` in JSON for console/admin flows
+
+Example runtime log line:
+
+```text
+[python] [fn:hello@default stdout] {'query': {'id': '42'}}
+```
+
+If you are debugging from another app, prefer headers for a quick check and runtime logs for the full stream.
+
+## Next step
+Continue with [Deploy to production](./deploy-to-production.md) after this checklist is consistently green in local and CI.
+
+## Related links
+- [Deploy to production](./deploy-to-production.md)
+- [Security confidence checklist](./security-confidence.md)
+- [Zero-config routing](./zero-config-routing.md)
+- [Platform runtime plumbing](./platform-runtime-plumbing.md)
+- [HTTP API reference](../reference/http-api.md)
+- [Function specification](../reference/function-spec.md)
+- [Architecture](../explanation/architecture.md)
+- [Get help](./get-help.md)
