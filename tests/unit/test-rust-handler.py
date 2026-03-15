@@ -2,6 +2,7 @@
 import importlib.util
 import json
 import shutil
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -68,12 +69,70 @@ def test_runtime_not_found() -> None:
     raise AssertionError("missing rust function should raise FileNotFoundError")
 
 
+def test_invalid_cached_binary_triggers_rebuild() -> None:
+    ensure_toolchain()
+    cargo_bin = shutil.which("cargo")
+    assert cargo_bin, "cargo should be available for rust runtime tests"
+
+    with tempfile.TemporaryDirectory() as tmp:
+        handler_path = Path(tmp) / "app.rs"
+        handler_path.write_text(SRC.read_text(encoding="utf-8"), encoding="utf-8")
+
+        build_dir = handler_path.parent / ".rust-build"
+        binary = build_dir / "target" / "release" / "fn_handler"
+        binary.parent.mkdir(parents=True, exist_ok=True)
+        binary.write_bytes(b"not-native")
+        binary.chmod(0o755)
+
+        signature = {
+            "source_mtime_ns": handler_path.stat().st_mtime_ns,
+            "main_rs_hash": rust_daemon._MAIN_RS_DIGEST,
+            "cargo_toml_hash": rust_daemon._CARGO_TOML_DIGEST,
+            "runtime_platform": rust_daemon.sys.platform,
+            "runtime_machine": rust_daemon.platform.machine(),
+        }
+        meta_path = build_dir / ".fastfn-build-meta.json"
+        meta_path.write_text(
+            json.dumps({"signature": signature, "binary": str(binary)}, separators=(",", ":"), sort_keys=True),
+            encoding="utf-8",
+        )
+
+        old_resolve = rust_daemon._resolve_command
+        old_run = rust_daemon.subprocess.run
+        rust_daemon._BINARY_CACHE.clear()
+        calls = {"count": 0}
+
+        def fake_run(cmd, capture_output, text, cwd, timeout, check):
+            calls["count"] += 1
+            shutil.copy2(cargo_bin, binary)
+            binary.chmod(binary.stat().st_mode | 0o111)
+
+            class Result:
+                returncode = 0
+                stderr = ""
+                stdout = ""
+
+            return Result()
+
+        try:
+            rust_daemon._resolve_command = lambda *_a, **_k: cargo_bin
+            rust_daemon.subprocess.run = fake_run
+            resolved = rust_daemon._ensure_rust_binary(handler_path)
+            assert resolved == binary
+            assert calls["count"] == 1, "expected cargo rebuild for invalid cached binary"
+        finally:
+            rust_daemon._resolve_command = old_resolve
+            rust_daemon.subprocess.run = old_run
+            rust_daemon._BINARY_CACHE.clear()
+
+
 def main() -> None:
     ensure_toolchain()
     configure_runtime_paths()
     test_source_contract()
     test_runtime_handler_execution()
     test_runtime_not_found()
+    test_invalid_cached_binary_triggers_rebuild()
     print("rust unit tests passed")
 
 

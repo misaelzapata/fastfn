@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import os
+import platform
 import re
 import select
 import shutil
@@ -171,6 +172,16 @@ fn main() {
 """
 _MAIN_RS_DIGEST = hashlib.sha256(_MAIN_RS.encode("utf-8")).hexdigest()
 _CARGO_TOML_DIGEST = hashlib.sha256(_CARGO_TOML.encode("utf-8")).hexdigest()
+_MACHO_MAGICS = {
+    b"\xfe\xed\xfa\xce",
+    b"\xfe\xed\xfa\xcf",
+    b"\xce\xfa\xed\xfe",
+    b"\xcf\xfa\xed\xfe",
+    b"\xca\xfe\xba\xbe",
+    b"\xbe\xba\xfe\xca",
+    b"\xca\xfe\xba\xbf",
+    b"\xbf\xba\xfe\xca",
+}
 
 
 def _resolve_command(env_name: str, default: str) -> str:
@@ -197,6 +208,25 @@ def _file_signature(path: Path) -> Optional[tuple[int, int]]:
     except FileNotFoundError:
         return None
     return (stat_info.st_mtime_ns, stat_info.st_size)
+
+
+def _binary_looks_native(binary: Path) -> bool:
+    if not binary.is_file() or not os.access(str(binary), os.X_OK):
+        return False
+
+    try:
+        with binary.open("rb") as fh:
+            header = fh.read(4)
+    except OSError:
+        return False
+
+    if sys.platform.startswith("linux"):
+        return header == b"\x7fELF"
+    if sys.platform == "darwin":
+        return header in _MACHO_MAGICS
+    if os.name == "nt":
+        return header[:2] == b"MZ"
+    return True
 
 
 def _read_function_env(handler_path: Path) -> Dict[str, str]:
@@ -387,6 +417,8 @@ def _ensure_rust_binary(handler_path: Path) -> Path:
         "source_mtime_ns": source_mtime,
         "main_rs_hash": _MAIN_RS_DIGEST,
         "cargo_toml_hash": _CARGO_TOML_DIGEST,
+        "runtime_platform": sys.platform,
+        "runtime_machine": platform.machine(),
     }
     with _BINARY_CACHE_LOCK:
         cached = _BINARY_CACHE.get(cache_key)
@@ -401,7 +433,7 @@ def _ensure_rust_binary(handler_path: Path) -> Path:
 
     if cached is not None:
         cached_binary = Path(str(cached.get("binary", "")))
-        if cached_binary.is_file() and cached.get("signature") == signature:
+        if _binary_looks_native(cached_binary) and cached.get("signature") == signature:
             return cached_binary
 
     cargo_toml = build_dir / "Cargo.toml"
@@ -432,7 +464,7 @@ def _ensure_rust_binary(handler_path: Path) -> Path:
             if (
                 isinstance(metadata, dict)
                 and metadata.get("signature") == signature
-                and binary.is_file()
+                and _binary_looks_native(binary)
             ):
                 with _BINARY_CACHE_LOCK:
                     _BINARY_CACHE[cache_key] = {
@@ -465,6 +497,8 @@ def _ensure_rust_binary(handler_path: Path) -> Path:
 
             if not binary.is_file():
                 raise RuntimeError("rust build produced no binary")
+            if not _binary_looks_native(binary):
+                raise RuntimeError("rust build produced non-native binary")
             _write_metadata()
         finally:
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)

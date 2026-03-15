@@ -48,22 +48,24 @@ function runtime_headers(): array
 
 function read_script_status(): ?int
 {
-    if (!array_key_exists('FASTFN_STATUS', $GLOBALS)) {
-        return null;
-    }
-    $raw = $GLOBALS['FASTFN_STATUS'];
+    return parse_script_status_value($GLOBALS['FASTFN_STATUS'] ?? null);
+}
+
+function read_script_headers(): array
+{
+    return parse_script_headers_value($GLOBALS['FASTFN_HEADERS'] ?? null);
+}
+
+function parse_script_status_value(mixed $raw): ?int
+{
     if (!is_int($raw) || $raw < 100 || $raw > 599) {
         return null;
     }
     return $raw;
 }
 
-function read_script_headers(): array
+function parse_script_headers_value(mixed $raw): array
 {
-    if (!array_key_exists('FASTFN_HEADERS', $GLOBALS)) {
-        return [];
-    }
-    $raw = $GLOBALS['FASTFN_HEADERS'];
     if (!is_array($raw)) {
         return [];
     }
@@ -331,56 +333,152 @@ function apply_runtime_env(array $rawEnv, array &$appliedEnv): void
     }
 }
 
-function invoke_handler_file(string $handlerPath, array $event, int &$requestCounter): array
+function reset_runtime_state(): void
 {
-    $runtimeHeaders = [];
-    $runtimeStatus = 200;
     header_remove();
     http_response_code(200);
     unset($GLOBALS['FASTFN_STATUS'], $GLOBALS['FASTFN_HEADERS']);
+}
 
-    ob_start();
-    $requestCounter++;
-    $namespace = '__FastFnReq' . $requestCounter;
-
-    $loader = 'namespace ' . $namespace . '; require ' . var_export($handlerPath, true) . ';';
-    eval($loader);
-
-    $capturedOutput = (string) ob_get_clean();
-    $runtimeHeaders = array_merge(runtime_headers(), read_script_headers());
-    $runtimeStatus = read_script_status() ?? current_status_code();
-
-    $handlerName = $namespace . '\\handler';
-    $hasHandler = function_exists($handlerName);
-    if ($hasHandler) {
-        $params = isset($event['params']) && is_array($event['params']) ? $event['params'] : [];
-        $rf = new ReflectionFunction($handlerName);
-        $resp = $rf->getNumberOfParameters() > 1 ? $handlerName($event, $params) : $handlerName($event);
-        if (is_array($resp) && has_contract_shape($resp)) {
-            $normalized = normalize_explicit_response($resp, $runtimeHeaders);
-            if (empty($normalized['is_base64']) && $capturedOutput !== '') {
-                $body = $normalized['body'] ?? '';
-                if (!is_string($body) || $body === '') {
-                    $normalized = normalize_magic_response(
-                        $capturedOutput,
-                        (int) ($normalized['status'] ?? 200),
-                        $normalized['headers'] ?? $runtimeHeaders
-                    );
-                }
-            }
-            return $normalized;
+function find_handler_function(array $newFunctions): ?string
+{
+    for ($i = count($newFunctions) - 1; $i >= 0; $i--) {
+        $candidate = $newFunctions[$i];
+        if (!is_string($candidate) || $candidate === '') {
+            continue;
         }
-
-        $magicValue = $resp;
-        if (($magicValue === null || $magicValue === '') && $capturedOutput !== '') {
-            $magicValue = $capturedOutput;
-        } elseif (is_string($magicValue) && $capturedOutput !== '') {
-            $magicValue = $capturedOutput . $magicValue;
+        $parts = explode('\\', $candidate);
+        $baseName = strtolower((string) end($parts));
+        if ($baseName === 'handler' && function_exists($candidate)) {
+            return $candidate;
         }
-        return normalize_magic_response($magicValue, $runtimeStatus, $runtimeHeaders);
     }
 
-    return normalize_magic_response($capturedOutput, $runtimeStatus, $runtimeHeaders);
+    if (function_exists('handler')) {
+        return 'handler';
+    }
+
+    return null;
+}
+
+function load_handler_artifacts(string $handlerPath): array
+{
+    $beforeFunctions = [];
+    foreach (get_defined_functions()['user'] as $name) {
+        $beforeFunctions[strtolower($name)] = true;
+    }
+
+    $loaded = (function () use ($handlerPath): array {
+        $FASTFN_STATUS = null;
+        $FASTFN_HEADERS = null;
+        ob_start();
+        require $handlerPath;
+        return [
+            'captured_output' => (string) ob_get_clean(),
+            'scoped_status' => $FASTFN_STATUS,
+            'scoped_headers' => $FASTFN_HEADERS,
+        ];
+    })();
+
+    $newFunctions = [];
+    foreach (get_defined_functions()['user'] as $name) {
+        if (!isset($beforeFunctions[strtolower($name)])) {
+            $newFunctions[] = $name;
+        }
+    }
+
+    return [
+        'captured_output' => is_string($loaded['captured_output'] ?? null) ? $loaded['captured_output'] : '',
+        'runtime_status' => parse_script_status_value($loaded['scoped_status'] ?? null) ?? read_script_status() ?? current_status_code(),
+        'runtime_headers' => array_merge(
+            runtime_headers(),
+            parse_script_headers_value($loaded['scoped_headers'] ?? null),
+            read_script_headers()
+        ),
+        'handler_name' => find_handler_function($newFunctions),
+    ];
+}
+
+function invoke_handler_callable(
+    string $handlerName,
+    array $event,
+    string $capturedOutput,
+    array $baseHeaders,
+    int $baseStatus
+): array {
+    $params = isset($event['params']) && is_array($event['params']) ? $event['params'] : [];
+    ob_start();
+    $rf = new ReflectionFunction($handlerName);
+    $resp = $rf->getNumberOfParameters() > 1 ? $handlerName($event, $params) : $handlerName($event);
+    $handlerOutput = (string) ob_get_clean();
+    $capturedOutput .= $handlerOutput;
+
+    $runtimeHeaders = array_merge($baseHeaders, runtime_headers(), read_script_headers());
+    $runtimeStatus = read_script_status() ?? current_status_code();
+    if (!is_int($runtimeStatus) || $runtimeStatus < 100 || $runtimeStatus > 599) {
+        $runtimeStatus = $baseStatus;
+    }
+
+    if (is_array($resp) && has_contract_shape($resp)) {
+        $normalized = normalize_explicit_response($resp, $runtimeHeaders);
+        if (empty($normalized['is_base64']) && $capturedOutput !== '') {
+            $body = $normalized['body'] ?? '';
+            if (!is_string($body) || $body === '') {
+                $normalized = normalize_magic_response(
+                    $capturedOutput,
+                    (int) ($normalized['status'] ?? $runtimeStatus),
+                    $normalized['headers'] ?? $runtimeHeaders
+                );
+            }
+        }
+        return $normalized;
+    }
+
+    $magicValue = $resp;
+    if (($magicValue === null || $magicValue === '') && $capturedOutput !== '') {
+        $magicValue = $capturedOutput;
+    } elseif (is_string($magicValue) && $capturedOutput !== '') {
+        $magicValue = $capturedOutput . $magicValue;
+    }
+    return normalize_magic_response($magicValue, $runtimeStatus, $runtimeHeaders);
+}
+
+function invoke_handler_file(string $handlerPath, array $event, int &$requestCounter): array
+{
+    static $cachedHandlerPath = null;
+    static $cachedHandlerName = null;
+
+    $requestCounter++;
+    reset_runtime_state();
+
+    if (
+        $cachedHandlerPath === $handlerPath
+        && is_string($cachedHandlerName)
+        && $cachedHandlerName !== ''
+        && function_exists($cachedHandlerName)
+    ) {
+        return invoke_handler_callable($cachedHandlerName, $event, '', [], 200);
+    }
+
+    $loaded = load_handler_artifacts($handlerPath);
+    $handlerName = $loaded['handler_name'] ?? null;
+    if (is_string($handlerName) && $handlerName !== '') {
+        $cachedHandlerPath = $handlerPath;
+        $cachedHandlerName = $handlerName;
+        return invoke_handler_callable(
+            $handlerName,
+            $event,
+            is_string($loaded['captured_output'] ?? null) ? $loaded['captured_output'] : '',
+            is_array($loaded['runtime_headers'] ?? null) ? $loaded['runtime_headers'] : [],
+            is_int($loaded['runtime_status'] ?? null) ? $loaded['runtime_status'] : 200
+        );
+    }
+
+    return normalize_magic_response(
+        is_string($loaded['captured_output'] ?? null) ? $loaded['captured_output'] : '',
+        is_int($loaded['runtime_status'] ?? null) ? $loaded['runtime_status'] : 200,
+        is_array($loaded['runtime_headers'] ?? null) ? $loaded['runtime_headers'] : []
+    );
 }
 
 function normalize_magic_response(mixed $value, ?int $status = null, ?array $headers = null): array
