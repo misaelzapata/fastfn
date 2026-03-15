@@ -170,8 +170,6 @@ func TestEmbeddedOpenRestyParityPortableMode(t *testing.T) {
 		"openresty/lua/fastfn/core/openapi.lua",
 		"openresty/lua/fastfn/core/routes.lua",
 		"openresty/lua/fastfn/core/lua_runtime.lua",
-		"openresty/lua/fastfn/core/assistant.lua",
-		"openresty/lua/fastfn/console/assistant_status_endpoint.lua",
 		"openresty/lua/fastfn/console/dashboard_endpoint.lua",
 		"openresty/lua/fastfn/console/data.lua",
 		"openresty/lua/fastfn/console/functions_endpoint.lua",
@@ -199,7 +197,6 @@ func TestEmbeddedOpenRestyParityPortableMode(t *testing.T) {
 
 	nginxData := string(mustReadFile(t, filepath.Join(root, "cli", "embed", "runtime", "openresty", "nginx.conf")))
 	requiredRoutes := []string{
-		"location = /_fn/assistant/status",
 		"location = /_fn/dashboard",
 		"location = /_fn/api/functions",
 	}

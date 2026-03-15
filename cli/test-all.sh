@@ -109,11 +109,4 @@ bash "$ROOT_DIR/tests/integration/test-hotreload-runtime-matrix.sh"
 echo "== integration: cli init auto-discovery =="
 bash "$ROOT_DIR/tests/integration/test-cli-init-auto.sh"
 
-if [[ "${RUN_ASSISTANT_LIVE_TEST:-0}" == "1" ]]; then
-  echo "== integration: assistant live provider smoke =="
-  bash "$ROOT_DIR/tests/integration/test-assistant-live-provider.sh" "${ASSISTANT_LIVE_PROVIDER:-auto}"
-else
-  echo "== integration: assistant live provider smoke (skipped, set RUN_ASSISTANT_LIVE_TEST=1) =="
-fi
-
 echo "all tests passed"

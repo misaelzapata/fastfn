@@ -268,17 +268,6 @@ function wizardTemplate(runtime, template) {
     }
   }
 
-  if (t === 'telegram-ai-reply') {
-    if (rt === 'node') {
-      return {
-        summary: 'Telegram webhook -> OpenAI -> Telegram reply (AI bot)',
-        methods: ['POST'],
-        body_example: '{"message":{"chat":{"id":123},"text":"Hola"}}',
-        code: `// @summary Telegram webhook -> OpenAI -> Telegram reply (AI bot)\n// @methods POST\n// @body {\"message\":{\"chat\":{\"id\":123},\"text\":\"Hola\"}}\n// Note: dry_run defaults to true; set ?dry_run=false to really send.\n\nfunction asBool(value, fallback = true) {\n  if (value === undefined || value === null) return fallback;\n  if (typeof value === 'boolean') return value;\n  const normalized = String(value).trim().toLowerCase();\n  return !['0','false','off','no'].includes(normalized);\n}\n\nfunction json(status, payload) {\n  return { status, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) };\n}\n\nfunction parseJson(raw) {\n  if (!raw) return null;\n  if (typeof raw === 'object' && !Array.isArray(raw)) return raw;\n  if (typeof raw !== 'string') return null;\n  try { return JSON.parse(raw); } catch { return null; }\n}\n\nfunction extractTelegram(update) {\n  const msg = update.message || update.edited_message || update.channel_post || update.edited_channel_post || null;\n  if (msg) return { chat_id: msg.chat && msg.chat.id, text: msg.text || msg.caption || '', message_id: msg.message_id || null };\n  const cb = update.callback_query;\n  if (cb && cb.message) return { chat_id: cb.message.chat && cb.message.chat.id, text: cb.data || '', message_id: cb.message.message_id || null };\n  return { chat_id: null, text: '', message_id: null };\n}\n\nfunction extractResponsesText(resp) {\n  const output = resp && resp.output;\n  if (!Array.isArray(output)) return null;\n  let out = '';\n  for (const item of output) {\n    if (!item || item.type !== 'message' || item.role !== 'assistant' || !Array.isArray(item.content)) continue;\n    for (const part of item.content) if (part && part.type === 'output_text' && typeof part.text === 'string') out += part.text;\n  }\n  return out || null;\n}\n\nasync function openaiGenerate(env, userText, timeoutMs) {\n  const apiKey = String(env.OPENAI_API_KEY || '');\n  if (!apiKey) throw new Error('OPENAI_API_KEY not configured');\n  const baseUrl = String(env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\\/+$/, '');\n  const model = String(env.OPENAI_MODEL || 'gpt-4o-mini');\n  const system = String(env.OPENAI_SYSTEM_PROMPT || 'You are a concise assistant. Reply in the same language as the user.');\n\n  const payload = {\n    model,\n    input: [\n      { role: 'system', content: [{ type: 'input_text', text: system }] },\n      { role: 'user', content: [{ type: 'input_text', text: String(userText || '') }] },\n    ],\n  };\n\n  const controller = new AbortController();\n  const timer = setTimeout(() => controller.abort(), Math.max(1, timeoutMs || 8000));\n  try {\n    const res = await fetch(baseUrl + '/responses', {\n      method: 'POST',\n      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey },\n      body: JSON.stringify(payload),\n      signal: controller.signal,\n    });\n    const raw = await res.text();\n    if (!res.ok) throw new Error('openai error status=' + res.status + ' body=' + raw);\n    const parsed = parseJson(raw);\n    const text = extractResponsesText(parsed);\n    if (!text) throw new Error('openai returned no text');\n    return text;\n  } finally {\n    clearTimeout(timer);\n  }\n}\n\nasync function telegramSend(env, chatId, text, replyToMessageId) {\n  const token = String(env.TELEGRAM_BOT_TOKEN || '');\n  if (!token) throw new Error('TELEGRAM_BOT_TOKEN not configured');\n  const apiBase = String(env.TELEGRAM_API_BASE || 'https://api.telegram.org').replace(/\\/+$/, '');\n\n  const body = { chat_id: String(chatId), text: String(text || '') };\n  if (replyToMessageId) body.reply_to_message_id = replyToMessageId;\n\n  const res = await fetch(apiBase + '/bot' + token + '/sendMessage', {\n    method: 'POST',\n    headers: { 'Content-Type': 'application/json' },\n    body: JSON.stringify(body),\n  });\n  const raw = await res.text();\n  const parsed = parseJson(raw) || { raw };\n  if (!res.ok || parsed.ok !== true) throw new Error('telegram send failed status=' + res.status + ' body=' + raw);\n  return parsed;\n}\n\nexports.handler = async (event) => {\n  const env = event.env || {};\n  const ctx = event.context || {};\n  const q = event.query || {};\n  const dryRun = asBool(q.dry_run, true);\n\n  const update = parseJson(event.body);\n  if (!update) return json(400, { error: 'invalid JSON body (expected Telegram update)' });\n\n  const t = extractTelegram(update);\n  if (!t.chat_id) return json(200, { ok: true, note: 'no chat_id in update; nothing to do' });\n  if (!t.text) return json(200, { ok: true, chat_id: t.chat_id, note: 'no text in update; nothing to do' });\n\n  if (dryRun) {\n    return json(200, { ok: true, dry_run: true, chat_id: t.chat_id, received_text: t.text, note: 'Set ?dry_run=false and configure TELEGRAM_BOT_TOKEN + OPENAI_API_KEY to enable sending.' });\n  }\n\n  try {\n    const reply = (await openaiGenerate(env, t.text, Math.min(15000, ctx.timeout_ms || 8000))).trim().slice(0, 3000);\n    const sent = await telegramSend(env, t.chat_id, reply, t.message_id);\n    return json(200, { ok: true, dry_run: false, chat_id: t.chat_id, reply_preview: reply, telegram: { message_id: sent.result && sent.result.message_id } });\n  } catch (err) {\n    return json(502, { error: String(err && err.message ? err.message : err) });\n  }\n};\n`,
-      };
-    }
-  }
-
   if (t === 'edge-proxy-ts') {
     if (rt === 'node') {
       return {
@@ -311,10 +300,6 @@ export function initWizard(opts) {
   const wizCreateBtn = document.getElementById('wizCreateBtn');
   const wizCreateOpenBtn = document.getElementById('wizCreateOpenBtn');
   const wizStatusEl = document.getElementById('wizStatus');
-  const wizPromptEl = document.getElementById('wizPrompt');
-  const wizAiBtn = document.getElementById('wizAiBtn');
-  const wizAiCreateBtn = document.getElementById('wizAiCreateBtn');
-  const wizAiOutEl = document.getElementById('wizAiOut');
 
   async function create(openAfter) {
     if (!wizRuntimeEl || !wizNameEl || !wizTemplateEl) return;
@@ -392,76 +377,6 @@ export function initWizard(opts) {
     if (openAfter && selectFn) await selectFn(runtime, name, version || null, { activateTab: 'explorer' });
   }
 
-  async function aiGenerate() {
-    if (!wizRuntimeEl || !wizNameEl || !wizTemplateEl) return;
-    const runtime = String(wizRuntimeEl.value || '').trim();
-    const name = String(wizNameEl.value || '').trim();
-    const template = String(wizTemplateEl.value || 'hello-json');
-    const prompt = wizPromptEl ? String(wizPromptEl.value || '') : '';
-    if (!runtime || !name) {
-      if (wizStatusEl) wizStatusEl.textContent = 'Runtime and name are required.';
-      return;
-    }
-    if (wizAiOutEl) wizAiOutEl.textContent = 'Generating...';
-    try {
-      const out = await getJson('/_fn/assistant/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ runtime, name, template, prompt }),
-      });
-      if (wizAiOutEl) wizAiOutEl.textContent = out.code || '(no code)';
-      state.wiz_ai_code = out.code || '';
-    } catch (err) {
-      if (wizAiOutEl) wizAiOutEl.textContent = `Error: ${String(err && err.message ? err.message : err)}`;
-      state.wiz_ai_code = '';
-    }
-  }
-
-  async function createFromAi() {
-    if (!wizRuntimeEl || !wizNameEl) return;
-    const runtime = String(wizRuntimeEl.value || '').trim();
-    const name = String(wizNameEl.value || '').trim();
-    const version = wizVersionEl ? String(wizVersionEl.value || '').trim() : '';
-    const code = String(state.wiz_ai_code || '');
-    if (!runtime || !name) throw new Error('Runtime and name are required');
-    if (!code) throw new Error('No AI code generated yet');
-
-    if (wizStatusEl) wizStatusEl.textContent = 'Creating from AI code...';
-    const q = new URLSearchParams({ runtime, name });
-    if (version) q.set('version', version);
-
-    const created = await getJson(`/_fn/function?${q.toString()}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        summary: 'AI generated',
-        methods: ['GET', 'POST'],
-        query_example: {},
-        body_example: '',
-        code,
-      }),
-    });
-
-    if (wizStatusEl) {
-      const baseUrl = 'http://127.0.0.1:8080';
-      const route = `/${name}${version ? `@${version}` : ''}`;
-      const lines = [];
-      lines.push(`Created ${runtime}/${publicLabel(name, version || null)} from AI`);
-      lines.push(`Route: ${route}`);
-      if (created && created.file_path) lines.push(`Code: ${created.file_path}`);
-      if (created && created.config_path) lines.push(`Config: ${created.config_path}`);
-      lines.push('Try:');
-      lines.push(`  ${curlFor(baseUrl, route, 'GET', {}, '')}`);
-      lines.push(`  ${curlFor(baseUrl, route, 'POST', {}, 'hello')}`);
-      wizStatusEl.textContent = lines.join('\n');
-    }
-
-    if (loadCatalog) await loadCatalog({ refreshSelected: true });
-    if (selectFn) await selectFn(runtime, name, version || null, { activateTab: 'explorer' });
-  }
-
   if (wizCreateBtn) wizCreateBtn.addEventListener('click', () => create(false).catch((e) => { if (wizStatusEl) wizStatusEl.textContent = e.message; }));
   if (wizCreateOpenBtn) wizCreateOpenBtn.addEventListener('click', () => create(true).catch((e) => { if (wizStatusEl) wizStatusEl.textContent = e.message; }));
-  if (wizAiBtn) wizAiBtn.addEventListener('click', () => aiGenerate().catch((e) => { if (wizAiOutEl) wizAiOutEl.textContent = e.message; }));
-  if (wizAiCreateBtn) wizAiCreateBtn.addEventListener('click', () => createFromAi().catch((e) => { if (wizStatusEl) wizStatusEl.textContent = e.message; }));
 }

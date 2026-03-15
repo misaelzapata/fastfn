@@ -1,5 +1,89 @@
 # Status Update: 2026-02-15
 
+## Update: 2026-03-12 (Docs Evidence Pipeline + Coverage Hardening Wave 1)
+
+- Revision: `docs-coverage-2026-03-12-r1`
+- Target version: `next patch after current main`
+- Scope:
+  - enforce reproducible docs evidence assets in CI
+  - raise Go CLI coverage with deterministic testability refactors
+  - keep strict gates at 100% enabled (Go + Lua), report remaining gaps explicitly
+
+- [x] Added visual evidence manifest tooling and CI gate:
+  - scripts:
+    - `scripts/docs/visual_manifest.py`
+    - `scripts/docs/capture-ui.mjs`
+    - `scripts/docs/generate_visual_evidence.sh`
+  - manifest:
+    - `docs/assets/screenshots/manifest.json`
+  - CI/docs gates:
+    - `.github/workflows/ci.yml` (`docs_quality` job)
+    - `.github/workflows/docs.yml` (manifest verify before strict build)
+  - local validation:
+    - `python3 scripts/docs/visual_manifest.py verify` -> pass
+
+- [x] Added strict coverage checkers and artifacts:
+  - `scripts/ci/check_go_coverage.py`
+  - `scripts/ci/check_lua_coverage.py`
+  - integrated in:
+    - `cli/coverage-go.sh`
+    - `cli/coverage.sh`
+    - CI artifact upload paths
+
+- [x] Improved Go CLI testability and branch coverage with new tests/refactors:
+  - refactors for deterministic tests:
+    - `cli/internal/process/runner.go` (dependency injection for runtime/bootstrap/signal/manager/watcher)
+    - `cli/embed/runtime/embed.go` (extract path injection)
+    - `cli/embed/templates/embed.go` (template IO/parse injection)
+    - `cli/cmd/logs.go` (injected backend/session/fatal handlers)
+    - `cli/cmd/doctor.go` (injected command flow + TLS probe dialer)
+  - new tests:
+    - `cli/internal/process/runner_native_test.go`
+    - `cli/embed/runtime/embed_error_test.go`
+    - `cli/embed/templates/embed_error_test.go`
+    - `cli/cmd/doctor_netprober_test.go`
+    - extended:
+      - `cli/cmd/docs_run_version_test.go`
+      - `cli/cmd/logs_runtime_test.go`
+      - `cli/cmd/root_execute_test.go`
+      - `cli/internal/runtime/manager_test.go`
+
+- [x] Coverage improvement measured:
+  - baseline (before this wave): Go CLI total ~`78.8%`
+  - current: Go CLI total ~`87.3%` (`./cli/coverage-go.sh`)
+  - packages now at `100%`:
+    - `cli/embed/runtime`
+    - `cli/embed/templates`
+    - `cli/internal/runtime`
+
+- [ ] Remaining to reach enforced `100%` gates:
+  - Go:
+    - package gaps: `cli/cmd`, `cli/internal/discovery`, `cli/internal/process`
+    - main files still below 100: `cli/cmd/dev.go`, `cli/cmd/doctor.go`, `cli/internal/discovery/scan.go`, `cli/internal/process/{config,hot_reload,manager,runner,session,watcher}.go`
+  - Lua/OpenResty:
+    - total still ~`78.82%`
+    - modules pending include:
+      - `openresty/lua/fastfn/core/routes.lua`
+      - `openresty/lua/fastfn/core/openapi.lua`
+      - `openresty/lua/fastfn/core/lua_runtime.lua`
+      - `openresty/lua/fastfn/core/scheduler.lua`
+      - `openresty/lua/fastfn/core/watchdog.lua`
+      - `openresty/lua/fastfn/console/{data.lua,guard.lua,ui_state_endpoint.lua}`
+
+Validation executed:
+
+- `go test ./cli/cmd`
+- `go test ./cli/internal/process`
+- `go test ./cli/embed/runtime`
+- `go test ./cli/embed/templates`
+- `go test ./cli/internal/runtime`
+- `./cli/coverage-go.sh` (strict mode, expected fail until remaining gaps close)
+- `LUA_COVERAGE=1 COVERAGE_DIR=coverage/lua bash cli/test-lua.sh`
+- `python3 scripts/ci/check_lua_coverage.py --report coverage/lua/luacov.report.out --min-total 100 --min-file 100` (expected fail until Lua gaps close)
+- `python3 scripts/docs/visual_manifest.py verify`
+- `python3 -m venv /tmp/mkdocs-venv && source /tmp/mkdocs-venv/bin/activate && pip install mkdocs-material && mkdocs build --strict`
+- `sh ./scripts/ci/test-pipeline.sh`
+
 ## Update: 2026-02-19 (Dependency UX Hardening for `--native`)
 
 - Revision: `deps-ux-2026-02-19-r2`
@@ -460,26 +544,6 @@ Validation executed:
   - E2E coverage:
     - `tests/e2e/console-gateway.spec.js` (`test templates generate runnable payloads with dynamic values`)
     - `tests/e2e/console-gateway.spec.js` (`post-json template does not force unsupported POST method`)
-- [x] AI chat panel scrollability validated with UI automation:
-  - verifies overflow + autoscroll-to-bottom behavior under long chat history
-  - files:
-    - `tests/e2e/console-wizard.spec.js` (`AI chat panel is scrollable and auto-scrolls to latest message`)
-- [x] Added live-provider assistant smoke test (real key path) with optional CLI hook:
-  - new script:
-    - `tests/integration/test-assistant-live-provider.sh`
-  - optional suite hook:
-    - `cli/test-all.sh` (`RUN_ASSISTANT_LIVE_TEST=1`)
-  - E2E webserver now supports provider override for real-model runs:
-    - `tests/e2e/start-fastfn-webserver.sh`
-- [ ] Live provider outbound connectivity from this local environment:
-  - **FAIL** for both OpenAI and Claude in native smoke
-  - error evidence:
-    - `connect_error:api.openai.com could not be resolved (60: Operation timed out)`
-    - `connect_error:api.anthropic.com could not be resolved (60: Operation timed out)`
-  - commands executed (outside sandbox):
-    - `ASSISTANT_LIVE_MODE=native ASSISTANT_LIVE_PORT=18133 WAIT_SECS=180 bash tests/integration/test-assistant-live-provider.sh openai`
-    - `ASSISTANT_LIVE_MODE=native ASSISTANT_LIVE_PORT=18132 WAIT_SECS=180 bash tests/integration/test-assistant-live-provider.sh claude`
-
 ## Coverage Uplift Sprint (2026-02-15)
 
 - [x] Started polyglot coverage uplift campaign with runtime-focused tests.
@@ -561,9 +625,6 @@ Validation executed:
 | Native OpenAPI method exactness | OpenAPI methods exactly match mapped route method unions | **OK** | strict parity assertions added in `test-openapi-native.sh` |
 | OpenAPI visibility toggles | Internal/admin paths hidden by default and visible only when opted-in | **OK** | `test-openapi-system.sh` + `test-openapi-native.sh` opt-in checks |
 | Console test templates interactivity | Test templates (`empty`,`hello`,`path-query`,`post-json`,`context-debug`) generate runnable payloads and invoke successfully | **OK** | `npm run test:e2e:ui -- --grep "test templates generate runnable payloads with dynamic values"` |
-| AI chat panel UX | AI output pane remains scrollable and auto-scrolls to newest message | **OK** | `npm run test:e2e:ui -- --grep "AI chat panel is scrollable and auto-scrolls to latest message"` |
-| Assistant live provider (OpenAI) | Real provider generate+invoke smoke in local runtime | **FAIL** | `ASSISTANT_LIVE_MODE=native ASSISTANT_LIVE_PORT=18133 WAIT_SECS=180 bash tests/integration/test-assistant-live-provider.sh openai` (`connect_error:api.openai.com could not be resolved`) |
-| Assistant live provider (Claude) | Real provider generate+invoke smoke in local runtime | **FAIL** | `ASSISTANT_LIVE_MODE=native ASSISTANT_LIVE_PORT=18132 WAIT_SECS=180 bash tests/integration/test-assistant-live-provider.sh claude` (`connect_error:api.anthropic.com could not be resolved`) |
 
 ### Linked Tests and Report References
 
@@ -580,9 +641,6 @@ Validation executed:
   - linked page: [http://localhost:18080/html?name=Designer](http://localhost:18080/html?name=Designer)
 - SDK parity checks:
   - script: `tests/unit/test-sdks.sh`
-  - report reference: [docs/internal/STATUS_UPDATE.md](./STATUS_UPDATE.md)
-- Assistant live-provider smoke:
-  - script: `tests/integration/test-assistant-live-provider.sh`
   - report reference: [docs/internal/STATUS_UPDATE.md](./STATUS_UPDATE.md)
 - CLI/process coverage checks:
   - package tests: `cd cli && go test ./cmd/... ./internal/process/...`
@@ -626,61 +684,6 @@ The core objective has shifted to emphasize "Look how easy it is to make an API"
 - [x] Rewrite `README.md` to be more "marketing" friendly and developer-centric. (Done)
 - [x] Improve exception handling in `python_daemon.py` to return friendly errors in Development Mode. (Done - Tracebacks added)
 - [x] Added `/system/metrics` for basic observability. (Done)
-
-## Feature Analysis: CLI Assistant (Claude/Codex) to Help Build an App
-
-### Current Baseline (already in repo)
-
-- There is already an assistant backend with:
-  - `POST /_fn/assistant/generate`
-  - `GET /_fn/assistant/status`
-- Current providers in runtime assistant: `openai`, `claude` (and `anthropic` alias).
-- The Console wizard already uses this assistant flow to generate code and then create functions.
-- Function creation/update endpoints already exist (`/_fn/function`, `/_fn/function-config`, `/_fn/function-code`).
-
-### Complexity Estimate by Scope
-
-1. **MVP CLI assistant (single function generation)**
-   - Example: `fastfn ai generate --runtime python --name users --prompt "..."`
-   - Flow: call local assistant endpoint, output code, optional `--apply` to create function.
-   - **Complexity: Medium**
-   - **Estimated effort: 2-4 days**
-   - Why: backend exists; missing piece is CLI UX + command wiring + tests.
-
-2. **CLI assistant to "create an app" (multi-function scaffold + routes)**
-   - Example: generate `auth`, `users`, `health`, and route/method config from one prompt.
-   - Needs structured planning format (JSON contract), validation, conflict handling, idempotency.
-   - **Complexity: Medium-High**
-   - **Estimated effort: 1-2 weeks**
-   - Why: moves from single-file generation to orchestration across multiple functions/configs.
-
-3. **Full coding assistant loop in CLI (chat, edit, test, iterate)**
-   - Example: conversational flow that edits existing code and runs smoke checks between turns.
-   - Needs session memory, patch safety rules, retries, and deterministic output handling.
-   - **Complexity: High**
-   - **Estimated effort: 2-4+ weeks**
-   - Why: agent-style workflow + reliability/guardrails is the hard part, not raw model calls.
-
-### Claude vs Codex Feasibility
-
-- **Claude:** practically ready (already wired through `FN_ASSISTANT_PROVIDER=claude` + `ANTHROPIC_*` env vars).
-- **Codex (OpenAI models):**
-  - Fast path: treat as OpenAI provider and set `OPENAI_MODEL` to a Codex-capable model.
-  - If we want explicit `--provider codex`, add a small alias layer in CLI/runtime.
-  - **Extra complexity for explicit codex label: Low (about 0.5-1 day).**
-
-### Recommended Delivery Plan
-
-1. **Phase 1 (MVP, quick win):** `fastfn ai generate` + `fastfn ai create` reusing existing assistant/function endpoints.
-2. **Phase 2:** `fastfn ai app "<prompt>"` with a strict JSON plan (functions, routes, methods, env keys) and dry-run mode.
-3. **Phase 3:** iterative assistant mode (`chat/edit/test`) with safety checks and targeted integration tests.
-
-### Overall Conclusion
-
-Adding an assistant to the CLI is feasible with **medium complexity** for a useful first version, because most backend primitives already exist.  
-What becomes complex is the jump from "generate one function" to "safely create a whole app with repeatable results."
-
----
 
 ## Full Project Audit (2026-02-15)
 
@@ -752,7 +755,7 @@ Python SDK is types-only (no runtime helpers), while the other three provide con
 
 #### 5.2 Lua — 11 of 19 modules untested
 
-No unit tests for: `client`, `http_client`, `scheduler`, `jobs`, `watchdog`, `assistant`, `guard`, `auth`, `ui`, `data` (CRUD), `packs`, `functions_endpoint`, `invoke_endpoint`, `dashboard_endpoint`, `assistant_endpoint`, `secrets_endpoint`, `login/logout_endpoint`.
+No unit tests for: `client`, `http_client`, `scheduler`, `jobs`, `watchdog`, `guard`, `auth`, `ui`, `data` (CRUD), `packs`, `functions_endpoint`, `invoke_endpoint`, `dashboard_endpoint`, `secrets_endpoint`, `login/logout_endpoint`.
 
 #### 5.3 Handler tests
 

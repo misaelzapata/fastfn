@@ -380,7 +380,7 @@ a {
 
 .code-layout {
     display: grid;
-    grid-template-columns: 240px minmax(0, 1fr) 300px;
+    grid-template-columns: 240px minmax(0, 1fr);
     gap: 1px;
     background: var(--border-color);
     border: 1px solid var(--border-color);
@@ -388,8 +388,7 @@ a {
 }
 
 .file-tree,
-.editor-area,
-.ai-panel {
+.editor-area {
     background: white;
     display: flex;
     flex-direction: column;
@@ -397,8 +396,7 @@ a {
 }
 
 .tree-header,
-.editor-toolbar,
-.ai-header {
+.editor-toolbar {
     background: #fafafa;
     padding: 8px 12px;
     font-size: 12px;
@@ -407,22 +405,6 @@ a {
     display: flex;
     align-items: center;
     justify-content: space-between;
-}
-
-.ai-mode-switch {
-    display: inline-flex;
-    gap: 6px;
-}
-
-.ai-mode-switch .btn {
-    border-radius: 999px;
-    padding: 3px 10px;
-}
-
-.ai-mode-switch .btn.active {
-    background: #ec7211;
-    border-color: #ec7211;
-    color: #fff;
 }
 
 .tree-content {
@@ -461,80 +443,6 @@ a {
     line-height: 1.5;
     white-space: pre;
     overflow: auto;
-}
-
-.ai-panel {
-    background: #fcfcfc;
-    min-height: 0;
-}
-
-.ai-body {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    padding: 12px;
-    min-height: 0;
-}
-
-.ai-messages {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
-    margin-bottom: 12px;
-    font-size: 13px;
-}
-
-.ai-msg {
-    margin-bottom: 12px;
-    padding: 8px;
-    border-radius: 4px;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-    word-break: break-word;
-}
-
-.ai-msg.system {
-    background: #e6f6fe;
-    border: 1px solid #bde0fe;
-    color: #005a9e;
-}
-
-.ai-msg.user {
-    background: #fff;
-    border: 1px solid #dcdcdc;
-    margin-left: 20px;
-}
-
-.ai-input-area {
-    display: flex;
-    gap: 8px;
-}
-
-.ai-input-area textarea {
-    flex: 1;
-    height: 50px;
-    border: 1px solid #d5dbdb;
-    border-radius: 4px;
-    padding: 8px;
-    font-size: 12px;
-    resize: none;
-}
-
-.ai-input-area button {
-    width: 36px;
-    height: 50px;
-    border: 1px solid #ec7211;
-    background: white;
-    color: #ec7211;
-    border-radius: 4px;
-    font-size: 18px;
-    cursor: pointer;
-}
-
-.ai-input-area button:hover {
-    background: #ec7211;
-    color: white;
 }
 
 .test-layout {
@@ -937,11 +845,6 @@ textarea:focus {
 @media (max-width: 1200px) {
     .code-layout {
         grid-template-columns: 200px minmax(0, 1fr);
-    }
-
-    .ai-panel {
-        grid-column: 1 / -1;
-        border-top: 1px solid var(--border-color);
     }
 
     .test-layout {

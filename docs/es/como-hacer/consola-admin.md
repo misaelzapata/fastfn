@@ -2,12 +2,12 @@
 
 
 > Estado verificado al **10 de marzo de 2026**.
-> Nota de runtime: FastFN auto-instala dependencias locales por función desde `requirements.txt` / `package.json`; en `fastfn dev --native` necesitas runtimes instalados en host, mientras que `fastfn dev` depende de Docker daemon activo.
+> Nota de runtime: FastFN resuelve dependencias y build por función según el runtime: Python usa `requirements.txt`, Node usa `package.json`, PHP instala desde `composer.json` cuando existe, y Rust compila handlers con `cargo`. En `fastfn dev --native` necesitas runtimes y herramientas del host; `fastfn dev` depende de un daemon de Docker activo.
 ## Ficha rapida
 
 - Complejidad: Intermedia
 - Tiempo tipico: 10-15 minutos
-- Usala cuando: necesitas endurecer /console y /_fn
+- Úsala cuando: necesitas endurecer /console y /_fn
 - Resultado: la superficie admin queda expuesta solo como corresponde
 
 
@@ -145,26 +145,6 @@ La consola esta organizada en tabs:
   - editor de env (secretos ocultos)
   - editor de codigo
 - **CRUD**: crear/borrar funciones + toggles de acceso a consola.
-
-## AI helper opcional (generador de codigo)
-
-El Wizard puede llamar un endpoint opcional:
-
-- `POST /_fn/assistant/generate`
-
-Esta apagado por defecto. Para habilitar (ejemplo OpenAI):
-
-```bash
-export FN_ASSISTANT_ENABLED=1
-export FN_ASSISTANT_PROVIDER=openai
-export OPENAI_API_KEY=...  # no commitear
-export OPENAI_MODEL=gpt-4.1-mini
-```
-
-Notas de seguridad:
-
-- el assistant usa el mismo guard de escritura que config/code/env (local-only por defecto, token admin override)
-- `OPENAI_API_KEY` nunca se devuelve en respuestas
 
 Notas de schedule:
 

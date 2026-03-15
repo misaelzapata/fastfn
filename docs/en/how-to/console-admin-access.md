@@ -2,7 +2,7 @@
 
 
 > Verified status as of **March 10, 2026**.
-> Runtime note: FastFN auto-installs function-local dependencies from `requirements.txt` / `package.json`; host runtimes are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
+> Runtime note: FastFN resolves dependencies and build steps per function: Python uses `requirements.txt`, Node uses `package.json`, PHP installs from `composer.json` when present, and Rust handlers are built with `cargo`. Host runtimes/tools are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
 ## Quick View
 
 - Complexity: Intermediate
@@ -146,26 +146,6 @@ The Console is organized into top-level tabs:
   - code editor
 - **CRUD**: create/delete functions, plus Console access toggles.
 
-## Optional AI helper (code generator)
-
-The Wizard can call an optional assistant endpoint:
-
-- `POST /_fn/assistant/generate`
-
-It is disabled by default. To enable (OpenAI example):
-
-```bash
-export FN_ASSISTANT_ENABLED=1
-export FN_ASSISTANT_PROVIDER=openai
-export OPENAI_API_KEY=...  # do not commit
-export OPENAI_MODEL=gpt-4.1-mini
-```
-
-Security notes:
-
-- assistant uses the same write-level guard as config/code/env updates (local-only by default, admin token override)
-- `OPENAI_API_KEY` is never returned by any API response
-
 Schedule panel notes:
 
 - Schedules are configured per function in `fn.config.json` under `schedule`.
@@ -178,28 +158,26 @@ Schedule panel notes:
 - require admin token for write/admin operations
 - keep write disabled except maintenance windows
 
-## Objective
+## Validate it
 
-Clear scope, expected outcome, and who should use this page.
-
-## Prerequisites
-
-- FastFN CLI available
-- Runtime dependencies by mode verified (Docker for `fastfn dev`, OpenResty+runtimes for `fastfn dev --native`)
-
-## Validation Checklist
-
-- Command examples execute with expected status codes
-- Routes appear in OpenAPI where applicable
-- References at the end are reachable
+- Call `GET /_fn/ui-state` before and after a config change.
+- Confirm write operations fail without the right local/admin access.
+- Load `/console` once with the intended login mode before exposing it to others.
 
 ## Troubleshooting
 
-- If runtime is down, verify host dependencies and health endpoint
-- If routes are missing, re-run discovery and check folder layout
+- If `/console` is missing, confirm `FN_UI_ENABLED=1`.
+- If reads work but writes fail, check `FN_CONSOLE_WRITE_ENABLED` and `FN_ADMIN_TOKEN`.
+- If login loops, clear cookies and confirm `FN_CONSOLE_SESSION_SECRET` is set consistently.
 
-## See also
+## Next step
 
+Continue with [Manage functions](./manage-functions.md) to use the admin surface for real create/update/delete flows.
+
+## Related links
+
+- [Manage functions](./manage-functions.md)
+- [Security confidence](./security-confidence.md)
 - [Function Specification](../reference/function-spec.md)
 - [HTTP API Reference](../reference/http-api.md)
-- [Run and Test Checklist](run-and-test.md)
+- [Run and test](./run-and-test.md)

@@ -12,9 +12,6 @@ const CONFIG_METHOD_TOGGLE_IDS = {
 };
 const EXEC_HISTORY_STORAGE_KEY = 'fastfn_execution_history_v1';
 const EXEC_HISTORY_LIMIT_PER_FN = 30;
-const AI_CHAT_HISTORY_STORAGE_KEY = 'fastfn_ai_chat_history_v1';
-const AI_CHAT_HISTORY_LIMIT_PER_FN = 40;
-const AI_MODE_STORAGE_KEY = 'fastfn_ai_mode_v1';
 
 function toFunctionArray(value) {
   if (Array.isArray(value)) return value;
@@ -248,16 +245,12 @@ class ConsoleApp {
     this.currentGatewayRoute = null;
     this.savedEvents = this.loadSavedEvents();
     this.executionHistory = this.loadExecutionHistory();
-    this.aiHistory = this.loadAiHistory();
     this.monitorRefreshTimer = null;
     this.catalogRefreshTimer = null;
     this.catalogRefreshInFlight = false;
     this.lastCatalogFingerprint = '';
-    this.assistantStatus = null;
-    this.assistantStatusAt = 0;
     this.apiPrimary = null;
     this.envUnsupportedEntries = {};
-    this.aiMode = this.loadAiMode();
     this.uiState = null;
     this.schedulerSnapshot = null;
   }
@@ -296,109 +289,6 @@ class ConsoleApp {
     } catch {
       // ignore storage errors
     }
-  }
-
-  loadAiHistory() {
-    try {
-      const raw = localStorage.getItem(AI_CHAT_HISTORY_STORAGE_KEY);
-      const parsed = raw ? JSON.parse(raw) : {};
-      return parsed && typeof parsed === 'object' ? parsed : {};
-    } catch {
-      return {};
-    }
-  }
-
-  persistAiHistory() {
-    try {
-      localStorage.setItem(AI_CHAT_HISTORY_STORAGE_KEY, JSON.stringify(this.aiHistory));
-    } catch {
-      // ignore storage errors
-    }
-  }
-
-  loadAiMode() {
-    try {
-      const raw = String(localStorage.getItem(AI_MODE_STORAGE_KEY) || 'auto').toLowerCase();
-      if (raw === 'chat' || raw === 'edit' || raw === 'auto') return raw;
-      return 'auto';
-    } catch {
-      return 'auto';
-    }
-  }
-
-  persistAiMode() {
-    try {
-      localStorage.setItem(AI_MODE_STORAGE_KEY, String(this.aiMode || 'auto'));
-    } catch {
-      // ignore storage errors
-    }
-  }
-
-  setAiMode(mode) {
-    const value = String(mode || '').toLowerCase();
-    this.aiMode = (value === 'chat' || value === 'edit' || value === 'auto') ? value : 'auto';
-    this.persistAiMode();
-    this.updateAiModeSwitch();
-  }
-
-  updateAiModeSwitch() {
-    const map = {
-      auto: document.getElementById('aiModeAuto'),
-      chat: document.getElementById('aiModeChat'),
-      edit: document.getElementById('aiModeEdit'),
-    };
-    for (const [key, el] of Object.entries(map)) {
-      if (!el) continue;
-      el.classList.toggle('active', this.aiMode === key);
-    }
-  }
-
-  aiHistoryKey() {
-    if (!this.currentFn) return '';
-    return `${this.currentFn.runtime}/${this.currentFn.name}@${this.currentFn.version || 'default'}`;
-  }
-
-  getAiHistoryEntriesForCurrentFn() {
-    const key = this.aiHistoryKey();
-    if (!key) return [];
-    const entries = this.aiHistory[key];
-    return Array.isArray(entries) ? entries : [];
-  }
-
-  recordAiHistory(role, text) {
-    const key = this.aiHistoryKey();
-    if (!key) return;
-    const content = String(text || '').trim();
-    if (!content) return;
-    if (!Array.isArray(this.aiHistory[key])) this.aiHistory[key] = [];
-    this.aiHistory[key].push({ role: String(role || 'assistant'), text: content, ts: Date.now() });
-    if (this.aiHistory[key].length > AI_CHAT_HISTORY_LIMIT_PER_FN) {
-      this.aiHistory[key] = this.aiHistory[key].slice(this.aiHistory[key].length - AI_CHAT_HISTORY_LIMIT_PER_FN);
-    }
-    this.persistAiHistory();
-  }
-
-  renderAiHistory() {
-    const out = document.getElementById('aiOutput');
-    if (!out) return;
-    const entries = this.getAiHistoryEntriesForCurrentFn();
-    out.innerHTML = '';
-    if (entries.length === 0) {
-      const msg = document.createElement('div');
-      msg.className = 'ai-msg system';
-      msg.textContent = 'How can I help you write this function?';
-      out.appendChild(msg);
-      return;
-    }
-    for (const entry of entries) {
-      if (!entry || typeof entry !== 'object') continue;
-      const role = String(entry.role || 'assistant');
-      const msg = document.createElement('div');
-      msg.className = `ai-msg ${role === 'user' ? 'user' : 'system'}`;
-      msg.textContent = String(entry.text || '');
-      out.appendChild(msg);
-    }
-    out.scrollTop = out.scrollHeight;
   }
 
   clearMonitorAutoRefresh() {
@@ -1013,14 +903,6 @@ class ConsoleApp {
         }
       });
     }
-
-    const aiModeAuto = document.getElementById('aiModeAuto');
-    if (aiModeAuto) aiModeAuto.addEventListener('click', () => this.setAiMode('auto'));
-    const aiModeChat = document.getElementById('aiModeChat');
-    if (aiModeChat) aiModeChat.addEventListener('click', () => this.setAiMode('chat'));
-    const aiModeEdit = document.getElementById('aiModeEdit');
-    if (aiModeEdit) aiModeEdit.addEventListener('click', () => this.setAiMode('edit'));
-    this.updateAiModeSwitch();
 
     document.addEventListener('keydown', (ev) => {
       if (ev.altKey && (ev.key === 's' || ev.key === 'S')) {
@@ -1910,7 +1792,6 @@ class ConsoleApp {
     this.updateApiGuide(detail);
     this.renderSavedEvents();
     this.renderExecutionHistory();
-    this.renderAiHistory();
 
     if (runtimeBadge) runtimeBadge.textContent = `${detail.runtime}${detail.version ? `@${detail.version}` : ''}`;
     if (status) status.textContent = 'Active';
@@ -2690,216 +2571,6 @@ class ConsoleApp {
       saveBtn.disabled = false;
       saveBtn.textContent = 'Deploy';
       throw err;
-    }
-  }
-
-  appendAiMessage(kind, text, persist = false) {
-    const out = document.getElementById('aiOutput');
-    if (!out) return;
-    const msg = document.createElement('div');
-    msg.className = `ai-msg ${kind}`;
-    msg.textContent = String(text || '');
-    out.appendChild(msg);
-    out.scrollTop = out.scrollHeight;
-    if (persist) {
-      this.recordAiHistory(kind === 'user' ? 'user' : 'assistant', text);
-    }
-  }
-
-  detectAssistantMode(prompt) {
-    const text = String(prompt || '').trim().toLowerCase();
-    if (!text) return 'generate';
-    const editWords = [
-      'change', 'modify', 'update', 'rewrite', 'refactor', 'fix', 'patch', 'replace', 'improve',
-      'cambia', 'modifica', 'actualiza', 'reescribe', 'refactoriza', 'corrige', 'ajusta', 'mejora',
-      'agrega', 'agregar', 'anade', 'añade', 'quita', 'elimina',
-    ];
-    if (editWords.some((w) => text.includes(w))) return 'generate';
-    if (/[?]$/.test(text)) return 'chat';
-    if (text.includes('what does this function do')) return 'chat';
-    if (text.includes('que hace esta funcion')) return 'chat';
-    if (text.startsWith('what ') || text.startsWith('how ') || text.startsWith('why ')) return 'chat';
-    if (text.startsWith('que ') || text.startsWith('como ') || text.startsWith('por que ')) return 'chat';
-    if (text.startsWith('explain') || text.startsWith('explica')) return 'chat';
-    return 'generate';
-  }
-
-  resolveAssistantMode(prompt) {
-    const selected = String(this.aiMode || 'auto').toLowerCase();
-    if (selected === 'chat') return 'chat';
-    if (selected === 'edit') return 'generate';
-    return this.detectAssistantMode(prompt);
-  }
-
-  extractCodeFromAssistantMessage(message, runtime) {
-    const text = String(message || '').trim();
-    if (!text) return '';
-
-    const fenced = text.match(/```[a-zA-Z0-9_-]*\s*([\s\S]*?)```/);
-    if (fenced && fenced[1] && fenced[1].trim()) {
-      return fenced[1].trim();
-    }
-
-    const rt = String(runtime || '').toLowerCase();
-    const markersByRuntime = {
-      node: ['exports.handler', 'module.exports', 'async (event) =>'],
-      python: ['def handler(', 'import json'],
-      php: ['<?php', 'function handler('],
-      lua: ['function handler(', 'local cjson = require'],
-      rust: ['fn handler(', 'use serde_json', 'serde_json::json!'],
-    };
-    const markers = markersByRuntime[rt] || [];
-    let best = -1;
-    for (const marker of markers) {
-      const idx = text.indexOf(marker);
-      if (idx >= 0 && (best < 0 || idx < best)) best = idx;
-    }
-    if (best >= 0) {
-      return text.slice(best).trim();
-    }
-    return '';
-  }
-
-  shouldRunAiSmoke(prompt) {
-    const text = String(prompt || '').trim().toLowerCase();
-    if (!text) return false;
-    return text.includes('test')
-      || text.includes('smoke')
-      || text.includes('probar')
-      || text.includes('prueba');
-  }
-
-  async runAiSmokeProbe() {
-    if (!this.currentFn) return null;
-    const payload = this.extractInvokePayload();
-    const started = performance.now();
-    const response = await getJson('/_fn/invoke', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    return {
-      status: Number(response && response.status ? response.status : 0),
-      latency_ms: Number((response && response.latency_ms) || Math.round(performance.now() - started)),
-      route: String((response && response.route) || payload.route || '(auto)'),
-      ok: Number(response && response.status ? response.status : 0) >= 200 && Number(response && response.status ? response.status : 0) < 300,
-    };
-  }
-
-  async fetchAssistantStatus(force = false) {
-    const now = Date.now();
-    if (!force && this.assistantStatus && (now - this.assistantStatusAt) < 30000) {
-      return this.assistantStatus;
-    }
-    const status = await getJson('/_fn/assistant/status');
-    this.assistantStatus = status;
-    this.assistantStatusAt = now;
-    return status;
-  }
-
-  async generateCode() {
-    if (!this.currentFn) return;
-
-    const promptEl = document.getElementById('aiPrompt');
-    const prompt = String(promptEl?.value || '').trim();
-    if (!prompt) return;
-    const priorHistory = this.getAiHistoryEntriesForCurrentFn().slice(-12).map((entry) => ({
-      role: String(entry.role || 'assistant'),
-      text: String(entry.text || ''),
-    }));
-    const mode = this.resolveAssistantMode(prompt);
-
-    this.appendAiMessage('user', prompt, true);
-    if (promptEl) promptEl.value = '';
-
-    const loading = document.createElement('div');
-    loading.className = 'ai-msg system';
-    loading.textContent = 'Thinking...';
-    const out = document.getElementById('aiOutput');
-    if (out) out.appendChild(loading);
-
-    try {
-      const status = await this.fetchAssistantStatus();
-      if (status && status.enabled === false) {
-        if (out && loading.parentNode === out) out.removeChild(loading);
-        this.appendAiMessage('system', 'Error: assistant disabled. Enable FN_ASSISTANT_ENABLED.', true);
-        return;
-      }
-
-      let smokeProbe = null;
-      if (mode === 'chat' && this.shouldRunAiSmoke(prompt)) {
-        try {
-          smokeProbe = await this.runAiSmokeProbe();
-          this.appendAiMessage('system', `Smoke probe: status ${smokeProbe.status} (${smokeProbe.latency_ms} ms) route=${smokeProbe.route}`, true);
-        } catch (probeErr) {
-          const probeMsg = String(probeErr && probeErr.message ? probeErr.message : probeErr);
-          smokeProbe = { error: probeMsg };
-          this.appendAiMessage('system', `Smoke probe error: ${probeMsg}`, true);
-        }
-      }
-
-      const result = await getJson('/_fn/assistant/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          runtime: this.currentFn.runtime,
-          name: this.currentFn.name,
-          template: 'hello_json',
-          prompt,
-          mode,
-          current_code: String(this.fileContents[this.handlerFile] || ''),
-          chat_history: priorHistory,
-          test_result: smokeProbe,
-        }),
-      });
-
-      if (out) out.removeChild(loading);
-      const resolvedMode = String(result.mode || mode);
-      const selectedMode = String(this.aiMode || 'auto').toLowerCase();
-      const effectiveMode = selectedMode === 'chat'
-        ? 'chat'
-        : (selectedMode === 'edit' ? 'generate' : resolvedMode);
-      const reply = String(result.message || '').trim();
-      let code = String(result.code || '');
-      if (!code && effectiveMode === 'generate' && reply) {
-        code = this.extractCodeFromAssistantMessage(reply, this.currentFn.runtime);
-      }
-
-      if (effectiveMode === 'chat') {
-        if (reply) {
-          this.appendAiMessage('system', reply, true);
-        } else {
-          this.appendAiMessage('system', 'Assistant returned an empty response.', true);
-        }
-        return;
-      }
-
-      if (!code) {
-        if (reply) {
-          this.appendAiMessage('system', reply, true);
-        } else {
-          this.appendAiMessage('system', 'Assistant returned empty code.', true);
-        }
-        return;
-      }
-
-      this.appendAiMessage('system', 'Generated suggestion applied to editor. Review and click Deploy to publish.', true);
-      this.fileContents[this.handlerFile] = code;
-      this.currentFile = this.handlerFile;
-      this.renderFileTree();
-      this.renderEditor();
-    } catch (err) {
-      if (out && loading.parentNode === out) out.removeChild(loading);
-      const msg = String(err && err.message ? err.message : err);
-      if (msg.includes('assistant disabled')) {
-        this.appendAiMessage('system', 'Error: assistant disabled. Enable FN_ASSISTANT_ENABLED to use AI generation.', true);
-        return;
-      }
-      if (msg.includes('console write disabled')) {
-        this.appendAiMessage('system', 'Error: console write disabled. Chat works, but code generation needs FN_CONSOLE_WRITE_ENABLED=1 (or admin token).', true);
-        return;
-      }
-      this.appendAiMessage('system', `Error: ${msg}`, true);
     }
   }
 
