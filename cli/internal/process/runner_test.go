@@ -14,11 +14,11 @@ import (
 
 func TestSelectNativeRuntimes_DefaultSkipsUnavailableSilently(t *testing.T) {
 	selected, warnings, err := selectNativeRuntimes("", map[string]bool{
-		"python3": true,
-		"node":    true,
-		"php":     false,
-		"cargo":   false,
-		"go":      false,
+		"python": true,
+		"node":   true,
+		"php":    false,
+		"cargo":  false,
+		"go":     false,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -33,11 +33,11 @@ func TestSelectNativeRuntimes_DefaultSkipsUnavailableSilently(t *testing.T) {
 
 func TestSelectNativeRuntimes_DefaultKeepsLuaWithoutExternalBinaries(t *testing.T) {
 	selected, warnings, err := selectNativeRuntimes("", map[string]bool{
-		"python3": false,
-		"node":    false,
-		"php":     false,
-		"cargo":   false,
-		"go":      false,
+		"python": false,
+		"node":   false,
+		"php":    false,
+		"cargo":  false,
+		"go":     false,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -52,11 +52,11 @@ func TestSelectNativeRuntimes_DefaultKeepsLuaWithoutExternalBinaries(t *testing.
 
 func TestSelectNativeRuntimes_ExplicitIgnoresUnknownAndUnavailableWithWarnings(t *testing.T) {
 	selected, warnings, err := selectNativeRuntimes("node,unknown,go,python", map[string]bool{
-		"python3": true,
-		"node":    true,
-		"php":     false,
-		"cargo":   false,
-		"go":      false,
+		"python": true,
+		"node":   true,
+		"php":    false,
+		"cargo":  false,
+		"go":     false,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -77,11 +77,11 @@ func TestSelectNativeRuntimes_ExplicitIgnoresUnknownAndUnavailableWithWarnings(t
 
 func TestSelectNativeRuntimes_ExplicitTrimsAndDedupes(t *testing.T) {
 	selected, warnings, err := selectNativeRuntimes(" python ,node,node , python ", map[string]bool{
-		"python3": true,
-		"node":    true,
-		"php":     true,
-		"cargo":   false,
-		"go":      false,
+		"python": true,
+		"node":   true,
+		"php":    true,
+		"cargo":  false,
+		"go":     false,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -96,11 +96,11 @@ func TestSelectNativeRuntimes_ExplicitTrimsAndDedupes(t *testing.T) {
 
 func TestSelectNativeRuntimes_ExplicitExperimentalWhenAvailable(t *testing.T) {
 	selected, warnings, err := selectNativeRuntimes("rust,go", map[string]bool{
-		"python3": true,
-		"node":    false,
-		"php":     false,
-		"cargo":   true,
-		"go":      true,
+		"python": true,
+		"node":   false,
+		"php":    false,
+		"cargo":  true,
+		"go":     true,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -115,11 +115,11 @@ func TestSelectNativeRuntimes_ExplicitExperimentalWhenAvailable(t *testing.T) {
 
 func TestSelectNativeRuntimes_ExplicitOnlyUnavailableReturnsError(t *testing.T) {
 	_, warnings, err := selectNativeRuntimes("go,rust", map[string]bool{
-		"python3": true,
-		"node":    false,
-		"php":     false,
-		"cargo":   false,
-		"go":      false,
+		"python": true,
+		"node":   false,
+		"php":    false,
+		"cargo":  false,
+		"go":     false,
 	})
 	if err == nil {
 		t.Fatalf("expected error when explicit runtimes are unavailable")
@@ -134,11 +134,11 @@ func TestSelectNativeRuntimes_ExplicitOnlyUnavailableReturnsError(t *testing.T) 
 
 func TestSelectNativeRuntimes_ExplicitEmptyCSVFallsBackToDefault(t *testing.T) {
 	selected, warnings, err := selectNativeRuntimes(", ,", map[string]bool{
-		"python3": false,
-		"node":    true,
-		"php":     false,
-		"cargo":   false,
-		"go":      false,
+		"python": false,
+		"node":   true,
+		"php":    false,
+		"cargo":  false,
+		"go":     false,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
