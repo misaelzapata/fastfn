@@ -31,11 +31,12 @@ Rule of thumb:
 
 ## Run “At 9am” (Cron + Timezone)
 
-FastFN supports 5-field and 6-field cron expressions and a limited `timezone`:
+FastFN supports 5-field and 6-field cron expressions, common macros, and a limited `timezone`:
 
 - `UTC` (or `Z`)
 - `local`
-- fixed offsets like `-05:00`, `+02:00`
+- fixed offsets like `-05:00`, `+02:00`, `-0500`, `+0200`
+- macros such as `@hourly`, `@daily`, `@midnight`, `@weekly`, `@monthly`, `@yearly`, `@annually`
 
 Example (daily at 09:00 UTC):
 
@@ -82,6 +83,7 @@ Enable retries for transient failures (429/503/5xx):
 
 - API snapshot: `GET /_fn/schedules`
 - Console view: `/console/scheduler`
+- Pending retries appear as `retry_due` and `retry_attempt` in the scheduler snapshot.
 
 ## Persistence Between Restarts
 
@@ -107,6 +109,7 @@ Controls:
 
 - No full IANA timezone names like `America/New_York` (only `UTC`, `local`, fixed offsets).
 - Not a distributed job queue (no cross-node coordination, no exactly-once guarantees).
+- Cron matching uses standard day/month aliases and Vixie-style `OR` semantics for day-of-month vs day-of-week, which is worth remembering when porting schedules from other systems.
 
 ## Problem
 

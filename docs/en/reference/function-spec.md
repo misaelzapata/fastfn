@@ -559,7 +559,9 @@ Cron supports:
 
 - 5 fields: `min hour dom mon dow`
 - 6 fields: `sec min hour dom mon dow`
-- macros: `@hourly`, `@daily`, `@weekly`, `@monthly`, `@yearly`
+- macros: `@hourly`, `@daily`, `@midnight`, `@weekly`, `@monthly`, `@yearly`, `@annually`
+- month/day aliases: `JAN..DEC`, `SUN..SAT`
+- day-of-week accepts `0..6` and also `7` for Sunday
 
 ```json
 {
@@ -580,13 +582,15 @@ Timezone values:
 
 - `UTC`, `Z`
 - `local` (default if omitted)
-- fixed offsets like `+02:00` or `-05:00`
+- fixed offsets like `+02:00`, `-05:00`, `+0200`, or `-0500`
 
 Notes:
 
 - This runs inside OpenResty (worker 0) and calls your function through the same gateway/runtime policy as normal traffic.
 - To run a function every **X minutes**, set `every_seconds = X * 60` (example: every 15 minutes => `900`).
+- When both day-of-month and day-of-week are restricted, cron matching follows Vixie-style `OR` semantics.
 - Scheduler state is visible at `GET /_fn/schedules` (`next`, `last`, `last_status`, `last_error`).
+- When retries are pending, the scheduler snapshot also exposes `retry_due` and `retry_attempt`.
 - Schedules are stored in `fn.config.json` (so schedule definitions persist across restarts).
 - Scheduler state is persisted to `<FN_FUNCTIONS_ROOT>/.fastfn/scheduler-state.json` by default (so `last/next/status/error` survives restarts).
 - Common failure modes (`last_status` / `last_error`):
@@ -597,13 +601,14 @@ Notes:
 - Retry/backoff (optional):
   - Set `schedule.retry=true` for defaults, or provide an object:
   - `max_attempts` (default `3`), `base_delay_seconds` (default `1`), `max_delay_seconds` (default `30`), `jitter` (default `0.2`).
+  - Runtime clamps: `max_attempts` `1..10`, delays `0..3600`, `jitter` `0..0.5`.
   - Retries apply to status `0`, `429`, `503`, and `>=500`. The scheduler updates `last_error` with a `retrying ...` message.
 - Console UI: `GET /console/scheduler` shows schedules + keep_warm (requires `FN_UI_ENABLED=1`).
 - Global toggles:
   - `FN_SCHEDULER_ENABLED=0` disables the scheduler entirely.
-  - `FN_SCHEDULER_INTERVAL` controls the scheduler tick loop (default `1` second).
+  - `FN_SCHEDULER_INTERVAL` controls the scheduler tick loop (default `1` second, minimum effective value `1`).
   - `FN_SCHEDULER_PERSIST_ENABLED=0` disables scheduler state persistence.
-  - `FN_SCHEDULER_PERSIST_INTERVAL` controls how often scheduler state is flushed (seconds).
+  - `FN_SCHEDULER_PERSIST_INTERVAL` controls how often scheduler state is flushed (seconds, clamped to `5..3600`).
   - `FN_SCHEDULER_STATE_PATH` overrides the state file path.
 
 ## Function env and secrets

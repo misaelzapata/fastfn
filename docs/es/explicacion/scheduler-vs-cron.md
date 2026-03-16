@@ -31,11 +31,12 @@ Regla rápida:
 
 ## Correr “A las 9am” (Cron + Timezone)
 
-FastFN soporta cron de 5 campos y 6 campos, y un `timezone` limitado:
+FastFN soporta cron de 5 campos y 6 campos, macros comunes y un `timezone` limitado:
 
 - `UTC` (o `Z`)
 - `local`
-- offsets fijos como `-05:00`, `+02:00`
+- offsets fijos como `-05:00`, `+02:00`, `-0500`, `+0200`
+- macros como `@hourly`, `@daily`, `@midnight`, `@weekly`, `@monthly`, `@yearly`, `@annually`
 
 Ejemplo (diario a las 09:00 UTC):
 
@@ -82,6 +83,7 @@ Habilita retries para fallas transitorias (429/503/5xx):
 
 - Snapshot API: `GET /_fn/schedules`
 - Vista en consola: `/console/scheduler`
+- Los retries pendientes aparecen como `retry_due` y `retry_attempt` en el snapshot del scheduler.
 
 ## Persistencia Entre Restarts
 
@@ -107,6 +109,7 @@ Controles:
 
 - No hay soporte completo de timezones IANA como `America/New_York` (solo `UTC`, `local`, offsets fijos).
 - No es una cola distribuida de jobs (sin coordinación multi-nodo, sin garantías exactly-once).
+- El match cron usa aliases estándar de día/mes y semántica tipo Vixie (`OR`) entre day-of-month y day-of-week, algo importante si migras schedules desde otros sistemas.
 
 ## Problema
 

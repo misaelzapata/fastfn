@@ -543,7 +543,9 @@ Cron soporta:
 
 - 5 campos: `min hour dom mon dow`
 - 6 campos: `sec min hour dom mon dow`
-- macros: `@hourly`, `@daily`, `@weekly`, `@monthly`, `@yearly`
+- macros: `@hourly`, `@daily`, `@midnight`, `@weekly`, `@monthly`, `@yearly`, `@annually`
+- aliases de mes/dia: `JAN..DEC`, `SUN..SAT`
+- day-of-week acepta `0..6` y tambien `7` para domingo
 
 ```json
 {
@@ -564,13 +566,15 @@ Timezones:
 
 - `UTC`, `Z`
 - `local` (default si se omite)
-- offsets fijos como `+02:00` o `-05:00`
+- offsets fijos como `+02:00`, `-05:00`, `+0200` o `-0500`
 
 - El scheduler corre dentro de OpenResty (worker 0).
 - Invoca el runtime por unix socket.
 - La policy aplica igual (metodos, body, concurrencia, timeout).
 - Para correr cada **X minutos**, usa `every_seconds = X * 60` (ejemplo: 15 minutos => `900`).
+- Cuando day-of-month y day-of-week estan restringidos a la vez, el match sigue semantica tipo Vixie (`OR`).
 - Estado del scheduler: `GET /_fn/schedules` (`next`, `last`, `last_status`, `last_error`).
+- Cuando hay retries pendientes, el snapshot tambien expone `retry_due` y `retry_attempt`.
 - Los schedules se guardan en `fn.config.json` (la definicion persiste entre restarts).
 - El estado del scheduler se persiste por defecto en `<FN_FUNCTIONS_ROOT>/.fastfn/scheduler-state.json` (para mantener `last/next/status/error` entre restarts).
 - Fallos comunes (`last_status` / `last_error`):
@@ -581,13 +585,14 @@ Timezones:
 - Retry/backoff (opcional):
   - Setea `schedule.retry=true` para defaults, o un objeto:
   - `max_attempts` (default `3`), `base_delay_seconds` (default `1`), `max_delay_seconds` (default `30`), `jitter` (default `0.2`).
+  - El runtime clamp-ea: `max_attempts` `1..10`, delays `0..3600`, `jitter` `0..0.5`.
   - Retries aplican a status `0`, `429`, `503` y `>=500`. El scheduler actualiza `last_error` con `retrying ...`.
 - Consola: `GET /console/scheduler` muestra schedules + keep_warm (requiere `FN_UI_ENABLED=1`).
 - Toggles globales:
   - `FN_SCHEDULER_ENABLED=0` deshabilita el scheduler.
-  - `FN_SCHEDULER_INTERVAL` controla el tick (default `1` segundo).
+  - `FN_SCHEDULER_INTERVAL` controla el tick (default `1` segundo, minimo efectivo `1`).
   - `FN_SCHEDULER_PERSIST_ENABLED=0` deshabilita persistencia de estado.
-  - `FN_SCHEDULER_PERSIST_INTERVAL` controla cada cuánto se escribe el estado (segundos).
+  - `FN_SCHEDULER_PERSIST_INTERVAL` controla cada cuánto se escribe el estado (segundos, clamp `5..3600`).
   - `FN_SCHEDULER_STATE_PATH` permite override del path del archivo.
 
 ## `fn.env.json` y secretos
