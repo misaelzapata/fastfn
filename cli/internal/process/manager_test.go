@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -137,14 +138,17 @@ func TestManager_RestartsServiceWhenConfigured(t *testing.T) {
 		t.Skip("skipping integration test requiring bash")
 	}
 
-	stdout, stderr := captureOutput(func() {
+	markerFile := filepath.Join(t.TempDir(), "restart-count.log")
+	const minBoots = 2
+
+	_, stderr := captureOutput(func() {
 		mgr := NewManager()
 		defer mgr.StopAll()
 
 		mgr.AddServiceWithOptions(
 			"restart-me",
 			"bash",
-			[]string{"-c", "echo boot; exit 1"},
+			[]string{"-c", "echo boot >> \"$1\"; exit 1", "bash", markerFile},
 			nil,
 			".",
 			ServiceOptions{
@@ -160,11 +164,26 @@ func TestManager_RestartsServiceWhenConfigured(t *testing.T) {
 		if err := mgr.StartAll(); err != nil {
 			t.Fatalf("StartAll failed: %v", err)
 		}
-		time.Sleep(200 * time.Millisecond)
+
+		deadline := time.Now().Add(2 * time.Second)
+		for {
+			payload, err := os.ReadFile(markerFile)
+			if err == nil && strings.Count(string(payload), "boot") >= minBoots {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("timed out waiting for %d boots in %s", minBoots, markerFile)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
 	})
 
-	if strings.Count(stdout, "[restart-me] boot") < 2 {
-		t.Fatalf("expected service to restart and print boot multiple times; stdout=%q", stdout)
+	payload, err := os.ReadFile(markerFile)
+	if err != nil {
+		t.Fatalf("expected restart marker file: %v", err)
+	}
+	if strings.Count(string(payload), "boot") < minBoots {
+		t.Fatalf("expected service to restart multiple times, marker=%q", string(payload))
 	}
 	if !strings.Contains(stderr, "[restart-me] Restarting in") {
 		t.Fatalf("expected restart log in stderr; stderr=%q", stderr)
@@ -222,5 +241,55 @@ func TestMergedServiceEnv_PreservesNoColorWithoutForceColor(t *testing.T) {
 
 	if !strings.Contains(out, "NO_COLOR=1") {
 		t.Fatalf("expected NO_COLOR to remain when FORCE_COLOR is empty, got: %s", out)
+	}
+}
+
+func TestSplitEnvKV(t *testing.T) {
+	cases := []struct {
+		input   string
+		wantKey string
+		wantVal string
+		wantOK  bool
+	}{
+		{input: "", wantOK: false},
+		{input: "NO_EQUALS", wantOK: false},
+		{input: "=missing-key", wantOK: false},
+		{input: "KEY=value", wantKey: "KEY", wantVal: "value", wantOK: true},
+		{input: "KEY=value=with=equals", wantKey: "KEY", wantVal: "value=with=equals", wantOK: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.input, func(t *testing.T) {
+			key, val, ok := splitEnvKV(tc.input)
+			if ok != tc.wantOK || key != tc.wantKey || val != tc.wantVal {
+				t.Fatalf("splitEnvKV(%q) = (%q, %q, %v), want (%q, %q, %v)", tc.input, key, val, ok, tc.wantKey, tc.wantVal, tc.wantOK)
+			}
+		})
+	}
+}
+
+func TestManager_StartAllReturnsErrorForInvalidCommand(t *testing.T) {
+	mgr := NewManager()
+	mgr.AddServiceWithOptions(
+		"broken",
+		"/definitely/missing/fastfn-binary",
+		nil,
+		nil,
+		".",
+		ServiceOptions{},
+	)
+
+	err := mgr.StartAll()
+	if err == nil {
+		t.Fatal("expected StartAll to fail")
+	}
+	if !strings.Contains(err.Error(), "failed to start broken") {
+		t.Fatalf("expected service name in error, got %v", err)
+	}
+
+	select {
+	case <-mgr.Done():
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("expected manager context to be canceled after rollback")
 	}
 }

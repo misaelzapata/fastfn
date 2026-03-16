@@ -120,6 +120,8 @@ PY
 
 wait_for_catalog_ready() {
   local ready=0
+  local prev_signature=""
+  local stable_hits=0
   for _ in $(seq 1 "$WAIT_SECS"); do
     local body_file code
     body_file="$(mktemp)"
@@ -132,7 +134,8 @@ wait_for_catalog_ready() {
     fi
 
     if [[ "$code" == "200" ]]; then
-      if CATALOG_FILE="$body_file" python3 - <<'PY' >/dev/null 2>&1
+      local signature=""
+      signature="$(CATALOG_FILE="$body_file" python3 - <<'PY' 2>/dev/null || true
 import json
 import os
 import sys
@@ -155,10 +158,22 @@ for entry in runtimes.values():
         fn_total += len(fns)
 
 if len(mapped) > 0 or fn_total > 0:
-    sys.exit(0)
-sys.exit(1)
+    print(f"{len(mapped)}:{fn_total}")
 PY
-      then
+)"
+      if [[ -n "$signature" ]]; then
+        if [[ "$signature" == "$prev_signature" ]]; then
+          stable_hits=$((stable_hits + 1))
+        else
+          prev_signature="$signature"
+          stable_hits=1
+        fi
+      else
+        prev_signature=""
+        stable_hits=0
+      fi
+
+      if [[ "$stable_hits" -ge 2 ]]; then
         rm -f "$body_file"
         ready=1
         break
@@ -226,6 +241,37 @@ assert_status() {
     exit 1
   fi
   rm -f "$body_file"
+}
+
+assert_status_eventually() {
+  local method="$1"
+  local path="$2"
+  local expected="$3"
+  local max_wait_secs="${4:-60}"
+  local started_at now elapsed
+  started_at="$(date +%s)"
+
+  while true; do
+    local body_file code
+    body_file="$(mktemp)"
+    code="$(curl_fastfn -sS -X "$method" -o "$body_file" -w '%{http_code}' "${BASE_URL}$path" 2>/dev/null || true)"
+    if [[ "$code" == "$expected" ]]; then
+      rm -f "$body_file"
+      return 0
+    fi
+
+    now="$(date +%s)"
+    elapsed="$((now - started_at))"
+    if (( elapsed >= max_wait_secs )); then
+      echo "FAIL $method $path expected=$expected within=${max_wait_secs}s got=$code"
+      cat "$body_file" || true
+      rm -f "$body_file"
+      exit 1
+    fi
+
+    rm -f "$body_file"
+    sleep 1
+  done
 }
 
 assert_status_extra() {
@@ -1602,7 +1648,7 @@ assert_status GET "/slow" "200"
 assert_status GET "/slow-node" "200"
 assert_status GET "/slow-python" "200"
 assert_status GET "/slow-php" "200"
-assert_status GET "/slow-rust" "200"
+assert_status_eventually GET "/slow-rust" "200" "120"
 assert_status GET "/state-a" "200"
 assert_status GET "/state-b" "200"
 assert_worker_pool_runtime_fn_version
@@ -1651,7 +1697,7 @@ assert_body_contains GET "/php-no-deps" "\"isolation_ok\":true"
 
 # ---- Rust basic ----
 # rust-basic uses only serde_json (built-in) → should compile and run
-assert_status GET "/rust-basic" "200"
+assert_status_eventually GET "/rust-basic" "200" "120"
 assert_body_contains GET "/rust-basic" "\"runtime\":\"rust\""
 assert_body_contains GET "/rust-basic" "\"ok\":true"
 
