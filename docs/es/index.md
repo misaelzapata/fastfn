@@ -11,7 +11,7 @@ hide:
   <img src="../logo.PNG" alt="FastFN Logo" width="180">
 </p>
 <p align="center">
-    <em>Framework FastFN, alto rendimiento, fácil de aprender, rápido de programar</em>
+    <em>Plataforma FaaS self-hosted, de alto rendimiento, fácil de aprender y rápida de programar</em>
 </p>
 <p align="center">
 <a href="https://github.com/misaelzapata/fastfn" target="_blank">
@@ -33,7 +33,7 @@ hide:
 <p><strong>Código Fuente</strong>: <a href="https://github.com/misaelzapata/fastfn" target="_blank">https://github.com/misaelzapata/fastfn</a></p>
 <hr />
 
-<p>FastFN es un framework serverless moderno y rápido (de alto rendimiento) para construir APIs con múltiples lenguajes basado en enrutamiento por sistema de archivos.</p>
+<p>FastFN es un servidor FaaS self-hosted de alto rendimiento para construir APIs con enrutamiento por sistema de archivos y múltiples runtimes en un mismo proyecto.</p>
 
 <p>Las características clave son:</p>
 <ul>

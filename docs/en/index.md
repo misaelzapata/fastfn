@@ -11,7 +11,7 @@ hide:
   <img src="../logo.PNG" alt="FastFN Logo" width="180">
 </p>
 <p align="center">
-    <em>FastFN framework, high performance, easy to learn, fast to code</em>
+    <em>Self-hosted FaaS platform, high performance, easy to learn, fast to code</em>
 </p>
 <p align="center">
 <a href="https://github.com/misaelzapata/fastfn" target="_blank">
@@ -33,7 +33,7 @@ hide:
 <p><strong>Source Code</strong>: <a href="https://github.com/misaelzapata/fastfn" target="_blank">https://github.com/misaelzapata/fastfn</a></p>
 <hr />
 
-<p>FastFN is a modern, fast (high-performance), serverless framework for building APIs with multiple languages based on file-system routing.</p>
+<p>FastFN is a high-performance, self-hosted FaaS server for building APIs with file-system routing and multiple runtimes in one project.</p>
 
 <p>The key features are:</p>
 <ul>
