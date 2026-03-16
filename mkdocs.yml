@@ -140,7 +140,6 @@ nav:
       - CLI Reference: en/reference/cli.md
       - HTTP API: en/reference/http-api.md
       - Runtime Contract: en/reference/runtime-contract.md
-      - Runtime Coercion Patterns: en/reference/runtime-coercion-patterns.md
       - External Links: en/reference/external-links.md
       - Builtin Functions: en/reference/builtin-functions.md
       - PHP Template: en/reference/php-template.md
@@ -149,7 +148,6 @@ nav:
       - Architecture: en/explanation/architecture.md
       - Security Model: en/explanation/security-model.md
       - Support Matrix (Advanced Protocols): en/explanation/support-matrix-advanced-protocols.md
-      - Feature Matrix: en/explanation/feature-matrix.md
       - Shared Logic Patterns: en/explanation/shared-logic-patterns.md
       - Technical Comparison: en/explanation/comparison.md
       - Concurrency and Async: en/explanation/concurrency-and-async.md
@@ -224,7 +222,6 @@ nav:
       - CLI Reference: es/referencia/cli-reference.md
       - API HTTP: es/referencia/api-http.md
       - Contrato Runtime: es/referencia/contrato-runtime.md
-      - Patrones de coerción runtime: es/referencia/patrones-coercion-runtime.md
       - Enlaces Externos: es/referencia/enlaces-externos.md
       - Funciones de Ejemplo: es/referencia/funciones-ejemplo.md
       - Plantilla PHP: es/referencia/plantilla-php.md
@@ -234,7 +231,6 @@ nav:
       - Benchmarks de Rendimiento: es/explicacion/benchmarks-rendimiento.md
       - Flujos visuales: es/explicacion/flujos-visuales.md
       - Matriz Soporte Protocolos Avanzados: es/explicacion/matriz-soporte-protocolos-avanzados.md
-      - Matriz de Features: es/explicacion/matriz-de-features.md
       - Patrones de Lógica Compartida: es/explicacion/patrones-de-logica-compartida.md
       - Concurrencia y Async: es/explicacion/concurrencia-y-async.md
       - Comparación Técnica: es/explicacion/comparacion.md

@@ -205,7 +205,7 @@ When both top-level and `invoke.*` are provided, `invoke.*` takes precedence.
 - secret objects: `"KEY":{"value":"secret","is_secret":true}`
 - `null` to delete a key
 
-`GET /_fn/function` also returns runtime dependency resolution metadata:
+`GET /_fn/function` can also return runtime dependency resolution metadata when the runtime emits it (today mainly Python/Node):
 
 - `metadata.dependency_resolution.mode` (`manifest` or `inferred`)
 - `metadata.dependency_resolution.manifest_generated`

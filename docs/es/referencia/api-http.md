@@ -205,7 +205,7 @@ El payload de `/_fn/function-env` acepta:
 - objetos secretos: `"KEY":{"value":"secret","is_secret":true}`
 - `null` para eliminar una clave
 
-`GET /_fn/function` tambien devuelve metadata de resolucion de dependencias:
+`GET /_fn/function` tambien puede devolver metadata de resolucion de dependencias cuando el runtime la emite (hoy sobre todo Python/Node):
 
 - `metadata.dependency_resolution.mode` (`manifest` o `inferred`)
 - `metadata.dependency_resolution.manifest_generated`

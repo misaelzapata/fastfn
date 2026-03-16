@@ -257,7 +257,8 @@ Resolution model:
 - Rust handlers are built with `cargo` inside a per-function `.rust-build/` workspace.
 - FastFN does **not** scan repo root dependency files automatically.
 - For reusable shared installs across many functions, use packs via `shared_deps`.
-- Runtime writes transparent state to `<function_dir>/.fastfn-deps-state.json`.
+- Python and Node write transparent resolution state to `<function_dir>/.fastfn-deps-state.json`.
+- PHP and Rust currently install/build directly without a per-function `.fastfn-deps-state.json` file.
 
 ### Python (manifest + inference)
 
@@ -313,6 +314,7 @@ Behavior:
 
 - FastFN runs `composer install` per function when `composer.json` is present.
 - No import-based inference is performed for PHP in this phase.
+- PHP currently does not emit `metadata.dependency_resolution` state.
 
 Toggle:
 
@@ -326,12 +328,13 @@ Behavior:
 - The runtime prepares a per-function `.rust-build/` workspace and compiles the handler there.
 - No import-based inference is performed for Rust in this phase.
 - Native mode requires `cargo` in `PATH`.
+- Rust currently does not emit `metadata.dependency_resolution` state.
 
 ### Strict errors and transparency
 
 - Unresolved inferred imports (when strict mode is on) return actionable runtime errors.
 - Install or build failures include short actionable tails from pip/npm/composer/cargo output.
-- Console API `GET /_fn/function` exposes `metadata.dependency_resolution` for current state.
+- Console API `GET /_fn/function` exposes `metadata.dependency_resolution` when the runtime writes that state (today mainly Python/Node).
 
 ```mermaid
 flowchart LR
@@ -340,7 +343,7 @@ flowchart LR
   C -- "No" --> D["Install from manifest"]
   C -- "Yes (Py/Node)" --> E["Infer imports and write manifest"]
   E --> D
-  D --> F["Write .fastfn-deps-state.json + lock info"]
+  D --> F["Write resolution state + lock info when supported"]
   F --> G["Invoke handler / build Rust binary"]
 ```
 

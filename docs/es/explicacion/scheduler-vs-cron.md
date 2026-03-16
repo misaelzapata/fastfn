@@ -110,17 +110,31 @@ Controles:
 
 ## Problema
 
-Qué dolor operativo o de DX resuelve este tema.
+Esto responde una duda operativa muy común: cuándo conviene que FastFN dispare una función por sí mismo y cuándo conviene delegar a un cron o scheduler externo.
+
+Conviene usar el scheduler built-in cuando quieres:
+
+- dejar la definición del trigger junto a la función en `fn.config.json`
+- ver retries y estado de última corrida en `/_fn/schedules`
+- ejecutar el trigger por la misma ruta de gateway/runtime que usa el tráfico normal
+
+Conviene usar un scheduler externo cuando necesitas timezones más ricos, coordinación entre varios nodos, o ejecutar comandos fuera del modelo HTTP/función.
 
 ## Modelo Mental
 
-Cómo razonar esta feature en entornos similares a producción.
+Piensa el schedule de FastFN como una invocación HTTP sintética administrada por el gateway:
+
+- `every_seconds` sirve mejor para polling o jobs simples de intervalo
+- `cron` sirve mejor para horarios de reloj, por ejemplo "todos los días a las 09:00 UTC"
+- `method`, `query`, `headers`, `body` y `context` forman el payload de esa invocación programada
+- `last`, `next`, `last_status` y `last_error` son estado del scheduler, no configuración funcional
 
 ## Decisiones de Diseño
 
-- Por qué existe este comportamiento
-- Qué tradeoffs se aceptan
-- Cuándo conviene una alternativa
+- El scheduler corre dentro del gateway para que el tráfico programado siga la misma auth, policy, timeout y camino de runtime que una request normal.
+- El soporte de timezone se limita a `UTC`, `local`, `Z` y offsets fijos para mantener el cálculo determinista entre local, Docker y CI.
+- Hay retries built-in para fallas transitorias, pero esto no intenta ser un sistema distribuido de jobs.
+- Si necesitas timezones IANA, coordinación multi-nodo, historial de jobs o ejecución arbitraria de comandos, conviene un scheduler externo.
 
 ## Ver también
 

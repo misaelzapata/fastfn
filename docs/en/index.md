@@ -142,11 +142,11 @@ This documentation is structured to help you learn FastFN step-by-step, from you
     
     [File-System Routing](./tutorial/routing.md)
 
--   **Feature Matrix**
+-   **Support Matrix**
     
     See what FastFN gives you out of the box and where it fits best.
     
-    [Explore Features](./explanation/feature-matrix.md)
+    [Explore Support Matrix](./explanation/support-matrix-advanced-protocols.md)
 
 -   **Learn (The Course)**
     
@@ -176,7 +176,7 @@ This documentation is structured to help you learn FastFN step-by-step, from you
 *   [Runtime Contract](./reference/runtime-contract.md)
 *   [Typed Inputs and Responses](./tutorial/typed-inputs-and-responses.md)
 *   [Built-in Functions](./reference/builtin-functions.md)
-*   [Feature Matrix](./explanation/feature-matrix.md)
+*   [Support Matrix (Advanced Protocols)](./explanation/support-matrix-advanced-protocols.md)
 *   [Operational Recipes](./how-to/operational-recipes.md)
 *   [Security Confidence Checklist](./how-to/security-confidence.md)
 

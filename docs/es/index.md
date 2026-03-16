@@ -142,11 +142,11 @@ Esta documentación está estructurada para ayudarte a aprender FastFN paso a pa
     
     [Enrutamiento por Sistema de Archivos](./tutorial/routing.md)
 
--   **Matriz de Features**
+-   **Matriz de Soporte**
     
     Revisa qué ofrece FastFN de fábrica y dónde encaja mejor.
     
-    [Explorar Features](./explicacion/matriz-de-features.md)
+    [Explorar Matriz de Soporte](./explicacion/matriz-soporte-protocolos-avanzados.md)
 
 -   **Aprende (El Curso)**
     
@@ -176,7 +176,7 @@ Esta documentación está estructurada para ayudarte a aprender FastFN paso a pa
 *   [Contrato de Runtime](./referencia/contrato-runtime.md)
 *   [Inputs y Respuestas Tipadas](./tutorial/inputs-y-respuestas-tipadas.md)
 *   [Funciones de Ejemplo](./referencia/funciones-ejemplo.md)
-*   [Matriz de Features](./explicacion/matriz-de-features.md)
+*   [Matriz de Soporte (Protocolos Avanzados)](./explicacion/matriz-soporte-protocolos-avanzados.md)
 *   [Recetas Operativas](./como-hacer/recetas-operativas.md)
 *   [Checklist de seguridad](./como-hacer/checklist-seguridad-produccion.md)
 

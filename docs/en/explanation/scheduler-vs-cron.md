@@ -110,17 +110,31 @@ Controls:
 
 ## Problem
 
-What operational or developer pain this topic solves.
+This answers a common operational question: should a function be triggered by FastFN itself, by a cron-like external service, or by a job runner outside the app?
+
+Use the built-in scheduler when you want:
+
+- the trigger definition to live next to the function in `fn.config.json`
+- retries and last-run state to stay visible in `/_fn/schedules`
+- the invocation to pass through the same gateway/runtime policy as normal traffic
+
+Use an external scheduler when you need richer timezone support, fleet-wide coordination, or non-HTTP command execution.
 
 ## Mental Model
 
-How to reason about this feature in production-like environments.
+Treat a FastFN schedule as a synthetic HTTP invocation owned by the gateway:
+
+- `every_seconds` is best for simple polling or heartbeat-style jobs
+- `cron` is best for wall-clock schedules like "every day at 09:00 UTC"
+- `method`, `query`, `headers`, `body`, and `context` become the scheduled request payload
+- `last`, `next`, `last_status`, and `last_error` are scheduler state, not function config
 
 ## Design Decisions
 
-- Why this behavior exists
-- Tradeoffs accepted
-- When to choose alternatives
+- The scheduler runs inside the gateway so scheduled traffic follows the same auth, policy, timeout, and runtime path as normal requests.
+- Timezone support is intentionally limited to `UTC`, `local`, `Z`, and fixed offsets to keep evaluation deterministic across local dev, Docker, and CI.
+- Retries are built in for transient runtime failures, but this is still not a distributed job system.
+- If you need IANA timezones, multi-node coordination, job history, or arbitrary shell execution, use an external scheduler.
 
 ## See also
 

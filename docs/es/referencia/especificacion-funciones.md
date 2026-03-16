@@ -401,7 +401,8 @@ Modelo de resolucion:
 - Los handlers Rust se compilan con `cargo` dentro de un workspace `.rust-build/` por función.
 - FastFN no busca automaticamente dependencias en la raiz del repo.
 - Para reutilizacion entre muchas funciones, usa `shared_deps`.
-- El runtime deja trazabilidad en `<function_dir>/.fastfn-deps-state.json`.
+- Python y Node dejan trazabilidad de resolucion en `<function_dir>/.fastfn-deps-state.json`.
+- PHP y Rust hoy resuelven/installan/build-ean directo sin ese archivo de estado por funcion.
 
 ### Python (manifiesto + inferencia)
 
@@ -453,6 +454,7 @@ Toggles:
 - FastFN ejecuta `composer install` por funcion cuando corresponde.
 - No hay inferencia por imports en PHP en esta fase.
 - `FN_AUTO_PHP_DEPS=0` desactiva auto-install de Composer.
+- PHP hoy no emite `metadata.dependency_resolution`.
 
 ### Rust (build en esta fase)
 
@@ -462,12 +464,13 @@ Comportamiento:
 - El runtime prepara un workspace `.rust-build/` por función y compila el handler allí.
 - No hay inferencia por imports para Rust en esta fase.
 - El modo native requiere `cargo` en `PATH`.
+- Rust hoy no emite `metadata.dependency_resolution`.
 
 ### Errores estrictos y transparencia
 
 - Si la inferencia no resuelve imports (con strict activo), la invocacion falla con error accionable.
 - Los fallos de install o build muestran un tail corto de pip/npm/composer/cargo para debug rapido.
-- `GET /_fn/function` expone `metadata.dependency_resolution`.
+- `GET /_fn/function` expone `metadata.dependency_resolution` cuando el runtime escribe ese estado (hoy sobre todo Python/Node).
 
 ```mermaid
 flowchart LR
@@ -476,7 +479,7 @@ flowchart LR
   C -- "No" --> D["Instalar desde manifiesto"]
   C -- "Si (Py/Node)" --> E["Inferir imports y escribir manifiesto"]
   E --> D
-  D --> F["Escribir .fastfn-deps-state.json + lock info"]
+  D --> F["Escribir estado de resolucion + lock info cuando aplica"]
   F --> G["Ejecutar handler / compilar binario Rust"]
 ```
 
