@@ -11,7 +11,7 @@ hide:
   <img src="../logo.PNG" alt="FastFN Logo" width="180">
 </p>
 <p align="center">
-    <em>FastFN framework, high performance, easy to learn, fast to code, ready for production</em>
+    <em>FastFN framework, high performance, easy to learn, fast to code</em>
 </p>
 <p align="center">
 <a href="https://github.com/misaelzapata/fastfn" target="_blank">
