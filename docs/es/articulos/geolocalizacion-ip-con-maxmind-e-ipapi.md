@@ -77,29 +77,21 @@ Integracion (incluye ambas rutas de geolocalizacion):
 bash tests/integration/test-api.sh
 ```
 
-## Diagrama de Flujo
+## Idea clave
 
-```mermaid
-flowchart LR
-  A["Request del cliente"] --> B["Discovery de rutas"]
-  B --> C["Validación de políticas y método"]
-  C --> D["Ejecución del handler runtime"]
-  D --> E["Respuesta HTTP + paridad OpenAPI"]
-```
+Este artículo te deja dos caminos funcionales para el mismo problema: lookup local con base de datos cuando querés latencia estable y más control, y lookup remoto cuando querés la puesta en marcha más corta posible. Ambos devuelven el mismo formato normalizado, así que el cliente no depende del proveedor.
 
-## Problema
+## Qué conviene tener en cuenta
 
-Qué dolor operativo o de DX resuelve este tema.
+- Probá primero con `mock=1` para tener tests repetibles antes de conectar el proveedor real.
+- Si usás MaxMind local, renová la base de datos en forma periódica.
+- Mantené estable la forma de la respuesta aunque el proveedor agregue más campos.
 
-## Modelo Mental
+## Cuándo elegir la otra opción
 
-Cómo razonar esta feature en entornos similares a producción.
-
-## Decisiones de Diseño
-
-- Por qué existe este comportamiento
-- Qué tradeoffs se aceptan
-- Cuándo conviene una alternativa
+- Elegí MMDB local cuando importan la privacidad, la latencia predecible o el modo offline.
+- Elegí un proveedor remoto cuando no querés descargar ni refrescar bases de datos.
+- Evitá hacer geolocalización inline en cada request caliente si podés cachear el resultado antes.
 
 ## Ver también
 

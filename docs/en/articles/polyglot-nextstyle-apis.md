@@ -1,4 +1,4 @@
-# Polyglot APIs with Next-Style Routing in FastFN
+# Polyglot APIs with File-Based Routing in FastFN
 
 
 > Verified status as of **March 10, 2026**.
@@ -9,7 +9,7 @@ This article summarizes what that means in real projects and why it reduces oper
 
 ## 1) One URL model across languages
 
-With Next-style routing (technical: file-based dynamic-segment routing), paths come from filenames, not per-runtime adapters.
+With file-based routing, paths come from filenames, not per-runtime adapters.
 
 Example from `examples/functions/next-style`:
 
@@ -88,29 +88,21 @@ Recommended sequence:
 
 Result: one platform contract, language flexibility, and lower operational overhead than maintaining separate gateways per runtime.
 
-## Flow Diagram
+## Key takeaway
 
-```mermaid
-flowchart LR
-  A["Client request"] --> B["Route discovery"]
-  B --> C["Policy and method validation"]
-  C --> D["Runtime handler execution"]
-  D --> E["HTTP response + OpenAPI parity"]
-```
+The biggest win is not just "many languages." It is one URL tree, one deployment surface, and one OpenAPI document even when different teams choose different runtimes.
 
-## Problem
+## What to keep in mind
 
-What operational or developer pain this topic solves.
+- File extension decides the runtime, but the URL comes from the same folder rules everywhere.
+- Keep shared policy in `fn.config.json`; use `fn.routes.json` only when you really need an override.
+- Validate warm and cold behavior in each runtime before moving latency-sensitive endpoints.
 
-## Mental Model
+## When this approach is worth it
 
-How to reason about this feature in production-like environments.
-
-## Design Decisions
-
-- Why this behavior exists
-- Tradeoffs accepted
-- When to choose alternatives
+- Use it when teams share one API surface but not one language.
+- Keep a single runtime if the whole service has the same tooling and performance needs.
+- Use explicit route overrides for legacy paths or special cases, not as the default way to build new endpoints.
 
 ## See also
 

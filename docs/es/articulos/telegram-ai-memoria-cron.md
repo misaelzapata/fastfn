@@ -1,18 +1,13 @@
-# Bot de Telegram con IA y Memoria que Sobrevive al Cron
+# Bots de Telegram Programados con FastFN
 
 
 > Estado verificado al **10 de marzo de 2026**.
 > Nota de runtime: FastFN auto-instala dependencias locales por función desde `requirements.txt` / `package.json`; en `fastfn dev --native` necesitas runtimes instalados en host, mientras que `fastfn dev` depende de Docker daemon activo.
 ## Por qué existe este artículo
-Muchos demos de bot en Telegram funcionan una sola vez y después se rompen.
 
-Esta guía va a la versión práctica:
-- loop de polling que se mantiene,
-- memoria por chat,
-- persistencia de offset para no reprocesar updates viejos,
-- configuración estable para scheduler.
+Usá una función programada de Telegram cuando el trabajo tenga que correr por intervalo: hacer polling, enviar digests o generar resúmenes para un chat. El repo ya incluye `telegram-ai-digest`, un ejemplo funcional que lee mensajes recientes, le pide un resumen a OpenAI y publica el resultado en Telegram.
 
-Si estás empezando, este es el camino más corto a un bot usable.
+Si necesitás una respuesta inmediata por cada mensaje entrante, mirá [Cómo funciona `telegram-ai-reply`](telegram-ai-reply-como-funciona.md).
 
 ## Mapa rápido de documentación
 - Arranque de plataforma: [Ejecutar y probar](../como-hacer/ejecutar-y-probar.md)
@@ -22,31 +17,22 @@ Si estás empezando, este es el camino más corto a un bot usable.
 - Contrato runtime y payload: [Contrato runtime](../referencia/contrato-runtime.md)
 - Ciclo completo de invocación: [Flujo de invocación](../explicacion/flujo-invocacion.md)
 
-## Qué vas a construir
-Una función `telegram-ai-reply` que:
-- consulta updates de Telegram por schedule,
-- llama a OpenAI,
-- responde al mismo chat,
-- guarda memoria corta para continuidad.
-
-## Arquitectura en una imagen
+## Arquitectura
 
 ```text
-Usuario Telegram
+Chat de Telegram
   -> Telegram Bot API (getUpdates)
-  -> scheduler de FastFN -> /telegram-ai-reply
+  -> schedule de FastFN
+  -> telegram-ai-digest
   -> OpenAI
   -> Telegram Bot API (sendMessage)
-  -> Usuario Telegram
+  -> Chat de Telegram
 ```
-
-Archivos de estado local usados:
-- `.memory.json` para memoria por chat
-- `.loop_state.json` para último offset procesado
 
 ## Prerrequisitos
 - Docker Desktop activo
 - token de bot creado con `@BotFather`
+- chat ID del chat de destino
 - API key de OpenAI
 
 Opcional recomendado:
@@ -62,15 +48,14 @@ curl -sS http://127.0.0.1:8080/_fn/health
 Esperado:
 - runtimes `node` y `python` en estado up.
 
-## Paso 2: Configurar secretos y opciones de runtime
-Editar `<FN_FUNCTIONS_ROOT>/telegram-ai-reply/fn.env.json`:
+## Paso 2: Configurar secretos
+Editar `<FN_FUNCTIONS_ROOT>/telegram-ai-digest/fn.env.json`:
 
 ```json
 {
   "TELEGRAM_BOT_TOKEN": { "value": "<set-me>", "is_secret": true },
-  "OPENAI_API_KEY": { "value": "<set-me>", "is_secret": true },
-  "OPENAI_MODEL": { "value": "gpt-4o-mini", "is_secret": false },
-  "TELEGRAM_LOOP_ENABLED": { "value": "true", "is_secret": false }
+  "TELEGRAM_CHAT_ID": { "value": "<set-me>", "is_secret": false },
+  "OPENAI_API_KEY": { "value": "<set-me>", "is_secret": true }
 }
 ```
 
@@ -78,33 +63,37 @@ Notas:
 - mantené secretos reales con `is_secret: true`
 - valores de función se exponen como `event.env`
 
-## Paso 3: Habilitar scheduler loop en config de función
-Editar `<FN_FUNCTIONS_ROOT>/telegram-ai-reply/fn.config.json`:
+## Paso 3: Revisar el schedule
+
+El ejemplo corre por intervalo desde `telegram-ai-digest/fn.config.json`:
 
 ```json
-{
-  "timeout_ms": 200000,
-  "max_concurrency": 2,
-  "schedule": {
-    "enabled": true,
-    "every_seconds": 75,
-    "method": "GET",
-    "query": {
-      "loop": "true",
-      "dry_run": "false",
-      "wait_secs": "45",
-      "force_clear_webhook": "true"
-    },
-    "context": { "type": "cron" }
-  }
+"schedule": {
+  "enabled": true,
+  "every_seconds": 3600,
+  "method": "GET"
 }
 ```
 
-Por qué esta combinación:
-- `every_seconds` mayor que `wait_secs` reduce solapamiento.
-- baja ruido de errores por ejecución concurrente.
+Ajustá el intervalo según tu caso y luego recargá.
 
-## Paso 4: Hot reload en vez de reiniciar
+## Paso 4: Ejecutar la función una vez a mano
+
+```bash
+curl -sS 'http://127.0.0.1:8080/telegram-ai-digest'
+```
+
+Ejemplo de respuesta:
+
+```json
+{
+  "ok": true,
+  "message_count": 42,
+  "digest": "Daily Digest (2026-03-17T12:00 UTC)\n\n..."
+}
+```
+
+## Paso 5: Hot reload en vez de reiniciar
 
 ```bash
 curl -sS -X POST http://127.0.0.1:8080/_fn/reload
@@ -112,66 +101,17 @@ curl -sS -X POST http://127.0.0.1:8080/_fn/reload
 
 Para cambios de función/config/env normalmente no hace falta reiniciar contenedor.
 
-## Paso 5: Verificar estado de scheduler
+## Paso 6: Verificar estado del scheduler
 
 ```bash
 curl -sS http://127.0.0.1:8080/_fn/schedules
 ```
 
-Revisar entrada `telegram-ai-reply`:
-- `schedule.enabled=true`
-- `state.last_status=200` después de al menos un ciclo
-
-## Paso 6: Verificación dry-run y live
-Dry run:
-
-```bash
-curl -sS -X POST \
-  'http://127.0.0.1:8080/telegram-ai-reply?mode=loop&dry_run=true&wait_secs=10'
-```
-
-Modo real:
-- enviá mensaje al bot,
-- esperá un ciclo,
-- verificá respuesta en tu teléfono.
-
-Prueba one-shot:
-
-```bash
-curl -sS -X POST \
-  'http://127.0.0.1:8080/telegram-ai-reply?mode=reply&dry_run=false&chat_id=<CHAT_ID>&text=Hola'
-```
-
-## Memoria y offset
-Ajustes de memoria por query:
-- `memory=true|false`
-- `memory_max_turns` (default 8)
-- `memory_ttl_secs` (default 3600)
-
-Archivo de offset:
-- `<FN_FUNCTIONS_ROOT>/telegram-ai-reply/.loop_state.json`
-
-Archivo de memoria:
-- `<FN_FUNCTIONS_ROOT>/telegram-ai-reply/.memory.json`
-
-Esta combinación estabiliza el modo cron tras reinicios.
-
-## Tabla rápida de troubleshooting
-
-| Síntoma | Significado | Solución |
-|---|---|---|
-| `last_status=409` | otro poller/webhook activo | usar `force_clear_webhook=true` y apagar poller externo |
-| `last_status=502` | falla API externa | validar token/key, red, cuotas |
-| `last_status=504` | sin mensajes en la ventana | aceptable en polling; ajustar intervalos |
-| responde una sola vez | loop/schedule deshabilitado | activar `TELEGRAM_LOOP_ENABLED` y `schedule.enabled` |
-| repite mensajes viejos | offset no persistido | validar permisos de `.loop_state.json` |
-
 ## Checklist operativo
 1. `/_fn/health` con runtimes activos.
-2. `/_fn/schedules` con loop activo y estado saludable.
-3. un solo origen de polling activo.
-4. secretos en `fn.env.json` con `is_secret=true`.
-5. archivos de estado con permisos de escritura.
+2. secretos en `fn.env.json` con `is_secret=true`.
+3. un solo origen de polling activo para el mismo bot token.
+4. si necesitás memoria entre corridas, guardala fuera de la request en base de datos, archivo u otro storage durable.
 
 ## Documentación relacionada
 - [Telegram E2E](../como-hacer/telegram-e2e.md)
@@ -180,29 +120,21 @@ Esta combinación estabiliza el modo cron tras reinicios.
 - [Especificación de funciones](../referencia/especificacion-funciones.md)
 - [Arquitectura](../explicacion/arquitectura.md)
 
-## Diagrama de Flujo
+## Idea clave
 
-```mermaid
-flowchart LR
-  A["Request del cliente"] --> B["Discovery de rutas"]
-  B --> C["Validación de políticas y método"]
-  C --> D["Ejecución del handler runtime"]
-  D --> E["Respuesta HTTP + paridad OpenAPI"]
-```
+El trabajo programado en Telegram tiene una forma distinta a la de los webhooks. Usalo cuando el bot tenga que despertarse por intervalo, leer actividad reciente y publicar un resultado sin esperar una request entrante.
 
-## Problema
+## Qué conviene tener en cuenta
 
-Qué dolor operativo o de DX resuelve este tema.
+- Los jobs programados sirven bien para digests, polling, limpieza y otras tareas en segundo plano.
+- Conviene dejar explícitos el polling, la deduplicación y el almacenamiento, en vez de esconderlos dentro de un handler de webhook.
+- Si el bot tiene que recordar algo entre corridas, guardá ese estado fuera de la request.
 
-## Modelo Mental
+## Cuándo conviene el camino de webhook
 
-Cómo razonar esta feature en entornos similares a producción.
-
-## Decisiones de Diseño
-
-- Por qué existe este comportamiento
-- Qué tradeoffs se aceptan
-- Cuándo conviene una alternativa
+- Usá la guía de webhook cuando cada mensaje entrante tenga que disparar una respuesta inmediata.
+- Usá el camino programado cuando el trabajo sea periódico o cuando polling sea más simple que exponer un webhook público.
+- Combiná ambos solo si cada uno tiene una responsabilidad bien separada.
 
 ## Ver también
 

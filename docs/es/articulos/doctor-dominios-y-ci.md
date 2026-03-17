@@ -74,29 +74,21 @@ fastfn doctor domains
 Fix actual:
 - crear `fastfn.json` minimo cuando falta.
 
-## Diagrama de Flujo
+## Idea clave
 
-```mermaid
-flowchart LR
-  A["Request del cliente"] --> B["Discovery de rutas"]
-  B --> C["Validación de políticas y método"]
-  C --> D["Ejecución del handler runtime"]
-  D --> E["Respuesta HTTP + paridad OpenAPI"]
-```
+Usá `fastfn doctor domains` como un chequeo previo del borde público, no como un reemplazo del health check de tu app. Te dice si el host, el destino DNS, TLS, la redirección y la ruta de ACME están bien desde afuera antes de mover tráfico.
 
-## Problema
+## Qué conviene tener en cuenta
 
-Qué dolor operativo o de DX resuelve este tema.
+- Corré el comando después de cambios DNS, antes de renovar certificados y en CI antes de un release.
+- Usá `--json` cuando quieras salida fácil de procesar en pipelines o validaciones automáticas.
+- Definí `expected-target` solo cuando tengas claro qué destino final querés exigir.
 
-## Modelo Mental
+## Cuándo usar otra herramienta
 
-Cómo razonar esta feature en entornos similares a producción.
-
-## Decisiones de Diseño
-
-- Por qué existe este comportamiento
-- Qué tradeoffs se aceptan
-- Cuándo conviene una alternativa
+- Usá health endpoints de la app para bugs aguas adentro, fallas de base de datos o dependencias lentas.
+- Usá monitoreo continuo para alertas de reachability y vencimiento de certificados.
+- Usá `fastfn doctor --fix` solo para ayuda local; a propósito no cambia DNS ni TLS remotos.
 
 ## Ver también
 

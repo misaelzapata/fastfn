@@ -156,29 +156,21 @@ Luego define/exporta `main` en el archivo runtime.
 - [Consola y administración](../como-hacer/consola-admin.md)
 - [Arquitectura](../explicacion/arquitectura.md)
 
-## Diagrama de Flujo
+## Idea clave
 
-```mermaid
-flowchart LR
-  A["Request del cliente"] --> B["Discovery de rutas"]
-  B --> C["Validación de políticas y método"]
-  C --> D["Ejecución del handler runtime"]
-  D --> E["Respuesta HTTP + paridad OpenAPI"]
-```
+El loop más rápido acá es simple: agregás un archivo, recargás una vez, llamás la ruta y revisás OpenAPI. Cuando esos cuatro pasos quedan alineados, el desarrollo local se siente predecible y no misterioso.
 
-## Problema
+## Qué conviene tener en cuenta
 
-Qué dolor operativo o de DX resuelve este tema.
+- La estructura de archivos controla el discovery, mientras que `fn.config.json` controla métodos, rutas y handlers.
+- Recargá después de cambios en config o rutas para que el catálogo y OpenAPI sigan sincronizados.
+- Las carpetas versionadas son una forma limpia de publicar un contrato nuevo sin romper el anterior.
 
-## Modelo Mental
+## Cuándo conviene otra forma
 
-Cómo razonar esta feature en entornos similares a producción.
-
-## Decisiones de Diseño
-
-- Por qué existe este comportamiento
-- Qué tradeoffs se aceptan
-- Cuándo conviene una alternativa
+- Usá rutas explícitas cuando necesites conservar exactamente un path público existente.
+- Usá un proceso de servicio más largo solo si tu feature depende de estado en memoria compartido entre muchas rutas.
+- Quedate con este modelo para trabajo HTTP de tamaño función donde importan la velocidad de iteración y la visibilidad del contrato.
 
 ## Ver también
 

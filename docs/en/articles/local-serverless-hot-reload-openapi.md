@@ -156,29 +156,21 @@ Then export/define `main` in your runtime file.
 - [Console and Admin Access](../how-to/console-admin-access.md)
 - [Architecture](../explanation/architecture.md)
 
-## Flow Diagram
+## Key takeaway
 
-```mermaid
-flowchart LR
-  A["Client request"] --> B["Route discovery"]
-  B --> C["Policy and method validation"]
-  C --> D["Runtime handler execution"]
-  D --> E["HTTP response + OpenAPI parity"]
-```
+The fastest loop here is simple: add a file, reload once, call the route, check OpenAPI. When those four steps stay aligned, local development feels predictable instead of magical.
 
-## Problem
+## What to keep in mind
 
-What operational or developer pain this topic solves.
+- File layout controls discovery, while `fn.config.json` controls methods, routes, and handler overrides.
+- Reload after config or route changes so the catalog and OpenAPI stay in sync.
+- Version folders are a clean way to ship a new contract without breaking the old one.
 
-## Mental Model
+## When to choose a different setup
 
-How to reason about this feature in production-like environments.
-
-## Design Decisions
-
-- Why this behavior exists
-- Tradeoffs accepted
-- When to choose alternatives
+- Use explicit routes when you must preserve an existing public path exactly.
+- Use a long-lived service process only if your feature depends on shared in-memory state across many routes.
+- Keep this model for function-sized HTTP work where fast iteration and contract visibility matter most.
 
 ## See also
 

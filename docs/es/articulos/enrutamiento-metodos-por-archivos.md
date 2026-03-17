@@ -1,6 +1,6 @@
 ---
 title: Construir una API REST con Enrutamiento de Metodos por Archivos
-description: Como usar el file routing estilo Next.js de FastFN para construir APIs REST limpias con un archivo por metodo HTTP.
+description: Como usar el routing por archivos de FastFN para construir APIs REST limpias con un archivo por metodo HTTP.
 ---
 
 # Construir una API REST con Enrutamiento de Metodos por Archivos
@@ -53,9 +53,9 @@ Funciona, pero tiene costos reales:
 - **Los permisos se mezclan.** Si POST requiere auth pero GET no, esa logica vive en
   el mismo handler, mezclada con logica de negocio.
 
-En frameworks como Express o FastAPI esto se resuelve con decoradores o handlers
-separados por ruta. Pero en function-as-a-service, tipicamente tienes un solo punto de
-entrada por funcion desplegada. FastFN cierra esa brecha.
+En muchos stacks esto se resuelve con decoradores o modulos separados por ruta. Pero
+en function-as-a-service, normalmente tenés un solo punto de entrada por función
+desplegada. FastFN cierra esa brecha sin obligarte a mantener una tabla de rutas a mano.
 
 ---
 
@@ -749,29 +749,21 @@ Los ejemplos funcionales completos estan disponibles en:
 
 Clona el repo, ejecuta `fastfn dev` y empieza a construir.
 
-## Diagrama de Flujo
+## Idea clave
 
-```mermaid
-flowchart LR
-  A["Request del cliente"] --> B["Discovery de rutas"]
-  B --> C["Validación de políticas y método"]
-  C --> D["Ejecución del handler runtime"]
-  D --> E["Respuesta HTTP + paridad OpenAPI"]
-```
+Usá un archivo por método HTTP cuando un recurso tenga varias operaciones. El árbol de carpetas pasa a ser el mapa de la API y cada handler queda lo bastante corto como para entenderlo de una sola lectura.
 
-## Problema
+## Qué conviene tener en cuenta
 
-Qué dolor operativo o de DX resuelve este tema.
+- Las rutas estáticas ganan sobre las dinámicas, así que `me.js` tiene prioridad sobre `[id].js`.
+- Los archivos `_helpers` quedan fuera del router y son el lugar correcto para lógica compartida.
+- Un solo `index.*` sigue siendo buena opción para endpoints simples de un solo método o webhooks.
 
-## Modelo Mental
+## Cuándo conviene otra estructura
 
-Cómo razonar esta feature en entornos similares a producción.
-
-## Decisiones de Diseño
-
-- Por qué existe este comportamiento
-- Qué tradeoffs se aceptan
-- Cuándo conviene una alternativa
+- Usá archivos por método para recursos tipo CRUD con tres o más operaciones.
+- Usá un solo handler cuando la ruta tenga un solo método y casi nada de branching.
+- Usá config de rutas explícita solo cuando necesites conservar una URL heredada que el árbol de carpetas no represente bien.
 
 ## Ver también
 

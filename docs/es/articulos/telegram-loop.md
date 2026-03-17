@@ -1,105 +1,64 @@
-# Telegram Loop Mode (Auto-contenido)
+# Telegram Loop Mode: qué cambió y qué usar ahora
 
 
 > Estado verificado al **10 de marzo de 2026**.
 > Nota de runtime: FastFN auto-instala dependencias locales por función desde `requirements.txt` / `package.json`; en `fastfn dev --native` necesitas runtimes instalados en host, mientras que `fastfn dev` depende de Docker daemon activo.
-Este articulo explica como `telegram-ai-reply` puede ejecutar un loop E2E completo **dentro de un solo endpoint**. La misma URL puede:
+Notas y capturas viejas pueden mencionar un loop auto-contenido de Telegram que hacía polling y respuesta dentro de un solo endpoint. Ese ya no es el ejemplo por defecto del repo.
 
-- enviarte un prompt,
-- esperar tu respuesta via `getUpdates`,
-- llamar a OpenAI,
-- y responderte por Telegram.
+Hoy el punto de partida recomendado es más chico y más fácil de seguir:
 
-## Por que existe
+1. Telegram manda un webhook POST a `/telegram-ai-reply`.
+2. El handler lee el texto entrante.
+3. La función le pide una respuesta a OpenAI.
+4. La función devuelve esa respuesta con Telegram `sendMessage`.
 
-Queremos mostrar que fastfn puede manejar un flujo multi-paso sin workers externos ni scripts. Todo pasa dentro de:
+El ejemplo funcional está en `examples/functions/node/telegram-ai-reply/app.js`.
 
-`/telegram-ai-reply`
+## Prueba local rápida
 
-## Un solo comando (modo loop)
-
-```bash
-curl -sS -X POST \
-"http://127.0.0.1:8080/telegram-ai-reply?mode=loop&dry_run=false&chat_id=TU_CHAT_ID&prompt=fastfn%20loop%20demo&wait_secs=120&max_replies=5&force_clear_webhook=true"
-```
-
-Que hace:
-
-1. fastfn envia el prompt a tu chat.
-2. Hace polling de `getUpdates` hasta que respondas.
-3. Llama OpenAI y te responde.
-
-Si respondes dentro de `wait_secs`, recibis una respuesta con IA.
-
-## Comportamiento por defecto
-
-Si ejecutás loop sin `chat_id`, entra en modo **poller multi-chat** (ideal para scheduler): lee updates entrantes y responde por chat.
-
-Para forzar un reply unico:
+Levantá el catálogo de ejemplos:
 
 ```bash
-curl -sS -X POST \
-"http://127.0.0.1:8080/telegram-ai-reply?mode=reply&dry_run=false&chat_id=TU_CHAT_ID&text=Hola"
+bin/fastfn dev examples/functions
 ```
 
-## Parametros
+Luego mandá una request de prueba:
 
-- `chat_id` (opcional): si está presente, el loop se limita a ese chat. Si falta, escucha todos los chats entrantes.
-- `prompt`: texto inicial enviado antes de esperar tu respuesta.
-- `wait_secs`: tiempo maximo de espera (default 120).
-- `max_replies`: cantidad de respuestas antes de salir (default 5).
-- `poll_ms`: intervalo de polling (default 2000).
-- `force_clear_webhook`: si `true`, limpia el webhook para evitar 409.
-- `dry_run`: si `true`, no hace llamadas externas.
-- `memory`: `true|false` (default `true`). Cuando esta activo, usa memoria por chat.
-- `memory_max_turns`: cuantos turnos guardar (default 8).
-- `memory_ttl_secs`: expira memoria en segundos (default 3600).
-
-## Errores comunes
-
-`409 Conflict`:
-
-Ya tenes un webhook o otro poller activo. Usa:
-
-`force_clear_webhook=true`
-
-o apaga el otro proceso.
-
-## Nota de seguridad
-
-El endpoint usa:
-
-- `TELEGRAM_BOT_TOKEN`
-- `OPENAI_API_KEY`
-
-Se pueden cargar via `fn.env.json` de `telegram-ai-reply` o por variables de entorno del contenedor.
-
-La memoria se guarda localmente en `<FN_FUNCTIONS_ROOT>/telegram-ai-reply/.memory.json`.
-El estado de offset del loop se guarda en `<FN_FUNCTIONS_ROOT>/telegram-ai-reply/.loop_state.json`.
-
-## Diagrama de Flujo
-
-```mermaid
-flowchart LR
-  A["Request del cliente"] --> B["Discovery de rutas"]
-  B --> C["Validación de políticas y método"]
-  C --> D["Ejecución del handler runtime"]
-  D --> E["Respuesta HTTP + paridad OpenAPI"]
+```bash
+curl -sS 'http://127.0.0.1:8080/telegram-ai-reply' \
+  -X POST \
+  -H 'Content-Type: application/json' \
+  -d '{"message":{"chat":{"id":123},"text":"Hola desde Telegram"}}'
 ```
 
-## Problema
+Si la función está configurada correctamente, va a llamar a OpenAI y devolver un resumen JSON de la respuesta que envió a Telegram.
 
-Qué dolor operativo o de DX resuelve este tema.
+## Si necesitás polling o trabajo programado
 
-## Modelo Mental
+Conviene usar una función programada en vez de volver a meter el loop viejo dentro del handler de webhook.
 
-Cómo razonar esta feature en entornos similares a producción.
+El repo ya trae `examples/functions/node/telegram-ai-digest`, que es un mejor punto de partida para trabajo de Telegram por intervalo. Su schedule se ve así:
 
-## Decisiones de Diseño
+```json
+"schedule": {
+  "enabled": true,
+  "every_seconds": 3600,
+  "method": "GET"
+}
+```
 
-- Por qué existe este comportamiento
-- Qué tradeoffs se aceptan
-- Cuándo conviene una alternativa
+Ese patrón encaja mejor para:
+
+- digests periódicos,
+- polling con `getUpdates`,
+- tareas de limpieza,
+- resúmenes que deben correr aunque nadie esté esperando una respuesta HTTP.
+
+## Qué camino conviene elegir
+
+- Usá webhook cuando cada mensaje tenga que disparar una respuesta inmediata.
+- Usá schedule cuando el trabajo tenga que correr por intervalo o cuando polling sea más simple que exponer un webhook público.
+- Guardá memoria fuera de la request si el bot necesita recordar algo entre corridas o mensajes.
 
 ## Ver también
 

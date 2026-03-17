@@ -1,6 +1,6 @@
 ---
 title: Building a REST API with File-Based Method Routing
-description: How to use FastFN's Next.js-style file routing to build clean REST APIs with one file per HTTP method.
+description: How to use FastFN's file-based routing to build clean REST APIs with one file per HTTP method.
 ---
 
 # Building a REST API with File-Based Method Routing
@@ -52,9 +52,9 @@ This works, but it has real costs:
 - **Permissions blur.** If POST requires auth but GET does not, that logic lives in
   the same handler, mixed with business logic.
 
-In frameworks like Express or FastAPI this is solved with decorators or separate route
-handlers. But in function-as-a-service, you typically get one entry point per deployed
-function. FastFN bridges that gap.
+In many stacks this is solved with route decorators or separate handler modules. In
+function-as-a-service, you usually get one entry point per deployed function. FastFN
+bridges that gap without making you keep a routing table by hand.
 
 ---
 
@@ -743,29 +743,21 @@ The complete working examples are available at:
 
 Clone the repo, run `fastfn dev`, and start building.
 
-## Flow Diagram
+## Key takeaway
 
-```mermaid
-flowchart LR
-  A["Client request"] --> B["Route discovery"]
-  B --> C["Policy and method validation"]
-  C --> D["Runtime handler execution"]
-  D --> E["HTTP response + OpenAPI parity"]
-```
+Use one file per HTTP method when a resource has multiple operations. The folder tree becomes the API map, and each handler stays short enough to understand in one read.
 
-## Problem
+## What to keep in mind
 
-What operational or developer pain this topic solves.
+- Static routes win over dynamic segments, so `me.js` beats `[id].js`.
+- `_helpers` files are ignored by the router and are the right place for shared code.
+- A single `index.*` handler is still a good fit for simple one-method endpoints or webhooks.
 
-## Mental Model
+## When to choose another layout
 
-How to reason about this feature in production-like environments.
-
-## Design Decisions
-
-- Why this behavior exists
-- Tradeoffs accepted
-- When to choose alternatives
+- Use method files for CRUD-style resources with three or more operations.
+- Use one handler file when the route only has one method and very little branching.
+- Use explicit route config only when you need to preserve a legacy URL shape that the folder layout does not express cleanly.
 
 ## See also
 

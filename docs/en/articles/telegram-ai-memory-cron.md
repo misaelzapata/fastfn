@@ -1,18 +1,13 @@
-# Build a Telegram AI Bot with Memory That Survives Cron Runs
+# Scheduled Telegram Bots with FastFN
 
 
 > Verified status as of **March 10, 2026**.
 > Runtime note: FastFN auto-installs function-local dependencies from `requirements.txt` / `package.json`; host runtimes are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
 ## Why this article exists
-Many Telegram bot demos work once and then fail in real use.
 
-This guide focuses on the practical version:
-- loop polling that keeps running,
-- memory per chat,
-- offset persistence so updates are not reprocessed after restart,
-- scheduler-friendly setup with predictable behavior.
+Use a scheduled Telegram function when the work should happen on a timer: polling for updates, sending digests, or generating summaries for a chat. The repo includes `telegram-ai-digest`, a working example that reads recent Telegram messages, asks OpenAI for a summary, and posts the digest back to Telegram.
 
-If you are new, this is the shortest path to a bot that feels "alive" instead of fragile.
+If you need one immediate reply per incoming message, see [How `telegram-ai-reply` Works](telegram-ai-reply-how-it-works.md).
 
 ## Quick docs map
 - First run platform: [Run & Test](../how-to/run-and-test.md)
@@ -22,32 +17,22 @@ If you are new, this is the shortest path to a bot that feels "alive" instead of
 - Runtime behavior and payload contract: [Runtime Contract](../reference/runtime-contract.md)
 - Full request lifecycle: [Invocation Flow](../explanation/invocation-flow.md)
 
-## What you will build
-A `telegram-ai-reply` function that:
-- polls Telegram on schedule,
-- reads new updates,
-- calls OpenAI,
-- replies back to the same chat,
-- stores short memory for context continuity.
-
-## Architecture in one picture
+## Architecture
 
 ```text
-Telegram user
+Telegram chat
   -> Telegram Bot API (getUpdates)
-  -> FastFN scheduler -> /telegram-ai-reply
+  -> FastFN schedule
+  -> telegram-ai-digest
   -> OpenAI
   -> Telegram Bot API (sendMessage)
-  -> Telegram user
+  -> Telegram chat
 ```
-
-Local state files used by the function:
-- `.memory.json` for per-chat memory
-- `.loop_state.json` for last processed update offset
 
 ## Prerequisites
 - Docker Desktop running
 - Telegram bot token from `@BotFather`
+- Telegram chat ID for the destination chat
 - OpenAI API key
 
 Optional but recommended:
@@ -63,15 +48,14 @@ curl -sS http://127.0.0.1:8080/_fn/health
 Expected:
 - `node` and `python` runtimes reported as up.
 
-## Step 2: Configure function secrets and runtime options
-Edit `<FN_FUNCTIONS_ROOT>/telegram-ai-reply/fn.env.json`:
+## Step 2: Configure function secrets
+Edit `<FN_FUNCTIONS_ROOT>/telegram-ai-digest/fn.env.json`:
 
 ```json
 {
   "TELEGRAM_BOT_TOKEN": { "value": "<set-me>", "is_secret": true },
-  "OPENAI_API_KEY": { "value": "<set-me>", "is_secret": true },
-  "OPENAI_MODEL": { "value": "gpt-4o-mini", "is_secret": false },
-  "TELEGRAM_LOOP_ENABLED": { "value": "true", "is_secret": false }
+  "TELEGRAM_CHAT_ID": { "value": "<set-me>", "is_secret": false },
+  "OPENAI_API_KEY": { "value": "<set-me>", "is_secret": true }
 }
 ```
 
@@ -79,33 +63,37 @@ Notes:
 - Keep real secrets with `is_secret: true`.
 - Function env values are exposed at runtime as `event.env`.
 
-## Step 3: Enable scheduler loop in function config
-Edit `<FN_FUNCTIONS_ROOT>/telegram-ai-reply/fn.config.json`:
+## Step 3: Review the schedule
+
+The example runs on an interval from `telegram-ai-digest/fn.config.json`:
 
 ```json
-{
-  "timeout_ms": 200000,
-  "max_concurrency": 2,
-  "schedule": {
-    "enabled": true,
-    "every_seconds": 75,
-    "method": "GET",
-    "query": {
-      "loop": "true",
-      "dry_run": "false",
-      "wait_secs": "45",
-      "force_clear_webhook": "true"
-    },
-    "context": { "type": "cron" }
-  }
+"schedule": {
+  "enabled": true,
+  "every_seconds": 3600,
+  "method": "GET"
 }
 ```
 
-Why this interval split:
-- `every_seconds` should be larger than `wait_secs` to reduce overlap.
-- This lowers duplicate work and noisy statuses.
+Change the interval to match your use case, then reload.
 
-## Step 4: Hot reload instead of restart
+## Step 4: Run the function once by hand
+
+```bash
+curl -sS 'http://127.0.0.1:8080/telegram-ai-digest'
+```
+
+Example response:
+
+```json
+{
+  "ok": true,
+  "message_count": 42,
+  "digest": "Daily Digest (2026-03-17T12:00 UTC)\n\n..."
+}
+```
+
+## Step 5: Hot reload instead of restart
 
 ```bash
 curl -sS -X POST http://127.0.0.1:8080/_fn/reload
@@ -113,66 +101,17 @@ curl -sS -X POST http://127.0.0.1:8080/_fn/reload
 
 You usually do not need a container restart for function code/config/env edits.
 
-## Step 5: Verify scheduler status
+## Step 6: Verify scheduler status
 
 ```bash
 curl -sS http://127.0.0.1:8080/_fn/schedules
 ```
 
-Check the `telegram-ai-reply` entry:
-- `schedule.enabled=true`
-- `state.last_status=200` after at least one cycle
-
-## Step 6: Dry run and live run checks
-Dry run:
-
-```bash
-curl -sS -X POST \
-  'http://127.0.0.1:8080/telegram-ai-reply?mode=loop&dry_run=true&wait_secs=10'
-```
-
-Live mode:
-- send any message to your bot in Telegram,
-- wait one scheduler cycle,
-- verify bot reply on your phone.
-
-Manual one-shot reply test:
-
-```bash
-curl -sS -X POST \
-  'http://127.0.0.1:8080/telegram-ai-reply?mode=reply&dry_run=false&chat_id=<CHAT_ID>&text=Hello'
-```
-
-## Memory and offset behavior
-Memory settings (query params):
-- `memory=true|false`
-- `memory_max_turns` (default 8)
-- `memory_ttl_secs` (default 3600)
-
-Offset persistence:
-- `<FN_FUNCTIONS_ROOT>/telegram-ai-reply/.loop_state.json`
-
-Memory file:
-- `<FN_FUNCTIONS_ROOT>/telegram-ai-reply/.memory.json`
-
-This combination is what makes cron mode stable after restarts.
-
-## Troubleshooting quick table
-
-| Symptom | Meaning | Fix |
-|---|---|---|
-| `last_status=409` | another poller/webhook active | keep `force_clear_webhook=true` and disable external poller |
-| `last_status=502` | outbound API failure | verify tokens/keys, network, API quotas |
-| `last_status=504` | no update within wait window | acceptable in polling; tune wait/interval |
-| bot responds once only | loop or schedule disabled | enable `TELEGRAM_LOOP_ENABLED` and `schedule.enabled` |
-| old messages repeat | offset not persisted | verify `.loop_state.json` write permissions |
-
 ## Production-minded checklist
 1. `/_fn/health` shows runtimes up.
-2. `/_fn/schedules` shows active loop with healthy status.
-3. Only one poller source is active.
-4. Secrets are in `fn.env.json` with `is_secret=true`.
-5. Memory and offset files are writable.
+2. Secrets are in `fn.env.json` with `is_secret=true`.
+3. Only one polling source is active for the same bot token.
+4. If you need memory across runs, store it outside the request in a database, file, or another durable store.
 
 ## Related docs
 - [Telegram E2E](../how-to/telegram-e2e.md)
@@ -181,29 +120,21 @@ This combination is what makes cron mode stable after restarts.
 - [Function Spec](../reference/function-spec.md)
 - [Architecture](../explanation/architecture.md)
 
-## Flow Diagram
+## Key takeaway
 
-```mermaid
-flowchart LR
-  A["Client request"] --> B["Route discovery"]
-  B --> C["Policy and method validation"]
-  C --> D["Runtime handler execution"]
-  D --> E["HTTP response + OpenAPI parity"]
-```
+Scheduled Telegram work is a different shape from webhook replies. Use it when your bot needs to wake up on a timer, read recent activity, and publish a result without waiting for an incoming HTTP request.
 
-## Problem
+## What to keep in mind
 
-What operational or developer pain this topic solves.
+- Scheduled jobs are a good fit for digests, polling, cleanup, and other background work.
+- Keep polling, deduplication, and storage concerns explicit instead of hiding them inside a webhook handler.
+- Put durable state outside the request if the bot needs to remember something between runs.
 
-## Mental Model
+## When to choose the webhook path instead
 
-How to reason about this feature in production-like environments.
-
-## Design Decisions
-
-- Why this behavior exists
-- Tradeoffs accepted
-- When to choose alternatives
+- Use the webhook guide when each incoming Telegram message should trigger one immediate reply.
+- Use the scheduled path when the job is periodic or when polling is easier than exposing a public webhook.
+- Combine both only when the responsibilities are clearly separated.
 
 ## See also
 

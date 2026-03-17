@@ -74,29 +74,21 @@ fastfn doctor domains
 Current safe fix:
 - create a minimal `fastfn.json` when missing.
 
-## Flow Diagram
+## Key takeaway
 
-```mermaid
-flowchart LR
-  A["Client request"] --> B["Route discovery"]
-  B --> C["Policy and method validation"]
-  C --> D["Runtime handler execution"]
-  D --> E["HTTP response + OpenAPI parity"]
-```
+Use `fastfn doctor domains` as a preflight for your public edge, not as a generic app health check. It tells you whether the hostname, DNS target, TLS, redirect policy, and ACME path look correct from the outside before you switch traffic.
 
-## Problem
+## What to keep in mind
 
-What operational or developer pain this topic solves.
+- Run it after DNS changes, before certificate renewals, and in CI before a release.
+- Use `--json` when you want machine-readable output for pipelines or deployment gates.
+- Set `expected-target` only when you know the final DNS target you want to enforce.
 
-## Mental Model
+## When to pick another tool
 
-How to reason about this feature in production-like environments.
-
-## Design Decisions
-
-- Why this behavior exists
-- Tradeoffs accepted
-- When to choose alternatives
+- Use application health endpoints for upstream bugs, database failures, or slow dependencies.
+- Use ongoing monitoring for continuous reachability and certificate-expiry alerts.
+- Use `fastfn doctor --fix` only for local setup help; it intentionally avoids rewriting remote DNS or TLS state.
 
 ## See also
 

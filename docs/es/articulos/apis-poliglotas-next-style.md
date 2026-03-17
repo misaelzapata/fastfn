@@ -1,4 +1,4 @@
-# APIs poliglotas con routing estilo Next en FastFN
+# APIs poliglotas con routing por archivos en FastFN
 
 
 > Estado verificado al **10 de marzo de 2026**.
@@ -9,7 +9,7 @@ Este articulo resume que significa eso en proyectos reales y por que baja fricci
 
 ## 1) Un modelo de URL para todos los lenguajes
 
-Con routing estilo Next (tecnico: file-based dynamic-segment routing), las rutas salen del nombre del archivo, no de adaptadores por runtime.
+Con routing por archivos, las rutas salen del nombre del archivo, no de adaptadores por runtime.
 
 Ejemplo en `examples/functions/next-style`:
 
@@ -88,29 +88,21 @@ Secuencia sugerida:
 
 Resultado: un contrato de plataforma unico, flexibilidad de lenguaje y menor overhead operativo que mantener gateways separados por runtime.
 
-## Diagrama de Flujo
+## Idea clave
 
-```mermaid
-flowchart LR
-  A["Request del cliente"] --> B["Discovery de rutas"]
-  B --> C["Validación de políticas y método"]
-  C --> D["Ejecución del handler runtime"]
-  D --> E["Respuesta HTTP + paridad OpenAPI"]
-```
+La ganancia grande no es solo "usar muchos lenguajes". La ganancia real es tener un solo árbol de URLs, una sola superficie de despliegue y un solo OpenAPI aunque cada equipo elija un runtime distinto.
 
-## Problema
+## Qué conviene tener en cuenta
 
-Qué dolor operativo o de DX resuelve este tema.
+- La extensión del archivo define el runtime, pero la URL sale de las mismas reglas de carpetas en todos los casos.
+- Dejá la policy compartida en `fn.config.json`; usá `fn.routes.json` solo cuando de verdad haga falta una sobreescritura.
+- Validá el comportamiento warm y cold de cada runtime antes de mover endpoints sensibles a latencia.
 
-## Modelo Mental
+## Cuándo conviene este enfoque
 
-Cómo razonar esta feature en entornos similares a producción.
-
-## Decisiones de Diseño
-
-- Por qué existe este comportamiento
-- Qué tradeoffs se aceptan
-- Cuándo conviene una alternativa
+- Usalo cuando varios equipos comparten una sola API pero no un solo lenguaje.
+- Quedate con un solo runtime si todo el servicio tiene las mismas necesidades de tooling y performance.
+- Reservá las rutas explícitas para paths heredados o casos especiales, no como forma por defecto de construir endpoints nuevos.
 
 ## Ver también
 

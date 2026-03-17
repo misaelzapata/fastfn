@@ -147,29 +147,21 @@ Para endpoints externos:
 - [Recetas operativas](../como-hacer/recetas-operativas.md)
 - [Modelo de seguridad](../explicacion/modelo-seguridad.md)
 
-## Diagrama de Flujo
+## Idea clave
 
-```mermaid
-flowchart LR
-  A["Request del cliente"] --> B["Discovery de rutas"]
-  B --> C["Validación de políticas y método"]
-  C --> D["Ejecución del handler runtime"]
-  D --> E["Respuesta HTTP + paridad OpenAPI"]
-```
+Empezá con límites en el gateway y agregá autenticación dentro del handler solo donde la identidad realmente importe. Esa combinación corta requests malos antes y deja un código de auth corto, revisable y fácil de testear.
 
-## Problema
+## Qué conviene tener en cuenta
 
-Qué dolor operativo o de DX resuelve este tema.
+- Guardá secretos en `fn.env.json`, no en el código ni en payloads de ejemplo.
+- Restringí métodos y tamaño de body antes de que la request llegue al handler.
+- Tratá rutas públicas y endpoints de consola/admin como superficies de seguridad distintas.
 
-## Modelo Mental
+## Qué patrón conviene según el caso
 
-Cómo razonar esta feature en entornos similares a producción.
-
-## Decisiones de Diseño
-
-- Por qué existe este comportamiento
-- Qué tradeoffs se aceptan
-- Cuándo conviene una alternativa
+- API keys funcionan bien para tráfico entre servicios y webhooks privados.
+- Verificación de firmas conviene cuando el proveedor ya manda un header firmable.
+- JWT encaja mejor cuando otro servicio se ocupa del login y de emitir el token.
 
 ## Ver también
 

@@ -149,29 +149,21 @@ Use this as your default for external-facing functions:
 - [Operational Recipes](../how-to/operational-recipes.md)
 - [Security Model](../explanation/security-model.md)
 
-## Flow Diagram
+## Key takeaway
 
-```mermaid
-flowchart LR
-  A["Client request"] --> B["Route discovery"]
-  B --> C["Policy and method validation"]
-  C --> D["Runtime handler execution"]
-  D --> E["HTTP response + OpenAPI parity"]
-```
+Start with gateway limits and add handler-level auth only where identity actually matters. That combination blocks bad requests early and keeps your auth code short enough to review and test.
 
-## Problem
+## What to keep in mind
 
-What operational or developer pain this topic solves.
+- Put secrets in `fn.env.json`, not in source files or copied curl payloads.
+- Restrict methods and body size before the request reaches your handler.
+- Treat public function routes and console/admin endpoints as separate security surfaces.
 
-## Mental Model
+## Which auth pattern fits which job
 
-How to reason about this feature in production-like environments.
-
-## Design Decisions
-
-- Why this behavior exists
-- Tradeoffs accepted
-- When to choose alternatives
+- API keys work well for service-to-service calls and private webhooks.
+- Signed payload verification is a good fit when the provider already sends a signature header.
+- JWT verification makes sense when another service is responsible for login and token issuance.
 
 ## See also
 

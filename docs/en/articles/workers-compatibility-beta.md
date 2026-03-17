@@ -147,29 +147,21 @@ exports.handler = (event, context, callback) => {
 - [Cloudflare Worker example repo](https://github.com/advissor/nodejs-cloudflare-workers/blob/main/src/index.js)
 - [AWS Lambda Node.js handlers](https://docs.aws.amazon.com/lambda/latest/dg/nodejs-handler.html)
 
-## Flow Diagram
+## Key takeaway
 
-```mermaid
-flowchart LR
-  A["Client request"] --> B["Route discovery"]
-  B --> C["Policy and method validation"]
-  C --> D["Runtime handler execution"]
-  D --> E["HTTP response + OpenAPI parity"]
-```
+Compatibility mode lets you reuse existing handlers while you migrate, which is often faster and safer than rewriting working business logic on day one.
 
-## Problem
+## What to keep in mind
 
-What operational or developer pain this topic solves.
+- The adapter matches handler shape and request/response mapping, not the provider's full platform behavior.
+- Test headers, body encoding, errors, and callback or Promise completion before moving production traffic.
+- Keep `native` for new endpoints unless you have a real compatibility reason to do otherwise.
 
-## Mental Model
+## When to use it
 
-How to reason about this feature in production-like environments.
-
-## Design Decisions
-
-- Why this behavior exists
-- Tradeoffs accepted
-- When to choose alternatives
+- Use `cloudflare-worker` or `aws-lambda` adapters to bring existing code over with minimal edits.
+- Stay with `native` for greenfield FastFN code.
+- Treat the beta label seriously for latency-sensitive or compliance-sensitive paths until the contract matrix is fully hardened.
 
 ## See also
 

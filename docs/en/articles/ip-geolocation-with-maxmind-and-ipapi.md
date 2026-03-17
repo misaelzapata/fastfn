@@ -77,29 +77,21 @@ Integration checks (includes both geolocation routes):
 bash tests/integration/test-api.sh
 ```
 
-## Flow Diagram
+## Key takeaway
 
-```mermaid
-flowchart LR
-  A["Client request"] --> B["Route discovery"]
-  B --> C["Policy and method validation"]
-  C --> D["Runtime handler execution"]
-  D --> E["HTTP response + OpenAPI parity"]
-```
+This article gives you two working shapes for the same feature: local database lookup when you want stable latency and control, and remote HTTP lookup when you want the shortest setup. Both return the same normalized fields, so clients do not need to care which provider answered the request.
 
-## Problem
+## What to keep in mind
 
-What operational or developer pain this topic solves.
+- Use `mock=1` first so tests stay deterministic while you wire the real provider.
+- Refresh the MaxMind database on a schedule if you rely on local lookups.
+- Keep your public response shape stable even if the upstream provider exposes extra fields.
 
-## Mental Model
+## When to choose the other path
 
-How to reason about this feature in production-like environments.
-
-## Design Decisions
-
-- Why this behavior exists
-- Tradeoffs accepted
-- When to choose alternatives
+- Pick local MMDB lookup when privacy, predictable latency, or offline behavior matters.
+- Pick a remote provider when you do not want to manage database downloads and refreshes.
+- Avoid doing geolocation inline on every hot path if the result can be cached earlier in the request flow.
 
 ## See also
 
