@@ -127,48 +127,18 @@ curl -sS 'http://127.0.0.1:8080/tools-loop?tool=ip_lookup,weather&city=Buenos%20
 ### `telegram-ai-reply-py` (bot Telegram con IA, Python)
 
 - Ruta: `/telegram-ai-reply-py`
-- Metodos: `GET`, `POST`
-- Objetivo: webhook/query Telegram -> OpenAI -> reply a Telegram (Python), con tools + memoria + loop
-- Comportamiento por defecto: `dry_run=true`
+- Metodos: `POST`
+- Objetivo: webhook Telegram -> OpenAI -> reply a Telegram (Python)
 - Env (secretos): `TELEGRAM_BOT_TOKEN`, `OPENAI_API_KEY`
 
-Dry run (query-mode):
+Ejemplo (webhook POST):
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/telegram-ai-reply-py?mode=reply&chat_id=123&text=Hola&dry_run=true'
+curl -sS 'http://127.0.0.1:8080/telegram-ai-reply-py' \
+  -X POST \
+  -H 'Content-Type: application/json' \
+  -d '{"message":{"chat":{"id":123},"text":"Hola"}}'
 ```
-
-Envio real (query-mode):
-
-```bash
-curl -sS 'http://127.0.0.1:8080/telegram-ai-reply-py?mode=reply&chat_id=123&text=Hola&dry_run=false'
-```
-
-Tools (directivas manuales dentro del texto):
-
-```bash
-curl -g -sS \
-"http://127.0.0.1:8080/telegram-ai-reply-py?mode=reply&chat_id=123&dry_run=false&tools=true&tool_allow_fn=tools-loop,request-inspector&text=Usa%20[[http:https://api.ipify.org?format=json]]%20y%20[[fn:tools-loop?text=mi%20ip%20y%20clima&dry_run=true|GET]]"
-```
-
-Auto-tools (desde intencion):
-
-```bash
-curl -sS \
-"http://127.0.0.1:8080/telegram-ai-reply-py?mode=reply&chat_id=123&dry_run=false&tools=true&auto_tools=true&text=Como%20esta%20el%20clima%20hoy%20y%20cual%20es%20mi%20IP%3F"
-```
-
-Modo loop (dry-run):
-
-```bash
-curl -sS \
-"http://127.0.0.1:8080/telegram-ai-reply-py?mode=loop&dry_run=true&wait_secs=20"
-```
-
-Archivos de memoria/offset (se crean en runtime):
-
-- `<FN_FUNCTIONS_ROOT>/telegram-ai-reply-py/.memory.json`
-- `<FN_FUNCTIONS_ROOT>/telegram-ai-reply-py/.loop_state.json`
 
 ### `hello`
 
@@ -468,43 +438,20 @@ curl -sS -X POST 'http://127.0.0.1:8080/telegram-send' \
 ### `telegram-ai-reply`
 
 - Ruta: `/telegram-ai-reply`
-- Metodos: `GET`, `POST`
+- Metodos: `POST`
 - Objetivo: webhook Telegram -> OpenAI -> reply a Telegram
-- Comportamiento por defecto: `dry_run=true` (seguro, no envia mensajes)
 - Env (secretos): `TELEGRAM_BOT_TOKEN`, `OPENAI_API_KEY`
 
-Ejemplo (dry run):
+Ejemplo (webhook POST):
 
 ```bash
-curl -sS 'http://127.0.0.1:8080/telegram-ai-reply?dry_run=true' \
+curl -sS 'http://127.0.0.1:8080/telegram-ai-reply' \
   -X POST \
   -H 'Content-Type: application/json' \
   -d '{"message":{"chat":{"id":123},"text":"Hola"}}'
 ```
 
-Para enviar de verdad:
-
-- set `dry_run=false`
-- setear `TELEGRAM_BOT_TOKEN` y `OPENAI_API_KEY` en `fn.env.json`
-
-Tools (opcional):
-
-- `TELEGRAM_TOOLS_ENABLED=true`
-- `TELEGRAM_AUTO_TOOLS=true` (seleccion automatica de tools segun intencion)
-- `TELEGRAM_TOOL_ALLOW_FN=request-inspector,telegram-ai-digest`
-- `TELEGRAM_TOOL_ALLOW_HTTP_HOSTS=api.ipify.org,wttr.in,ipapi.co`
-- `TELEGRAM_TOOL_TIMEOUT_MS=5000`
-
-Directivas manuales dentro del mensaje del usuario:
-
-- `[[fn:request-inspector?key=test|GET]]`
-- `[[http:https://api.ipify.org?format=json]]`
-
-Memoria:
-
-- Archivo de memoria por chat: `<FN_FUNCTIONS_ROOT>/telegram-ai-reply/.memory.json`
-- Archivo de offset del loop: `<FN_FUNCTIONS_ROOT>/telegram-ai-reply/.loop_state.json`
-- El prompt de sistema evita respuestas falsas del tipo "no recuerdo" cuando existe historial.
+Para enviar de verdad, setear `TELEGRAM_BOT_TOKEN` y `OPENAI_API_KEY` en `fn.env.json`.
 
 ### `whatsapp`
 
@@ -519,35 +466,20 @@ Memoria:
   - `GET /whatsapp?action=inbox`
   - `DELETE /whatsapp?action=reset-session`
 
-Tools para WhatsApp (`action=chat`):
-
-- `WHATSAPP_TOOLS_ENABLED=true`
-- `WHATSAPP_AUTO_TOOLS=true`
-- `WHATSAPP_TOOL_ALLOW_FN=request-inspector,telegram-ai-digest`
-- `WHATSAPP_TOOL_ALLOW_HTTP_HOSTS=api.ipify.org,wttr.in,ipapi.co`
-- `WHATSAPP_TOOL_TIMEOUT_MS=5000`
 
 ### `toolbox-bot` (runner seguro de tools)
 
 - Ruta: `/toolbox-bot`
 - Métodos: `GET`, `POST`
-- Objetivo: ejecutar directivas de tools (`[[http:...]]`, `[[fn:...]]`) y devolver plan + resultados como JSON
-- Comportamiento por defecto: `dry_run=true`
+- Objetivo: parsear directivas de tools (`[[http:...]]`, `[[fn:...]]`) del texto y ejecutarlas con allowlists
 - Código: `examples/functions/node/toolbox-bot/app.js`
 - Doc: [Herramientas](../como-hacer/herramientas.md)
 
-Solo plan (sin llamadas externas):
+Ejemplo:
 
 ```bash
 curl -g -sS \
-"http://127.0.0.1:8080/toolbox-bot?dry_run=true&text=Usa%20[[http:https://api.ipify.org?format=json]]%20y%20[[fn:request-inspector?key=demo|GET]]"
-```
-
-Ejecutar (solo allowlisted):
-
-```bash
-curl -g -sS \
-"http://127.0.0.1:8080/toolbox-bot?dry_run=false&text=Usa%20[[http:https://api.ipify.org?format=json]]%20y%20[[fn:request-inspector?key=demo|GET]]"
+"http://127.0.0.1:8080/toolbox-bot?text=Usa%20[[http:https://api.ipify.org?format=json]]%20y%20[[fn:hello|GET]]"
 ```
 
 ### `ai-tool-agent` (agent con OpenAI tool-calling)

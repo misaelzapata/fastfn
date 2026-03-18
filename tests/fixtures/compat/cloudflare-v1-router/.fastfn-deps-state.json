@@ -1,0 +1,13 @@
+{
+  "runtime": "node",
+  "mode": "manifest",
+  "manifest_path": "/home/misael/Desktop/projects/fastfn/tests/fixtures/compat/cloudflare-v1-router/package.json",
+  "manifest_generated": false,
+  "inferred_imports": [],
+  "resolved_packages": [],
+  "unresolved_imports": [],
+  "last_install_status": "skipped",
+  "last_error": "FN_AUTO_NODE_DEPS is disabled",
+  "lockfile_path": null,
+  "updated_at": "2026-03-17T02:16:53.499Z"
+}

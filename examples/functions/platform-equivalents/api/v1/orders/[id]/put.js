@@ -1,88 +1,48 @@
+// PUT /api/v1/orders/:id — Update an order's status
 const fs = require("node:fs");
-const path = require("node:path");
 
-const ALLOWED_STATUS = new Set(["pending", "processing", "shipped", "delivered", "cancelled"]);
+const STATE_FILE = "/tmp/fastfn-platform-equivalents/orders.json";
 
-function json(status, payload) {
-  return {
-    status,
-    headers: { "Content-Type": "application/json; charset=utf-8" },
-    body: JSON.stringify(payload),
-  };
-}
-
-function resolveStateFile() {
-  const stateDir = path.join("/tmp", "fastfn-platform-equivalents");
-  fs.mkdirSync(stateDir, { recursive: true });
-  return path.join(stateDir, "orders.json");
-}
-
-function loadOrders(filePath) {
-  if (!fs.existsSync(filePath)) {
-    return [];
-  }
+function loadOrders() {
   try {
-    const data = JSON.parse(fs.readFileSync(filePath, "utf8"));
-    return Array.isArray(data) ? data : [];
+    return JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
   } catch {
     return [];
   }
-}
-
-function saveOrders(filePath, orders) {
-  fs.writeFileSync(filePath, JSON.stringify(orders, null, 2), "utf8");
-}
-
-function parseBody(body) {
-  if (body == null || body === "") {
-    return {};
-  }
-  if (typeof body === "object") {
-    return body;
-  }
-  return JSON.parse(String(body));
 }
 
 exports.handler = async (event = {}, params = {}) => {
-  const idCandidate = (params && params.id)
-    || ((event && event.params) ? event.params.id : undefined)
-    || (event ? event.id : undefined);
-  const id = Number(idCandidate || 0);
-  if (!Number.isInteger(id) || id <= 0) {
-    return json(400, { error: "validation_error", message: "id must be a positive integer." });
+  const id = Number(params.id || 0);
+  const body =
+    typeof event.body === "string" ? JSON.parse(event.body) : event.body || {};
+
+  const status = (body.status || "").toLowerCase();
+  const allowed = ["pending", "processing", "shipped", "delivered", "cancelled"];
+  if (!allowed.includes(status)) {
+    return {
+      status: 400,
+      body: JSON.stringify({ error: `status must be one of: ${allowed.join(", ")}` }),
+    };
   }
 
-  let update;
-  try {
-    update = parseBody(event.body);
-  } catch {
-    return json(400, { error: "invalid_json", message: "Body must be valid JSON." });
-  }
-
-  const status = String(update.status || "").trim().toLowerCase();
-  if (!ALLOWED_STATUS.has(status)) {
-    return json(400, {
-      error: "validation_error",
-      message: "status must be one of pending/processing/shipped/delivered/cancelled.",
-    });
-  }
-
-  const tracking = update.tracking_number == null ? null : String(update.tracking_number);
-  const stateFile = resolveStateFile();
-  const orders = loadOrders(stateFile);
-  const idx = orders.findIndex((item) => Number((item && item.id) || 0) === id);
+  // Find and update the order
+  const orders = loadOrders();
+  const idx = orders.findIndex((o) => o.id === id);
   if (idx < 0) {
-    return json(404, { error: "not_found", message: "Order not found." });
+    return { status: 404, body: JSON.stringify({ error: "Order not found" }) };
   }
 
-  const next = {
+  orders[idx] = {
     ...orders[idx],
     status,
-    tracking_number: tracking,
+    tracking_number: body.tracking_number || null,
     updated_at: Math.floor(Date.now() / 1000),
   };
-  orders[idx] = next;
-  saveOrders(stateFile, orders);
+  fs.mkdirSync("/tmp/fastfn-platform-equivalents", { recursive: true });
+  fs.writeFileSync(STATE_FILE, JSON.stringify(orders, null, 2));
 
-  return json(200, { ok: true, order: next });
+  return {
+    status: 200,
+    body: JSON.stringify({ ok: true, order: orders[idx] }),
+  };
 };

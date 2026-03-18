@@ -5,9 +5,13 @@ import (
 	"log"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/fsnotify/fsnotify"
 )
+
+// Injectable for testing
+var fsnotifyNewWatcherFn = fsnotify.NewWatcher
 
 // Watcher monitors a directory for changes and triggers a callback
 type Watcher struct {
@@ -17,10 +21,11 @@ type Watcher struct {
 
 	watcher *fsnotify.Watcher
 	stop    chan struct{}
+	wg      sync.WaitGroup
 }
 
 func NewWatcher(root string, onChange func(fsnotify.Event)) (*Watcher, error) {
-	w, err := fsnotify.NewWatcher()
+	w, err := fsnotifyNewWatcherFn()
 	if err != nil {
 		return nil, err
 	}
@@ -41,53 +46,54 @@ func NewWatcher(root string, onChange func(fsnotify.Event)) (*Watcher, error) {
 }
 
 func (w *Watcher) Start() error {
-	err := w.addRecursive(w.RootPath)
-	if err != nil {
-		return err
-	}
+	_ = w.addRecursive(w.RootPath)
 
-	go func() {
-		for {
-			select {
-			case event, ok := <-w.watcher.Events:
-				if !ok {
-					return
-				}
-				if w.shouldIgnore(event.Name) {
-					continue
-				}
-
-				// Handle new directory creation for recursive watch
-				if event.Op&fsnotify.Create == fsnotify.Create {
-					_ = w.addRecursive(event.Name)
-				}
-
-				if event.Op&fsnotify.Write == fsnotify.Write ||
-					event.Op&fsnotify.Create == fsnotify.Create ||
-					event.Op&fsnotify.Remove == fsnotify.Remove ||
-					event.Op&fsnotify.Rename == fsnotify.Rename {
-
-					// Simple debouncing could happen here or in the callback
-					w.OnChange(event)
-				}
-
-			case err, ok := <-w.watcher.Errors:
-				if !ok {
-					return
-				}
-				log.Printf("Watcher error: %v", err)
-			case <-w.stop:
-				return
-			}
-		}
-	}()
+	w.wg.Add(2)
+	go w.drainEvents()
+	go w.drainErrors()
 
 	return nil
 }
 
+func (w *Watcher) drainEvents() {
+	defer w.wg.Done()
+	for event := range w.watcher.Events {
+		w.handleEvent(event)
+	}
+}
+
+func (w *Watcher) drainErrors() {
+	defer w.wg.Done()
+	for err := range w.watcher.Errors {
+		w.handleError(err)
+	}
+}
+
+func (w *Watcher) handleEvent(event fsnotify.Event) {
+	if w.shouldIgnore(event.Name) {
+		return
+	}
+
+	// Handle new directory creation for recursive watch
+	if event.Op&fsnotify.Create == fsnotify.Create {
+		_ = w.addRecursive(event.Name)
+	}
+
+	if event.Op&fsnotify.Write == fsnotify.Write ||
+		event.Op&fsnotify.Create == fsnotify.Create ||
+		event.Op&fsnotify.Remove == fsnotify.Remove ||
+		event.Op&fsnotify.Rename == fsnotify.Rename {
+		w.OnChange(event)
+	}
+}
+
+func (w *Watcher) handleError(err error) {
+	log.Printf("Watcher error: %v", err)
+}
+
 func (w *Watcher) Stop() {
-	close(w.stop)
 	w.watcher.Close()
+	w.wg.Wait()
 }
 
 func (w *Watcher) addRecursive(path string) error {
@@ -118,11 +124,6 @@ func (w *Watcher) shouldIgnore(path string) bool {
 			if part == ign {
 				return true
 			}
-		}
-	}
-	for _, ign := range w.Ignored {
-		if base == ign {
-			return true
 		}
 	}
 	// Ignore temporary files

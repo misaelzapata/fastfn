@@ -21,6 +21,12 @@ if not runtime or not name then
   return
 end
 
+if method == "POST" or method == "PUT" or method == "DELETE" then
+  if not guard.enforce_write() then
+    return
+  end
+end
+
 if method == "GET" then
   -- Read file content
   if not path or path == "" then

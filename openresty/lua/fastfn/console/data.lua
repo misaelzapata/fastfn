@@ -4,6 +4,10 @@ local invoke_rules = require "fastfn.core.invoke_rules"
 
 local M = {}
 
+local function shell_quote(s)
+  return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
+end
+
 local CACHE = ngx.shared.fn_cache
 local NAME_RE = "^[a-zA-Z0-9_/-]+$"
 local FILE_TARGET_RE = "^[a-zA-Z0-9_/%[%]%.%-]+$"
@@ -56,7 +60,7 @@ local function file_exists(path)
 end
 
 local function is_symlink(path)
-  local cmd = string.format("[ -L %q ] && echo 1 || true", tostring(path))
+  local cmd = "[ -L " .. shell_quote(path) .. " ] && echo 1 || true"
   local p = io.popen(cmd)
   if not p then
     return false
@@ -193,7 +197,7 @@ local function is_allowed_config_path(path)
 end
 
 local function dir_exists(path)
-  local p = io.popen(string.format("[ -d %q ] && echo 1 || true", tostring(path)))
+  local p = io.popen("[ -d " .. shell_quote(path) .. " ] && echo 1 || true")
   if not p then
     return false
   end
@@ -203,17 +207,17 @@ local function dir_exists(path)
 end
 
 local function ensure_dir(path)
-  local ok = os.execute(string.format("mkdir -p %q", tostring(path)))
+  local ok = os.execute("mkdir -p " .. shell_quote(path))
   return ok == true or ok == 0
 end
 
 local function rm_path(path)
-  local ok = os.execute(string.format("rm -rf %q", tostring(path)))
+  local ok = os.execute("rm -rf " .. shell_quote(path))
   return ok == true or ok == 0
 end
 
 local function list_dirs(path)
-  local p = io.popen(string.format("find %q -mindepth 1 -maxdepth 1 -type d -print 2>/dev/null", tostring(path)))
+  local p = io.popen("find " .. shell_quote(path) .. " -mindepth 1 -maxdepth 1 -type d -print 2>/dev/null")
   if not p then
     return {}
   end
@@ -2410,7 +2414,8 @@ end
 
 local function file_size(path)
   -- Try Linux stat first (more common in Docker), then macOS
-  local p = io.popen(string.format("stat -c '%%s' %q 2>/dev/null || stat -f '%%z' %q 2>/dev/null", path, path))
+  local qp = shell_quote(path)
+  local p = io.popen("stat -c '%s' " .. qp .. " 2>/dev/null || stat -f '%z' " .. qp .. " 2>/dev/null")
   if not p then
     return 0
   end
@@ -2420,10 +2425,7 @@ local function file_size(path)
 end
 
 local function list_files_recursive(dir, max_depth)
-  local cmd = string.format(
-    "find %q -maxdepth %d -type f -not -name '.*' -print 2>/dev/null",
-    tostring(dir), max_depth or 3
-  )
+  local cmd = "find " .. shell_quote(dir) .. " -maxdepth " .. tostring(max_depth or 3) .. " -type f -not -name '.*' -print 2>/dev/null"
   local p = io.popen(cmd)
   if not p then
     return {}
@@ -2579,7 +2581,7 @@ function M.write_function_file(runtime, name, rel_path, content, version)
   -- Ensure parent directory exists
   local parent = abs:match("^(.*)/[^/]+$")
   if parent and not dir_exists(parent) then
-    os.execute(string.format("mkdir -p %q", parent))
+    os.execute("mkdir -p " .. shell_quote(parent))
   end
 
   local wok, werr = write_file(abs, content)

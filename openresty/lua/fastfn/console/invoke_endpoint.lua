@@ -219,6 +219,10 @@ if ngx.req.get_method() ~= "POST" then
   return
 end
 
+if not guard.enforce_body_limit(1048576) then  -- 1MB for invoke payloads
+  return
+end
+
 ngx.req.read_body()
 local payload = cjson.decode(ngx.req.get_body_data() or "")
 if type(payload) ~= "table" then
@@ -423,16 +427,48 @@ local request_payload = {
     },
   },
 }
--- Inject secrets vault into event.secrets
+-- Inject only the secrets that this specific function references via its
+-- fn.env.json (keys with is_secret=true).  This prevents function A from
+-- reading secrets that belong to function B.
 local secrets_list = console.list_secrets() or {}
 if #secrets_list > 0 then
+  local cjson_local = require "cjson.safe"
+  local allowed_keys = nil
+  local entrypoint = routes.resolve_function_entrypoint(resolved_runtime, name, resolved_version)
+  if type(entrypoint) == "string" and entrypoint ~= "" then
+    local fn_dir = entrypoint:match("^(.*)/[^/]+$") or "."
+    local env_path = fn_dir .. "/fn.env.json"
+    local ef = io.open(env_path, "rb")
+    if ef then
+      local raw_env = ef:read("*a")
+      ef:close()
+      if type(raw_env) == "string" and raw_env ~= "" then
+        local env_parsed = cjson_local.decode(raw_env)
+        if type(env_parsed) == "table" then
+          allowed_keys = {}
+          for k, v in pairs(env_parsed) do
+            if type(k) == "string" and k ~= "" then
+              if type(v) == "table" and v.is_secret == true then
+                allowed_keys[k] = true
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+
   local secrets_map = {}
   local fcache = ngx.shared.fn_cache
   for _, item in ipairs(secrets_list) do
-    local val = fcache:get("sys:secret:val:" .. item.key)
-    if val then secrets_map[item.key] = val end
+    if allowed_keys == nil or allowed_keys[item.key] then
+      local val = fcache:get("sys:secret:val:" .. item.key)
+      if val then secrets_map[item.key] = val end
+    end
   end
-  request_payload.event.secrets = secrets_map
+  if next(secrets_map) then
+    request_payload.event.secrets = secrets_map
+  end
 end
 
 local res, err_code, err_msg

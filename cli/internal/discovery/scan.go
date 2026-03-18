@@ -49,15 +49,9 @@ func Scan(root string, logFn Logger) ([]Function, error) {
 
 	logFn("Scanning for functions in: %s", root)
 	var functions []Function
-	seen := map[string]struct{}{}
 
-	appendUnique := func(scope string, fns []Function) {
+	appendFunctions := func(scope string, fns []Function) {
 		for _, fn := range fns {
-			key := fn.Runtime + "|" + fn.Path + "|" + fn.EntryFile + "|" + fn.OriginalRoute + "|" + fn.Name
-			if _, exists := seen[key]; exists {
-				continue
-			}
-			seen[key] = struct{}{}
 			switch scope {
 			case "root":
 				logFn("Found function at root: [%s] %s", fn.Runtime, fn.Name)
@@ -65,8 +59,6 @@ func Scan(root string, logFn Logger) ([]Function, error) {
 				logFn("Found function (L1): [%s] %s", fn.Runtime, fn.Name)
 			case "L2":
 				logFn("Found function (L2): [%s] %s", fn.Runtime, fn.Name)
-			default:
-				logFn("Found function: [%s] %s", fn.Runtime, fn.Name)
 			}
 			functions = append(functions, fn)
 		}
@@ -74,7 +66,7 @@ func Scan(root string, logFn Logger) ([]Function, error) {
 
 	// 1. Check if the root itself is a function
 	if fns, ok := detectFunction(root, root, logFn); ok {
-		appendUnique("root", fns)
+		appendFunctions("root", fns)
 	}
 
 	// 2. Walk the directory tree
@@ -94,7 +86,7 @@ func Scan(root string, logFn Logger) ([]Function, error) {
 
 		// Level 1 check
 		if fns, ok := detectFunction(path, root, logFn); ok {
-			appendUnique("L1", fns)
+			appendFunctions("L1", fns)
 		}
 
 		// Even when a directory has its own file routes (Next.js-style),
@@ -116,7 +108,7 @@ func Scan(root string, logFn Logger) ([]Function, error) {
 			}
 			subPath := filepath.Join(path, sub.Name())
 			if fns, ok := detectFunction(subPath, root, logFn); ok {
-				appendUnique("L2", fns)
+				appendFunctions("L2", fns)
 			}
 		}
 	}

@@ -41,12 +41,29 @@ const packDepsCache = new Map();
 const depsResolutionState = new Map();
 const tsBuildCache = new Map();
 const strictFsContext = new AsyncLocalStorage();
+const envContext = new AsyncLocalStorage();
 let strictFsHooksInstalled = false;
 const ENABLE_RUNTIME_PROCESS_POOL = !["0", "false", "off", "no"].includes(String(process.env.FN_NODE_RUNTIME_PROCESS_POOL || "1").toLowerCase());
 const RUNTIME_POOL_ACQUIRE_TIMEOUT_MS = Number(process.env.FN_NODE_POOL_ACQUIRE_TIMEOUT_MS || 5000);
 const RUNTIME_POOL_IDLE_TTL_MS = Number(process.env.FN_NODE_POOL_IDLE_TTL_MS || 300000);
 const RUNTIME_POOL_REAPER_INTERVAL_MS = Number(process.env.FN_NODE_POOL_REAPER_INTERVAL_MS || 2000);
 const WORKER_CHILD_SCRIPT = path.join(__dirname, "node-function-worker.js");
+
+// Env var prefixes that must NEVER be passed to user function worker processes.
+// These contain admin tokens, console credentials, and internal config that
+// could be exploited if leaked to user-authored code.
+const BLOCKED_ENV_PREFIXES = ["FN_ADMIN_", "FN_CONSOLE_", "FN_TRUSTED_"];
+
+function sanitizeWorkerEnv(env) {
+  const out = {};
+  for (const [k, v] of Object.entries(env)) {
+    if (!BLOCKED_ENV_PREFIXES.some((prefix) => k.startsWith(prefix))) {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
 const runtimeProcessPools = new Map();
 let runtimePoolReaperTimer = null;
 let runtimeWorkerRequestSeq = 0;
@@ -492,36 +509,92 @@ async function withPatchedProcessEnv(eventEnv, run) {
     return await run();
   }
 
-  const tracked = [];
-  const previous = new Map();
+  // Store per-request env in AsyncLocalStorage instead of mutating the global
+  // process.env. This prevents env vars (including secrets from fn.env.json)
+  // from leaking between concurrent requests for different functions.
+  const envOverrides = Object.create(null);
   for (const [rawKey, rawValue] of Object.entries(env)) {
     const key = String(rawKey || "");
     if (!key) {
       continue;
     }
-    tracked.push(key);
-    if (Object.prototype.hasOwnProperty.call(process.env, key)) {
-      previous.set(key, process.env[key]);
-    }
-    if (rawValue === null || rawValue === undefined) {
-      delete process.env[key];
-    } else {
-      process.env[key] = String(rawValue);
-    }
+    envOverrides[key] = rawValue === null || rawValue === undefined ? undefined : String(rawValue);
   }
 
-  try {
-    return await run();
-  } finally {
-    for (const key of tracked) {
-      if (previous.has(key)) {
-        process.env[key] = previous.get(key);
-      } else {
-        delete process.env[key];
+  return envContext.run(envOverrides, run);
+}
+
+// Install a Proxy over process.env that checks AsyncLocalStorage first.
+// This ensures that when handler code reads process.env.MY_SECRET, it gets
+// the per-request value without any global mutation or cross-request leakage.
+// Also hides sensitive system env vars (FN_ADMIN_*, FN_CONSOLE_*, FN_TRUSTED_*)
+// from user function code.
+const _originalProcessEnv = process.env;
+
+function _isBlockedEnvKey(prop) {
+  if (typeof prop !== "string") return false;
+  return BLOCKED_ENV_PREFIXES.some((prefix) => prop.startsWith(prefix));
+}
+
+process.env = new Proxy(_originalProcessEnv, {
+  get(target, prop, receiver) {
+    if (_isBlockedEnvKey(prop)) {
+      return undefined;
+    }
+    if (typeof prop === "string") {
+      const store = envContext.getStore();
+      if (store && prop in store) {
+        return store[prop];
       }
     }
-  }
-}
+    return Reflect.get(target, prop, receiver);
+  },
+  has(target, prop) {
+    if (_isBlockedEnvKey(prop)) {
+      return false;
+    }
+    if (typeof prop === "string") {
+      const store = envContext.getStore();
+      if (store && prop in store) {
+        return store[prop] !== undefined;
+      }
+    }
+    return Reflect.has(target, prop);
+  },
+  ownKeys(target) {
+    const store = envContext.getStore();
+    let keys;
+    if (!store) {
+      keys = Reflect.ownKeys(target);
+    } else {
+      const set = new Set(Reflect.ownKeys(target));
+      for (const key of Object.keys(store)) {
+        if (store[key] === undefined) {
+          set.delete(key);
+        } else {
+          set.add(key);
+        }
+      }
+      keys = [...set];
+    }
+    return keys.filter((k) => !_isBlockedEnvKey(k));
+  },
+  getOwnPropertyDescriptor(target, prop) {
+    if (_isBlockedEnvKey(prop)) {
+      return undefined;
+    }
+    if (typeof prop === "string") {
+      const store = envContext.getStore();
+      if (store && prop in store) {
+        if (store[prop] === undefined) {
+          return undefined;
+        }
+        return { value: store[prop], writable: true, enumerable: true, configurable: true };
+      }
+    }
+    return Reflect.getOwnPropertyDescriptor(target, prop);
+  },
+});
 
 function logDepsEvent(event, fields = {}) {
   try {
@@ -1504,8 +1577,10 @@ function resolveHandlerSourcePath(fnName, version) {
     try {
       const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
       if (config.entrypoint && typeof config.entrypoint === "string") {
-        const explicitPath = path.join(baseDir, config.entrypoint);
-        if (fs.existsSync(explicitPath)) {
+        const explicitPath = path.resolve(baseDir, config.entrypoint);
+        if (!explicitPath.startsWith(path.resolve(baseDir) + path.sep) && explicitPath !== path.resolve(baseDir)) {
+          // entrypoint escapes function directory — ignore it
+        } else if (fs.existsSync(explicitPath)) {
           return explicitPath;
         }
       }
@@ -2284,7 +2359,7 @@ function removeRuntimeWorker(pool, worker) {
 function spawnRuntimeWorker(pool) {
   const proc = childProcess.fork(WORKER_CHILD_SCRIPT, [], {
     stdio: ["ignore", "inherit", "inherit", "ipc"],
-    env: { ...process.env },
+    env: sanitizeWorkerEnv(process.env),
   });
 
   const worker = {

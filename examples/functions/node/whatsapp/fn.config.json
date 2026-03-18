@@ -1,14 +1,7 @@
 {
   "timeout_ms": 60000,
-  "max_concurrency": 4,
-  "max_body_bytes": 1048576,
-  "include_debug_headers": false,
   "invoke": {
     "methods": ["GET", "POST", "DELETE"],
-    "summary": "WhatsApp session + messaging + AI chat",
-    "query": {
-      "action": "status"
-    },
-    "body": ""
+    "summary": "WhatsApp session manager — QR login, send/receive, AI chat"
   }
 }

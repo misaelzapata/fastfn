@@ -9,6 +9,9 @@ import (
 	"strings"
 )
 
+// jsonMarshalFn is injectable for testing the json.Marshal error path.
+var jsonMarshalFn = json.Marshal
+
 var runtimeSocketEnvByRuntime = map[string]string{
 	"python": "FN_PY_SOCKET",
 	"node":   "FN_NODE_SOCKET",
@@ -136,7 +139,7 @@ func encodeRuntimeSocketMap(runtimeSockets map[string][]string) (string, error) 
 		dup := append([]string{}, sockets...)
 		payload[runtimeName] = dup
 	}
-	raw, err := json.Marshal(payload)
+	raw, err := jsonMarshalFn(payload)
 	if err != nil {
 		return "", err
 	}

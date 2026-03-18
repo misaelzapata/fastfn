@@ -1,65 +1,35 @@
+// POST /jobs/render-report — Accept a report request and return a job ID
 const fs = require("node:fs");
-const path = require("node:path");
 
-function json(status, payload) {
-  return {
-    status,
-    headers: { "Content-Type": "application/json; charset=utf-8" },
-    body: JSON.stringify(payload),
-  };
-}
-
-function parseBody(body) {
-  if (body == null || body === "") {
-    return {};
-  }
-  if (typeof body === "object") {
-    return body;
-  }
-  return JSON.parse(String(body));
-}
-
-function jobFile(jobId) {
-  const jobsDir = path.join("/tmp", "fastfn-platform-equivalents", "jobs");
-  fs.mkdirSync(jobsDir, { recursive: true });
-  return path.join(jobsDir, `${jobId}.json`);
-}
-
-function newJobId() {
-  const now = Date.now();
-  const rand = Math.random().toString(36).slice(2, 8);
-  return `job_${now}_${rand}`;
-}
+const JOBS_DIR = "/tmp/fastfn-platform-equivalents/jobs";
 
 exports.handler = async (event = {}) => {
-  let data;
-  try {
-    data = parseBody(event.body);
-  } catch {
-    return json(400, { error: "invalid_json", message: "Body must be valid JSON." });
-  }
+  const body =
+    typeof event.body === "string" ? JSON.parse(event.body) : event.body || {};
 
-  const reportType = String(data.report_type || "").trim();
-  const items = Array.isArray(data.items) ? data.items : [];
+  const reportType = (body.report_type || "").trim();
   if (!reportType) {
-    return json(400, { error: "validation_error", message: "report_type is required." });
+    return { status: 400, body: JSON.stringify({ error: "report_type is required" }) };
   }
 
-  const jobId = newJobId();
-  const nowMs = Date.now();
-  const spec = {
+  // Create a job record on disk (simulates a queue)
+  const jobId = `job_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const job = {
     id: jobId,
     report_type: reportType,
-    items_count: items.length,
-    created_at_ms: nowMs,
-    payload: data,
+    items_count: Array.isArray(body.items) ? body.items.length : 0,
+    created_at_ms: Date.now(),
   };
-  fs.writeFileSync(jobFile(jobId), JSON.stringify(spec, null, 2), "utf8");
+  fs.mkdirSync(JOBS_DIR, { recursive: true });
+  fs.writeFileSync(`${JOBS_DIR}/${jobId}.json`, JSON.stringify(job, null, 2));
 
-  return json(202, {
-    accepted: true,
-    job_id: jobId,
-    poll_url: `/jobs/render-report/${jobId}`,
-    recommended_poll_ms: 1200,
-  });
+  // Return 202 Accepted — the caller polls GET /jobs/render-report/:id
+  return {
+    status: 202,
+    body: JSON.stringify({
+      accepted: true,
+      job_id: jobId,
+      poll_url: `/jobs/render-report/${jobId}`,
+    }),
+  };
 };

@@ -65,6 +65,15 @@ local function session_secret()
   return env_str("FN_CONSOLE_SESSION_SECRET") or env_str("FN_ADMIN_TOKEN")
 end
 
+local function constant_time_eq(a, b)
+  if type(a) ~= "string" or type(b) ~= "string" or #a ~= #b then return false end
+  local acc = 0
+  for i = 1, #a do
+    acc = bit.bor(acc, bit.bxor(string.byte(a, i), string.byte(b, i)))
+  end
+  return acc == 0
+end
+
 local function hmac(secret, payload)
   -- Built-in OpenResty primitive.
   local sig = ngx.hmac_sha1(secret, payload)
@@ -106,7 +115,7 @@ function M.read_session()
   end
 
   local expected = hmac(secret, payload)
-  if expected ~= sig64 then
+  if not constant_time_eq(expected, sig64) then
     return nil, "invalid session signature"
   end
 
@@ -154,7 +163,8 @@ function M.set_session_cookie(user)
   local sig64 = hmac(secret, payload)
   local token = p64 .. "." .. sig64
 
-  local cookie = string.format("%s=%s; Path=/; HttpOnly; SameSite=Lax; Max-Age=%d", COOKIE_NAME, token, ttl)
+  local secure = (ngx.var.scheme == "https") and "; Secure" or ""
+  local cookie = string.format("%s=%s; Path=/; HttpOnly; SameSite=Lax; Max-Age=%d%s", COOKIE_NAME, token, ttl, secure)
   ngx.header["Set-Cookie"] = cookie
   return true
 end

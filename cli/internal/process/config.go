@@ -9,6 +9,10 @@ import (
 	"strings"
 )
 
+// Injectable for testing
+var configGOOS = goruntime.GOOS
+var configStatFn = os.Stat
+
 // GenerateNativeConfig adapts the embedded nginx.conf for host execution.
 // runtimeDir: path where the runtime assets were extracted
 // hostPort: HTTP port for local listener (default: 8080)
@@ -29,7 +33,7 @@ func GenerateNativeConfig(runtimeDir string, hostPort string) (string, error) {
 	content = strings.ReplaceAll(content, "/etc/ssl/certs/ca-certificates.crt", sslPath)
 
 	// 2b. Event backend: epoll is Linux-only.
-	if goruntime.GOOS == "darwin" {
+	if configGOOS == "darwin" {
 		content = strings.ReplaceAll(content, "use epoll;", "use kqueue;")
 	}
 
@@ -64,7 +68,7 @@ func detectSSLPath() string {
 	}
 
 	for _, c := range candidates {
-		if _, err := os.Stat(c); err == nil {
+		if _, err := configStatFn(c); err == nil {
 			return c
 		}
 	}

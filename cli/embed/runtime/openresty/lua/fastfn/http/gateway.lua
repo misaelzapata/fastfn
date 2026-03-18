@@ -244,6 +244,24 @@ local function host_is_private(host)
   if host:match("^169%.254%.") then
     return true
   end
+  -- IPv6 unique-local (fd00::/8) and link-local (fe80::/10) addresses
+  if host:match("^fd[0-9a-f][0-9a-f]:") or host:match("^fe[89ab][0-9a-f]:") then
+    return true
+  end
+  -- IPv4-mapped IPv6 forms (e.g., ::ffff:169.254.x.x, ::ffff:10.x.x.x)
+  if host:match("^::ffff:") then
+    local mapped = host:sub(8)
+    if mapped:match("^10%.") or mapped:match("^192%.168%.") or mapped:match("^169%.254%.") or mapped == "127.0.0.1" then
+      return true
+    end
+    local a = mapped:match("^172%.(%d+)%.")
+    if a then
+      local n = tonumber(a)
+      if n and n >= 16 and n <= 31 then
+        return true
+      end
+    end
+  end
   return false
 end
 
@@ -288,7 +306,7 @@ local function build_proxy_url(proxy, edge_cfg)
   if not path or path == "" or path:sub(1, 1) ~= "/" then
     return nil, "proxy.url must be absolute (http/https) or proxy.path must start with /"
   end
-  if path:find("%.%.", 1, true) then
+  if path:find("..", 1, true) then
     return nil, "proxy.path may not include .."
   end
 
@@ -741,18 +759,51 @@ local ok, run_err = xpcall(function()
     },
   }
 
-  -- Inject secrets vault into event.secrets
+  -- Inject only the secrets that this specific function references via its
+  -- fn.env.json (keys with is_secret=true).  This prevents function A from
+  -- reading secrets that belong to function B.
   local console_data = require "fastfn.console.data"
   local secrets_list = console_data.list_secrets() or {}
   if #secrets_list > 0 then
-    local secrets_map = {}
-    for _, item in ipairs(secrets_list) do
-      local val = FCACHE:get("sys:secret:val:" .. item.key)
-      if val then
-        secrets_map[item.key] = val
+    -- Build set of secret keys this function is allowed to access.
+    local allowed_keys = nil
+    local entrypoint = routes_mod.resolve_function_entrypoint(runtime, fn_name, requested_version)
+    if type(entrypoint) == "string" and entrypoint ~= "" then
+      local fn_dir = entrypoint:match("^(.*)/[^/]+$") or "."
+      local env_path = fn_dir .. "/fn.env.json"
+      local ef = io.open(env_path, "rb")
+      if ef then
+        local raw_env = ef:read("*a")
+        ef:close()
+        if type(raw_env) == "string" and raw_env ~= "" then
+          local env_parsed = cjson.decode(raw_env)
+          if type(env_parsed) == "table" then
+            allowed_keys = {}
+            for k, v in pairs(env_parsed) do
+              if type(k) == "string" and k ~= "" then
+                if type(v) == "table" and v.is_secret == true then
+                  allowed_keys[k] = true
+                end
+              end
+            end
+          end
+        end
       end
     end
-    event.secrets = secrets_map
+
+    local secrets_map = {}
+    for _, item in ipairs(secrets_list) do
+      -- Only inject secrets explicitly referenced by this function.
+      if allowed_keys == nil or allowed_keys[item.key] then
+        local val = FCACHE:get("sys:secret:val:" .. item.key)
+        if val then
+          secrets_map[item.key] = val
+        end
+      end
+    end
+    if next(secrets_map) then
+      event.secrets = secrets_map
+    end
   end
 
   local resp, err_code, err_msg, dispatch_meta

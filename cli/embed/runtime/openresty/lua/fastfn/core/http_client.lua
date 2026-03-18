@@ -266,10 +266,15 @@ function M.request(opts)
   for k, v in pairs(headers) do
     local key = tostring(k)
     local val = tostring(v)
-    if lower(key) == "content-length" then
-      has_content_length = true
+    -- Skip headers containing CRLF characters to prevent header injection
+    if key:find("[\r\n]") or val:find("[\r\n]") then
+      -- silently drop dangerous header
+    else
+      if lower(key) == "content-length" then
+        has_content_length = true
+      end
+      req_lines[#req_lines + 1] = key .. ": " .. val
     end
-    req_lines[#req_lines + 1] = key .. ": " .. val
   end
 
   if body ~= nil and not has_content_length then

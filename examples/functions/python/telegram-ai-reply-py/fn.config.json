@@ -1,36 +1,10 @@
 {
-  "timeout_ms": 200000,
+  "timeout_ms": 60000,
   "max_concurrency": 2,
   "invoke": {
-    "summary": "Telegram webhook/query -> OpenAI -> Telegram reply (Python with tools)",
-    "methods": ["GET", "POST"],
-    "query": {
-      "mode": "reply",
-      "chat_id": "123456789",
-      "text": "Hola desde python",
-      "dry_run": "true",
-      "tools": "true",
-      "auto_tools": "true"
-    },
-    "body": "{\"message\":{\"chat\":{\"id\":123456789},\"text\":\"Hola\"}}",
+    "summary": "Telegram webhook -> OpenAI -> Telegram reply (Python, no deps)",
+    "methods": ["POST"],
+    "body": "{\"message\":{\"chat\":{\"id\":123456789},\"text\":\"Hello!\"}}",
     "content_type": "application/json"
-  },
-  "schedule": {
-    "enabled": false,
-    "every_seconds": 30,
-    "method": "GET",
-    "query": {
-      "mode": "loop",
-      "dry_run": "false",
-      "wait_secs": "12",
-      "poll_ms": "700",
-      "max_replies": "3",
-      "tools": "true",
-      "auto_tools": "true",
-      "memory": "true"
-    },
-    "context": {
-      "type": "cron"
-    }
   }
 }

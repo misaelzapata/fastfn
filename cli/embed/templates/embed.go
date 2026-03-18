@@ -10,6 +10,12 @@ import (
 //go:embed docker-compose.yml
 var Content embed.FS
 
+// Injectable for testing
+var templateReadFileFn = func(name string) ([]byte, error) { return Content.ReadFile(name) }
+var templateParseFn = func(name, text string) (*template.Template, error) {
+	return template.New(name).Parse(text)
+}
+
 // Config for the template
 type Config struct {
 	FunctionDir string
@@ -21,12 +27,12 @@ func GenerateDockerCompose(destDir, functionDir string) (string, error) {
 		FunctionDir: functionDir,
 	}
 
-	raw, err := Content.ReadFile("docker-compose.yml")
+	raw, err := templateReadFileFn("docker-compose.yml")
 	if err != nil {
 		return "", err
 	}
 
-	t, err := template.New("docker-compose").Parse(string(raw))
+	t, err := templateParseFn("docker-compose", string(raw))
 	if err != nil {
 		return "", err
 	}

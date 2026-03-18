@@ -64,11 +64,11 @@ Format:
 
 Note: `curl` treats `[` and `]` as URL "ranges" (globbing). Examples that include `[[...]]` in the URL use `curl -g` to disable globbing.
 
-### 3.1 Plan-only (no outbound calls)
+### 3.1 Run with directives
 
 ```bash
 curl -g -sS \
-"http://127.0.0.1:8080/toolbox-bot?dry_run=true&text=Use%20[[http:https://api.ipify.org?format=json]]%20and%20[[fn:request-inspector?key=demo|GET]]"
+"http://127.0.0.1:8080/toolbox-bot?text=Use%20[[http:https://api.ipify.org?format=json]]%20and%20[[fn:hello|GET]]"
 ```
 
 Expected response shape:
@@ -76,38 +76,13 @@ Expected response shape:
 ```json
 {
   "ok": true,
-  "dry_run": true,
-  "plan": [
-    { "type": "fn", "name": "request-inspector", "query": "?key=demo", "method": "GET" },
-    { "type": "http", "url": "https://api.ipify.org?format=json" }
-  ],
-  "note": "Set dry_run=false to execute tools."
+  "text": "Use [[http:...]] and [[fn:hello|GET]]",
+  "results": [
+    { "ok": true, "type": "http", "status": 200, "body": "..." },
+    { "ok": true, "type": "fn", "name": "hello", "status": 200, "body": "..." }
+  ]
 }
 ```
-
-### 3.2 Execute tools (allowlisted only)
-
-```bash
-curl -g -sS \
-"http://127.0.0.1:8080/toolbox-bot?dry_run=false&text=Use%20[[http:https://api.ipify.org?format=json]]%20and%20[[fn:request-inspector?key=demo|GET]]"
-```
-
-Expected result entries:
-
-- `ok`, `status`, `elapsed_ms`
-- `body` (truncated)
-- `json` (parsed when `Content-Type` is JSON)
-
-## 4) Auto-tools (intent-based selection)
-
-If you do **not** include directives, you can enable auto-tools:
-
-```bash
-curl -sS \
-"http://127.0.0.1:8080/toolbox-bot?dry_run=true&auto_tools=true&text=what%20is%20my%20ip%20and%20weather%20in%20Buenos%20Aires%3F"
-```
-
-Auto-tools are intentionally simple (keyword-based). If the bot picks nothing, use manual directives.
 
 ## 5) Allowlists (security controls)
 
@@ -138,11 +113,7 @@ Note: local hosts are always blocked (even if allowlisted) to prevent access to 
 
 ## 6) Where tools are used
 
-These examples support tools:
-
-- `telegram-ai-reply` (Node): `TELEGRAM_*` tool knobs
-- `telegram-ai-reply-py` (Python): tool query params + allowlists
-- `whatsapp` (Node): `action=chat` + `WHATSAPP_*` tool knobs
+The `toolbox-bot` example demonstrates tool directives. For model-driven tool calling, see `ai-tool-agent` below.
 
 ## 6.1 OpenAI tool-calling (model chooses tools)
 

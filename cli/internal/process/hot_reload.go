@@ -4,13 +4,27 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
 )
 
-const DefaultReloadURL = "http://localhost:8080/_fn/reload"
+// defaultReloadURL builds the fallback reload endpoint using FN_HOST_PORT.
+func defaultReloadURL() string {
+	port := os.Getenv("FN_HOST_PORT")
+	if port == "" {
+		port = "8080"
+	}
+	return fmt.Sprintf("http://localhost:%s/_fn/reload", port)
+}
+
+// newWatcherFn is injectable for testing.
+var newWatcherFn = NewWatcher
+
+// watcherStartFn is injectable for testing the Start() error path.
+var watcherStartFn = func(w *Watcher) error { return w.Start() }
 
 // Debouncer coalesces bursts of events into a single callback execution.
 type Debouncer struct {
@@ -65,18 +79,21 @@ func (d *Debouncer) Stop() {
 	}
 }
 
+// reloadMethods lists the HTTP methods to try in order. Injectable for testing.
+var reloadMethods = []string{"POST", "GET"}
+
 // TriggerCatalogReload calls the runtime reload endpoint. It prefers POST and
 // falls back to GET for compatibility with older/newer gateway behavior.
 func TriggerCatalogReload(endpoint string, timeout time.Duration) error {
 	if endpoint == "" {
-		endpoint = DefaultReloadURL
+		endpoint = defaultReloadURL()
 	}
 	if timeout <= 0 {
 		timeout = 1500 * time.Millisecond
 	}
 
 	client := &http.Client{Timeout: timeout}
-	methods := []string{"POST", "GET"}
+	methods := reloadMethods
 	var lastErr error
 
 	for _, method := range methods {
@@ -125,7 +142,7 @@ func StartHotReloadWatcher(root, reloadURL string, logf func(format string, args
 		}
 	})
 
-	watcher, err := NewWatcher(root, func(event fsnotify.Event) {
+	watcher, err := newWatcherFn(root, func(event fsnotify.Event) {
 		_ = event // keep callback signature for potential future diagnostics.
 		debouncer.Trigger()
 	})
@@ -133,7 +150,7 @@ func StartHotReloadWatcher(root, reloadURL string, logf func(format string, args
 		debouncer.Stop()
 		return nil, err
 	}
-	if err := watcher.Start(); err != nil {
+	if err := watcherStartFn(watcher); err != nil {
 		debouncer.Stop()
 		return nil, err
 	}

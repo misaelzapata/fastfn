@@ -215,7 +215,7 @@ local function ensure_name(raw)
     return nil, "name is required"
   end
   local name = tostring(raw)
-  if name:sub(1, 1) == "/" or name == ".." or name:find("%.%.", 1, true) then
+  if name:sub(1, 1) == "/" or name == ".." or name:find("..", 1, true) then
     return nil, "invalid name"
   end
   if not name:match("^[A-Za-z0-9._/%-\\[%]@]+$") then

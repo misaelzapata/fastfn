@@ -1,3 +1,6 @@
+// Cloudflare Workers provide crypto as a global; Node <19 does not.
+const crypto = globalThis.crypto || require("crypto");
+
 /**
  * Handle incoming HTTP requests
  * @param {Request} request

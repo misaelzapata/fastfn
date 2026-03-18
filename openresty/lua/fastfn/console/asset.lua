@@ -6,7 +6,7 @@ end
 
 local path = ngx.var.uri or ""
 local rel_path = path:match("^/console/assets/([a-zA-Z0-9_./-]+)$")
-if not rel_path or rel_path:find("%.%.", 1, true) then
+if not rel_path or rel_path:find("..", 1, true) then
   ngx.status = 404
   ngx.say("not found")
   return
@@ -23,7 +23,7 @@ local asset_path = prefix .. "console/" .. rel_path
 local f, err = io.open(asset_path, "rb")
 if not f then
   ngx.status = 404
-  ngx.say("asset not found: " .. tostring(err))
+  ngx.say("asset not found")
   return
 end
 

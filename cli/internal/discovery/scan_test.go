@@ -571,3 +571,803 @@ func TestScanDetectsLuaFileRoutes(t *testing.T) {
 		t.Fatal("expected lua file route to be discovered")
 	}
 }
+
+func TestScanDetectsGoAndRustFromFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	goDir := filepath.Join(tmpDir, "go-fn")
+	if err := os.Mkdir(goDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(goDir, "main.go"), []byte("package main"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	rustDir := filepath.Join(tmpDir, "rust-fn")
+	if err := os.Mkdir(rustDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(rustDir, "handler.rs"), []byte("fn handler(){}"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	funcs, err := Scan(tmpDir, nil)
+	if err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+
+	foundGo := false
+	foundRust := false
+	for _, fn := range funcs {
+		if fn.Name == "go-fn" && fn.Runtime == "go" {
+			foundGo = true
+		}
+		if fn.Name == "rust-fn" && fn.Runtime == "rust" {
+			foundRust = true
+		}
+	}
+
+	if !foundGo {
+		t.Fatal("expected go function from main.go")
+	}
+	if !foundRust {
+		t.Fatal("expected rust function from handler.rs")
+	}
+}
+
+func TestScanConfigNoRuntime_FallbackToFileDetect(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	fnDir := filepath.Join(tmpDir, "my-fn")
+	if err := os.Mkdir(fnDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Config with name but no runtime
+	if err := os.WriteFile(filepath.Join(fnDir, "fn.config.json"), []byte(`{"name":"my-fn"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fnDir, "handler.py"), []byte("def handler():pass"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	funcs, err := Scan(tmpDir, nil)
+	if err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+
+	found := false
+	for _, fn := range funcs {
+		if fn.Name == "my-fn" && fn.Runtime == "python" && fn.HasConfig {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("expected config with no runtime to fallback to file detection")
+	}
+}
+
+func TestScanConfigNoRuntimeNoFiles_DefaultsToNode(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	fnDir := filepath.Join(tmpDir, "bare-fn")
+	if err := os.Mkdir(fnDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fnDir, "fn.config.json"), []byte(`{"name":"bare-fn"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	funcs, err := Scan(tmpDir, nil)
+	if err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+
+	found := false
+	for _, fn := range funcs {
+		if fn.Name == "bare-fn" && fn.Runtime == "node" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("expected bare config with no runtime files to default to node")
+	}
+}
+
+func TestScanInvalidRoot(t *testing.T) {
+	_, err := Scan("/nonexistent/path/that/does/not/exist", nil)
+	if err == nil {
+		t.Fatal("expected error for invalid root")
+	}
+}
+
+func TestScanRootIsFunctionItself(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "handler.js"), []byte("module.exports={}"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	funcs, err := Scan(tmpDir, nil)
+	if err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+
+	found := false
+	for _, fn := range funcs {
+		if fn.Runtime == "node" && fn.Path == tmpDir {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("expected root itself to be detected as a function")
+	}
+}
+
+func TestScanDuplicateDetectionDedup(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Create a function that would match both config and file detection
+	fnDir := filepath.Join(tmpDir, "dedup-fn")
+	if err := os.Mkdir(fnDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fnDir, "fn.config.json"), []byte(`{"runtime":"node","name":"dedup-fn"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fnDir, "handler.js"), []byte("module.exports={}"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	funcs, err := Scan(tmpDir, nil)
+	if err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+
+	count := 0
+	for _, fn := range funcs {
+		if fn.Name == "dedup-fn" && fn.Runtime == "node" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("expected exactly 1 dedup-fn entry, got %d", count)
+	}
+}
+
+func TestScanManifestEmptyRoutes(t *testing.T) {
+	tmpDir := t.TempDir()
+	fnDir := filepath.Join(tmpDir, "empty-manifest")
+	if err := os.Mkdir(fnDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fnDir, "fn.routes.json"), []byte(`{"routes":{}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fnDir, "handler.js"), []byte("..."), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	funcs, err := Scan(tmpDir, nil)
+	if err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+
+	found := false
+	for _, fn := range funcs {
+		if fn.Name == "empty-manifest" && fn.Runtime == "node" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("expected fallback to file detection when manifest routes are empty")
+	}
+}
+
+func TestScanWithLogger(t *testing.T) {
+	tmpDir := t.TempDir()
+	fnDir := filepath.Join(tmpDir, "logged-fn")
+	if err := os.Mkdir(fnDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fnDir, "handler.js"), []byte("..."), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	var logs []string
+	logger := func(format string, v ...interface{}) {
+		logs = append(logs, format)
+	}
+
+	funcs, err := Scan(tmpDir, logger)
+	if err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+
+	if len(funcs) == 0 {
+		t.Fatal("expected at least one function")
+	}
+	if len(logs) == 0 {
+		t.Fatal("expected logger to be called")
+	}
+}
+
+func TestDetectRuntimeFromFile_AllExtensions(t *testing.T) {
+	tests := []struct {
+		file    string
+		runtime string
+	}{
+		{"handler.js", "node"},
+		{"handler.ts", "node"},
+		{"handler.py", "python"},
+		{"handler.php", "php"},
+		{"handler.lua", "lua"},
+		{"handler.rs", "rust"},
+		{"handler.go", "go"},
+		{"handler.txt", ""},
+		{"types.d.ts", ""},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.file, func(t *testing.T) {
+			got := detectRuntimeFromFile(tc.file)
+			if got != tc.runtime {
+				t.Fatalf("detectRuntimeFromFile(%q) = %q, want %q", tc.file, got, tc.runtime)
+			}
+		})
+	}
+}
+
+func TestIsLeafFunctionDir_WithManifest(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "fn.routes.json"), []byte(`{"routes":{"GET /x":"handler.js"}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if !isLeafFunctionDir(tmpDir) {
+		t.Fatal("expected leaf function dir with non-empty manifest")
+	}
+}
+
+func TestIsLeafFunctionDir_WithExplicitConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "fn.config.json"), []byte(`{"runtime":"node","name":"leaf"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if !isLeafFunctionDir(tmpDir) {
+		t.Fatal("expected leaf function dir with explicit config")
+	}
+}
+
+func TestIsLeafFunctionDir_NeitherManifestNorConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	if isLeafFunctionDir(tmpDir) {
+		t.Fatal("expected non-leaf when neither manifest nor config exists")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// parseConfig
+// ---------------------------------------------------------------------------
+
+func TestParseConfig_Valid(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "fn.config.json")
+	os.WriteFile(cfgPath, []byte(`{"runtime":"python","name":"my-fn"}`), 0644)
+
+	rt, name := parseConfig(cfgPath)
+	if rt != "python" {
+		t.Fatalf("parseConfig runtime = %q, want python", rt)
+	}
+	if name != "my-fn" {
+		t.Fatalf("parseConfig name = %q, want my-fn", name)
+	}
+}
+
+func TestParseConfig_MissingFile(t *testing.T) {
+	rt, name := parseConfig("/nonexistent/fn.config.json")
+	if rt != "" || name != "" {
+		t.Fatalf("expected empty values for missing file, got (%q, %q)", rt, name)
+	}
+}
+
+func TestParseConfig_InvalidJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "fn.config.json")
+	os.WriteFile(cfgPath, []byte(`{invalid`), 0644)
+
+	rt, name := parseConfig(cfgPath)
+	if rt != "" || name != "" {
+		t.Fatalf("expected empty values for invalid JSON, got (%q, %q)", rt, name)
+	}
+}
+
+func TestParseConfig_EmptyFields(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "fn.config.json")
+	os.WriteFile(cfgPath, []byte(`{"runtime":"","name":""}`), 0644)
+
+	rt, name := parseConfig(cfgPath)
+	if rt != "" || name != "" {
+		t.Fatalf("expected empty values for empty fields, got (%q, %q)", rt, name)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// isNonEmptyJSONConfig
+// ---------------------------------------------------------------------------
+
+func TestIsNonEmptyJSONConfig_Valid(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "fn.config.json")
+	os.WriteFile(cfgPath, []byte(`{"runtime":"node"}`), 0644)
+
+	if !isNonEmptyJSONConfig(cfgPath) {
+		t.Fatal("expected true for non-empty JSON config")
+	}
+}
+
+func TestIsNonEmptyJSONConfig_Empty(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "fn.config.json")
+	os.WriteFile(cfgPath, []byte(`{}`), 0644)
+
+	if isNonEmptyJSONConfig(cfgPath) {
+		t.Fatal("expected false for empty JSON config")
+	}
+}
+
+func TestIsNonEmptyJSONConfig_MissingFile(t *testing.T) {
+	if isNonEmptyJSONConfig("/nonexistent/fn.config.json") {
+		t.Fatal("expected false for missing file")
+	}
+}
+
+func TestIsNonEmptyJSONConfig_InvalidJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "fn.config.json")
+	os.WriteFile(cfgPath, []byte(`{bad`), 0644)
+
+	if isNonEmptyJSONConfig(cfgPath) {
+		t.Fatal("expected false for invalid JSON")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// isExplicitFunctionConfig
+// ---------------------------------------------------------------------------
+
+func TestIsExplicitFunctionConfig_EmptyMap(t *testing.T) {
+	if isExplicitFunctionConfig(map[string]interface{}{}) {
+		t.Fatal("expected false for empty map")
+	}
+}
+
+func TestIsExplicitFunctionConfig_RuntimeOnly(t *testing.T) {
+	raw := map[string]interface{}{"runtime": "python"}
+	if !isExplicitFunctionConfig(raw) {
+		t.Fatal("expected true when runtime is set")
+	}
+}
+
+func TestIsExplicitFunctionConfig_NameOnly(t *testing.T) {
+	raw := map[string]interface{}{"name": "my-fn"}
+	if !isExplicitFunctionConfig(raw) {
+		t.Fatal("expected true when name is set")
+	}
+}
+
+func TestIsExplicitFunctionConfig_EntrypointOnly(t *testing.T) {
+	raw := map[string]interface{}{"entrypoint": "handler.js"}
+	if !isExplicitFunctionConfig(raw) {
+		t.Fatal("expected true when entrypoint is set")
+	}
+}
+
+func TestIsExplicitFunctionConfig_InvokeRoutes(t *testing.T) {
+	raw := map[string]interface{}{
+		"invoke": map[string]interface{}{
+			"routes": []interface{}{"GET /hello"},
+		},
+	}
+	if !isExplicitFunctionConfig(raw) {
+		t.Fatal("expected true when invoke.routes is non-empty")
+	}
+}
+
+func TestIsExplicitFunctionConfig_InvokeEmptyRoutes(t *testing.T) {
+	raw := map[string]interface{}{
+		"invoke": map[string]interface{}{
+			"routes": []interface{}{},
+		},
+	}
+	if isExplicitFunctionConfig(raw) {
+		t.Fatal("expected false when invoke.routes is empty")
+	}
+}
+
+func TestIsExplicitFunctionConfig_InvokeNotMap(t *testing.T) {
+	raw := map[string]interface{}{
+		"invoke": "not a map",
+	}
+	if isExplicitFunctionConfig(raw) {
+		t.Fatal("expected false when invoke is not a map")
+	}
+}
+
+func TestIsExplicitFunctionConfig_InvokeRoutesNotSlice(t *testing.T) {
+	raw := map[string]interface{}{
+		"invoke": map[string]interface{}{
+			"routes": "not a slice",
+		},
+	}
+	if isExplicitFunctionConfig(raw) {
+		t.Fatal("expected false when invoke.routes is not a slice")
+	}
+}
+
+func TestIsExplicitFunctionConfig_WhitespaceRuntime(t *testing.T) {
+	raw := map[string]interface{}{"runtime": "  "}
+	if isExplicitFunctionConfig(raw) {
+		t.Fatal("expected false when runtime is whitespace-only")
+	}
+}
+
+func TestIsExplicitFunctionConfig_NonStringRuntime(t *testing.T) {
+	raw := map[string]interface{}{"runtime": 42, "timeout_ms": 1000}
+	if isExplicitFunctionConfig(raw) {
+		t.Fatal("expected false when runtime is not a string and no other identity fields")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// routeKey
+// ---------------------------------------------------------------------------
+
+func TestRouteKey_MethodAndPath(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"GET /items", "GET /items"},
+		{"post /items", "POST /items"},
+		{"PUT /items", "PUT /items"},
+		{"PATCH /items", "PATCH /items"},
+		{"DELETE /items", "DELETE /items"},
+		{"/items", "GET /items"},
+		{"  GET  /items  ", "GET /items"},
+		{"UNKNOWN /items", "GET UNKNOWN /items"},
+	}
+	for _, tc := range tests {
+		got := routeKey(tc.input)
+		if got != tc.want {
+			t.Fatalf("routeKey(%q) = %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// splitFileTokens
+// ---------------------------------------------------------------------------
+
+func TestSplitFileTokens_EmptyString(t *testing.T) {
+	got := splitFileTokens("")
+	if len(got) != 1 || got[0] != "" {
+		t.Fatalf("splitFileTokens(\"\") = %v", got)
+	}
+}
+
+func TestSplitFileTokens_NoBrackets(t *testing.T) {
+	got := splitFileTokens("get.users")
+	if len(got) != 2 || got[0] != "get" || got[1] != "users" {
+		t.Fatalf("splitFileTokens(\"get.users\") = %v", got)
+	}
+}
+
+func TestSplitFileTokens_WithBrackets(t *testing.T) {
+	got := splitFileTokens("get.users.[id]")
+	if len(got) != 3 || got[0] != "get" || got[1] != "users" || got[2] != "[id]" {
+		t.Fatalf("splitFileTokens(\"get.users.[id]\") = %v", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// detectManifestRoutes – unknown extension fallback to rt="node"
+// ---------------------------------------------------------------------------
+
+func TestDetectManifestRoutes_UnknownExtensionFallsBackToNode(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Create a manifest that maps a route to a file with an unknown extension.
+	if err := os.WriteFile(filepath.Join(tmpDir, "fn.routes.json"), []byte(`{
+		"routes": {
+			"GET /data": "handlers/export.xyz"
+		}
+	}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	fns, hasManifest := detectManifestRoutes(tmpDir, func(format string, v ...interface{}) {})
+	if !hasManifest {
+		t.Fatal("expected hasManifest=true")
+	}
+	if len(fns) != 1 {
+		t.Fatalf("expected 1 function, got %d", len(fns))
+	}
+	if fns[0].Runtime != "node" {
+		t.Fatalf("expected runtime fallback to 'node', got %q", fns[0].Runtime)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// detectFileBasedRoutes – filepath.Rel error path
+// ---------------------------------------------------------------------------
+
+func TestDetectFileBasedRoutes_RelError(t *testing.T) {
+	// When filepath.Rel fails, relPath falls back to filepath.Base(path).
+	// This is hard to trigger on most OSes, but we can test the normal case
+	// and verify the function handles edge cases gracefully.
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "get.health.js"), []byte("..."), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Pass an unrelated root to make Rel produce a relative path with ".." prefixes
+	unrelatedRoot := "/unlikely/root/path/that/does/not/match"
+	fns := detectFileBasedRoutes(tmpDir, unrelatedRoot)
+	// Should still produce routes even when root doesn't match
+	if len(fns) == 0 {
+		t.Fatal("expected at least one file-based route even with mismatched root")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Scan – L2 os.ReadDir error, appendUnique default scope
+// ---------------------------------------------------------------------------
+
+func TestScan_L2ReadDirErrorSkipped(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a L1 directory that is not a leaf and contains a non-readable L2 dir
+	l1Dir := filepath.Join(tmpDir, "group")
+	if err := os.Mkdir(l1Dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Create an unreadable L2 dir
+	l2Dir := filepath.Join(l1Dir, "broken")
+	if err := os.Mkdir(l2Dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Make it unreadable
+	if err := os.Chmod(l2Dir, 0000); err != nil {
+		t.Skipf("chmod not supported: %v", err)
+	}
+	t.Cleanup(func() { os.Chmod(l2Dir, 0755) })
+
+	// Also add a working L2 dir with a function
+	l2Good := filepath.Join(l1Dir, "good-fn")
+	if err := os.Mkdir(l2Good, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(l2Good, "handler.js"), []byte("..."), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	funcs, err := Scan(tmpDir, nil)
+	if err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+	// Should find good-fn despite broken L2 dir
+	found := false
+	for _, fn := range funcs {
+		if fn.Name == "good-fn" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("expected good-fn to be discovered despite broken sibling")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// detectFunction – hasManifest=true but merged is empty
+// ---------------------------------------------------------------------------
+
+func TestDetectFunction_ManifestEmptyRoutesAndNoFileRoutes(t *testing.T) {
+	tmpDir := t.TempDir()
+	fnDir := filepath.Join(tmpDir, "empty-merge")
+	if err := os.Mkdir(fnDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Empty manifest routes
+	if err := os.WriteFile(filepath.Join(fnDir, "fn.routes.json"), []byte(`{"routes":{}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// No handler files, so file-based routes are empty too
+	// But add a handler.js so the single-entry fallback path hits
+	if err := os.WriteFile(filepath.Join(fnDir, "handler.js"), []byte("..."), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	fns, ok := detectFunction(fnDir, tmpDir, func(format string, v ...interface{}) {})
+	if !ok {
+		t.Fatal("expected function to be detected via single-entry fallback")
+	}
+	if len(fns) == 0 {
+		t.Fatal("expected at least one function")
+	}
+	if fns[0].Runtime != "node" {
+		t.Fatalf("expected runtime=node, got %q", fns[0].Runtime)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// detectFunction – overlay config with manifest producing merged
+// ---------------------------------------------------------------------------
+
+func TestDetectFunction_OverlayConfigWithManifest(t *testing.T) {
+	tmpDir := t.TempDir()
+	fnDir := filepath.Join(tmpDir, "overlay-manifest")
+	if err := os.Mkdir(fnDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Non-identity config (overlay)
+	if err := os.WriteFile(filepath.Join(fnDir, "fn.config.json"), []byte(`{"timeout_ms": 1200}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Manifest with routes
+	if err := os.WriteFile(filepath.Join(fnDir, "fn.routes.json"), []byte(`{
+		"routes": {
+			"GET /items": "list.js"
+		}
+	}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	fns, ok := detectFunction(fnDir, tmpDir, func(format string, v ...interface{}) {})
+	if !ok {
+		t.Fatal("expected function to be detected")
+	}
+	// Overlay config should mark HasConfig=true on merged routes
+	for _, fn := range fns {
+		if !fn.HasConfig {
+			t.Fatalf("expected HasConfig=true for overlay config + manifest merge, got false for %s", fn.Name)
+		}
+	}
+}
+
+func TestDetectFunction_ConfigWithRuntimeButNoName(t *testing.T) {
+	// When fn.config.json has "runtime" but no "name", the name should
+	// fall back to filepath.Base(path).
+	tmpDir := t.TempDir()
+	fnDir := filepath.Join(tmpDir, "my-func-dir")
+	if err := os.Mkdir(fnDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fnDir, "fn.config.json"), []byte(`{"runtime":"python"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	fns, ok := detectFunction(fnDir, tmpDir, func(format string, v ...interface{}) {})
+	if !ok {
+		t.Fatal("expected function to be detected")
+	}
+	if len(fns) != 1 {
+		t.Fatalf("expected 1 function, got %d", len(fns))
+	}
+	if fns[0].Name != "my-func-dir" {
+		t.Fatalf("expected name to fallback to dir base name 'my-func-dir', got %q", fns[0].Name)
+	}
+	if fns[0].Runtime != "python" {
+		t.Fatalf("expected runtime 'python', got %q", fns[0].Runtime)
+	}
+}
+
+func TestScan_DuplicateFunctionDedup(t *testing.T) {
+	// When the same function is detected at both L1 and root level,
+	// the appendUnique seen map should deduplicate them.
+	// This happens when the root itself IS a function and also appears
+	// in the L1 scan. We create a dir that is itself a function.
+	tmpDir := t.TempDir()
+
+	// Root itself is a function (has handler.js)
+	if err := os.WriteFile(filepath.Join(tmpDir, "handler.js"), []byte("exports.handler = () => {};"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	fns, err := Scan(tmpDir, nil)
+	if err != nil {
+		t.Fatalf("Scan() error = %v", err)
+	}
+	// Should have exactly 1 function even if root was detected
+	count := 0
+	for _, fn := range fns {
+		if fn.Runtime == "node" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("expected exactly 1 deduped function, got %d (total fns=%d)", count, len(fns))
+	}
+}
+
+func TestSplitFileTokens_DotInsideBrackets(t *testing.T) {
+	got := splitFileTokens("get.[[...opt]]")
+	if len(got) != 2 || got[0] != "get" || got[1] != "[[...opt]]" {
+		t.Fatalf("splitFileTokens(\"get.[[...opt]]\") = %v", got)
+	}
+}
+
+func TestScan_L2ReadDirErrorContinues(t *testing.T) {
+	// When an L1 directory is not readable, os.ReadDir at L2 level
+	// should fail and be skipped gracefully.
+	tmpDir := t.TempDir()
+
+	// Create L1 dir that is NOT a leaf (no manifest, no explicit config)
+	// and is not itself a function, but cannot be listed for L2 scanning.
+	l1Dir := filepath.Join(tmpDir, "unreadable-group")
+	if err := os.Mkdir(l1Dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Create a subdir so it looks like a group dir, then make it unreadable
+	l2Dir := filepath.Join(l1Dir, "sub-fn")
+	if err := os.Mkdir(l2Dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(l2Dir, "handler.js"), []byte("..."), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Make L1 dir unreadable so os.ReadDir(l1Dir) fails at the L2 stage
+	if err := os.Chmod(l1Dir, 0111); err != nil {
+		t.Skipf("chmod not supported: %v", err)
+	}
+	t.Cleanup(func() { os.Chmod(l1Dir, 0755) })
+
+	// Also add a working L1 function so we verify scan still succeeds
+	workingDir := filepath.Join(tmpDir, "working-fn")
+	if err := os.Mkdir(workingDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workingDir, "handler.py"), []byte("..."), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	funcs, err := Scan(tmpDir, nil)
+	if err != nil {
+		t.Fatalf("Scan failed: %v", err)
+	}
+
+	found := false
+	for _, fn := range funcs {
+		if fn.Name == "working-fn" && fn.Runtime == "python" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("expected working-fn to be discovered despite unreadable sibling group dir")
+	}
+}
+
+func TestDetectFileBasedRoutes_RelativeRootCausesRelError(t *testing.T) {
+	// When root is a relative path and path is absolute, filepath.Rel
+	// returns an error, causing the fallback to filepath.Base(path).
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "get.health.js"), []byte("..."), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Pass a relative root with an absolute path to trigger filepath.Rel error
+	fns := detectFileBasedRoutes(tmpDir, "relative-root")
+	if len(fns) == 0 {
+		t.Fatal("expected file-based routes despite Rel error")
+	}
+	// The route should use filepath.Base(tmpDir) as the prefix
+	baseName := filepath.Base(tmpDir)
+	foundHealth := false
+	for _, fn := range fns {
+		if fn.OriginalRoute == "GET /"+baseName+"/health" {
+			foundHealth = true
+		}
+	}
+	if !foundHealth {
+		t.Fatalf("expected route with base dir prefix, got routes: %v", fns)
+	}
+}

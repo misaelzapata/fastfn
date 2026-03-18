@@ -1,39 +1,27 @@
+// GET /api/v1/orders — List all orders, optionally filtered by ?status=
 const fs = require("node:fs");
-const path = require("node:path");
 
-function json(status, payload) {
-  return {
-    status,
-    headers: { "Content-Type": "application/json; charset=utf-8" },
-    body: JSON.stringify(payload),
-  };
-}
+const STATE_FILE = "/tmp/fastfn-platform-equivalents/orders.json";
 
 function loadOrders() {
-  const stateDir = path.join("/tmp", "fastfn-platform-equivalents");
-  const stateFile = path.join(stateDir, "orders.json");
-  if (!fs.existsSync(stateFile)) {
-    return [];
-  }
   try {
-    const data = JSON.parse(fs.readFileSync(stateFile, "utf8"));
-    return Array.isArray(data) ? data : [];
+    return JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
   } catch {
     return [];
   }
 }
 
 exports.handler = async (event = {}) => {
-  const query = (event && event.query) || {};
-  const statusFilter = String(query.status || "").trim().toLowerCase();
+  const filter = (event.query?.status || "").toLowerCase();
   const orders = loadOrders();
-  const filtered = statusFilter
-    ? orders.filter((item) => String((item && item.status) || "").toLowerCase() === statusFilter)
+
+  // Optional filter: GET /api/v1/orders?status=pending
+  const result = filter
+    ? orders.filter((o) => (o.status || "").toLowerCase() === filter)
     : orders;
 
-  return json(200, {
-    ok: true,
-    total: filtered.length,
-    orders: filtered,
-  });
+  return {
+    status: 200,
+    body: JSON.stringify({ ok: true, total: result.length, orders: result }),
+  };
 };

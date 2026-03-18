@@ -11,16 +11,21 @@ import (
 //go:embed *
 var Content embed.FS
 
+// Injectable for testing
+var mkdirTempFn = os.MkdirTemp
+var walkDirFS fs.FS = Content
+var readFileFn = func(path string) ([]byte, error) { return Content.ReadFile(path) }
+
 // Extract extracts the embedded runtime files to a temporary directory
 // Returns the path to the directory containing Dockerfile
 func Extract() (string, error) {
-	tempDir, err := os.MkdirTemp("", "fastfn-runtime-build-*")
+	tempDir, err := mkdirTempFn("", "fastfn-runtime-build-*")
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp dir: %w", err)
 	}
 
 	// Copy all embedded files to the temp dir
-	err = fs.WalkDir(Content, ".", func(path string, d fs.DirEntry, err error) error {
+	err = fs.WalkDir(walkDirFS, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -28,7 +33,7 @@ func Extract() (string, error) {
 			return os.MkdirAll(filepath.Join(tempDir, path), 0755)
 		}
 
-		data, err := Content.ReadFile(path)
+		data, err := readFileFn(path)
 		if err != nil {
 			return err
 		}

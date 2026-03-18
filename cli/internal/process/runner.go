@@ -90,6 +90,7 @@ var (
 	writeNativeSessionFn     = WriteNativeSession
 	clearNativeSessionForPID = ClearNativeSessionForPID
 	notifySignalFn           = signal.Notify
+	runtimeSocketURIsFn      = runtimeSocketURIsByRuntime
 	newNativeManagerFn       = func() nativeServiceManager { return NewManager() }
 	awaitNativeStopFn        = func(pm nativeServiceManager) error {
 		sigChan := make(chan os.Signal, 1)
@@ -263,7 +264,7 @@ func RunNative(cfg RunConfig) error {
 	for _, message := range daemonWarnings {
 		fmt.Printf("Warning: %s\n", message)
 	}
-	runtimeSockets := runtimeSocketURIsByRuntime(socketDir, runtimes, runtimeDaemonCounts)
+	runtimeSockets := runtimeSocketURIsFn(socketDir, runtimes, runtimeDaemonCounts)
 	runtimeSocketMapJSON, err := encodeRuntimeSocketMap(runtimeSockets)
 	if err != nil {
 		return fmt.Errorf("failed to encode runtime socket map: %w", err)

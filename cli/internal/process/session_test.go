@@ -264,3 +264,132 @@ func TestIsPIDRunning_SpecialCases(t *testing.T) {
 		t.Fatalf("expected ESRCH to report not running")
 	}
 }
+
+func TestNormalize_NilReceiver(t *testing.T) {
+	var s *NativeSession
+	s.normalize() // should not panic
+}
+
+func TestNormalize_LogsDirAlreadySet(t *testing.T) {
+	s := &NativeSession{RuntimeDir: "/some/dir", LogsDir: "/custom/logs"}
+	s.normalize()
+	if s.LogsDir != "/custom/logs" {
+		t.Fatalf("expected LogsDir to remain unchanged, got %q", s.LogsDir)
+	}
+}
+
+func TestNormalize_EmptyRuntimeDir(t *testing.T) {
+	s := &NativeSession{RuntimeDir: "", LogsDir: ""}
+	s.normalize()
+	if s.LogsDir != "" {
+		t.Fatalf("expected LogsDir to remain empty when RuntimeDir is empty, got %q", s.LogsDir)
+	}
+}
+
+func TestIsActive_NilSession(t *testing.T) {
+	var s *NativeSession
+	if s.IsActive() {
+		t.Fatalf("nil session should not be active")
+	}
+}
+
+func TestIsActive_EmptyLogsDir(t *testing.T) {
+	s := &NativeSession{
+		LaunchPID: os.Getpid(),
+		LogsDir:   "",
+	}
+	if s.IsActive() {
+		t.Fatalf("expected inactive when LogsDir is empty")
+	}
+}
+
+func TestIsActive_LogsDirNotExist(t *testing.T) {
+	s := &NativeSession{
+		LaunchPID: os.Getpid(),
+		LogsDir:   "/nonexistent/path/that/does/not/exist",
+	}
+	if s.IsActive() {
+		t.Fatalf("expected inactive when LogsDir does not exist on disk")
+	}
+}
+
+func TestIsActive_NoLogFilesPresent(t *testing.T) {
+	logsDir := filepath.Join(t.TempDir(), "logs")
+	if err := os.MkdirAll(logsDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	s := &NativeSession{
+		LaunchPID: os.Getpid(),
+		LogsDir:   logsDir,
+	}
+	if s.IsActive() {
+		t.Fatalf("expected inactive when no log files exist in LogsDir")
+	}
+}
+
+func TestNativeSessionPath_DefaultFallback(t *testing.T) {
+	t.Setenv("FASTFN_NATIVE_SESSION_FILE", "")
+	got := NativeSessionPath()
+	want := filepath.Join(os.TempDir(), nativeSessionFileName)
+	if got != want {
+		t.Fatalf("NativeSessionPath() default = %q, want %q", got, want)
+	}
+}
+
+func TestWriteNativeSession_DefaultsPIDAndTimestamp(t *testing.T) {
+	sessionPath := filepath.Join(t.TempDir(), "native-session.json")
+	t.Setenv("FASTFN_NATIVE_SESSION_FILE", sessionPath)
+
+	if err := WriteNativeSession(NativeSession{
+		RuntimeDir: t.TempDir(),
+	}); err != nil {
+		t.Fatalf("WriteNativeSession() error = %v", err)
+	}
+
+	got, err := ReadNativeSession()
+	if err != nil {
+		t.Fatalf("ReadNativeSession() error = %v", err)
+	}
+	if got.LaunchPID != os.Getpid() {
+		t.Fatalf("expected default PID %d, got %d", os.Getpid(), got.LaunchPID)
+	}
+	if got.StartedAt == "" {
+		t.Fatalf("expected StartedAt to be auto-filled")
+	}
+}
+
+func TestClearNativeSessionForPID_ReadError(t *testing.T) {
+	origReadFile := sessionReadFileFn
+	t.Cleanup(func() {
+		sessionReadFileFn = origReadFile
+	})
+
+	sessionReadFileFn = func(string) ([]byte, error) {
+		return nil, errors.New("disk error")
+	}
+
+	err := ClearNativeSessionForPID(123)
+	if err == nil || !strings.Contains(err.Error(), "disk error") {
+		t.Fatalf("expected read error propagation, got %v", err)
+	}
+}
+
+func TestClearNativeSessionForPID_RemoveNotExistIgnored(t *testing.T) {
+	origReadFile := sessionReadFileFn
+	origRemove := sessionRemoveFn
+	t.Cleanup(func() {
+		sessionReadFileFn = origReadFile
+		sessionRemoveFn = origRemove
+	})
+
+	sessionReadFileFn = func(string) ([]byte, error) {
+		return []byte(`{"launch_pid":42}`), nil
+	}
+	sessionRemoveFn = func(string) error {
+		return os.ErrNotExist
+	}
+
+	if err := ClearNativeSessionForPID(42); err != nil {
+		t.Fatalf("expected not-exist remove error to be ignored, got %v", err)
+	}
+}

@@ -17,7 +17,7 @@ local function serve_html_file(path)
   if not f then
     ngx.status = 500
     ngx.header["Content-Type"] = "text/plain; charset=utf-8"
-    ngx.say("console shell not found: " .. tostring(err))
+    ngx.say("console unavailable")
     return
   end
   local body = f:read("*a")

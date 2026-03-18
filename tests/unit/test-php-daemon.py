@@ -748,14 +748,21 @@ def test_additional_edge_branches() -> None:
         finally:
             php_daemon.json.loads = old_loads
 
-    # _patched_process_env tracks previous vars and supports None delete.
+    # _patched_process_env stores per-request env in thread-local storage
+    # instead of mutating global os.environ (security fix for concurrency).
     old_prev = os.environ.get("UNIT_PREV")
     os.environ["UNIT_PREV"] = "old"
     try:
         with php_daemon._patched_process_env({1: "x", "": "y", "UNIT_PREV": "new", "UNIT_NONE": None}):
-            assert os.environ.get("UNIT_PREV") == "new"
-            assert "UNIT_NONE" not in os.environ
-        assert os.environ.get("UNIT_PREV") == "old"
+            # Overrides are in thread-local, visible via _build_subprocess_env
+            sub_env = php_daemon._build_subprocess_env()
+            assert sub_env.get("UNIT_PREV") == "new"
+            assert "UNIT_NONE" not in sub_env
+            # Global os.environ is NOT mutated (security invariant)
+            assert os.environ.get("UNIT_PREV") == "old"
+        # After context exit, overrides are cleared
+        sub_env_after = php_daemon._build_subprocess_env()
+        assert sub_env_after.get("UNIT_PREV") == "old"
     finally:
         if old_prev is None:
             os.environ.pop("UNIT_PREV", None)
@@ -1059,6 +1066,477 @@ def test_php_handle_request_passes_params_through() -> None:
         php_daemon._run_prepared_request_persistent = old_run_prepared
 
 
+def test_persistent_pool_lifecycle() -> None:
+    """Cover persistent pool: create, checkout, release, discard, shutdown, reaper."""
+    import threading as _threading
+
+    # _handler_signature covers existing and missing file branches.
+    with tempfile.TemporaryDirectory() as tmp:
+        fn_dir = Path(tmp)
+        handler = fn_dir / "app.php"
+        handler.write_text("<?php", encoding="utf-8")
+        sig = php_daemon._handler_signature(handler)
+        assert isinstance(sig, str)
+        assert "app.php:" in sig
+        assert "missing" in sig  # fn.env.json, composer.json, composer.lock are missing
+
+    # _shutdown_persistent_runtime_pool with non-list workers, non-dict entries, and non-worker objects.
+    php_daemon._shutdown_persistent_runtime_pool({"workers": "bad"})
+    php_daemon._shutdown_persistent_runtime_pool({"workers": [None, "not-dict", {"worker": "not-a-worker"}]})
+    php_daemon._shutdown_persistent_runtime_pool({"workers": []})
+
+    # _warmup_persistent_runtime_pool branches: target <= 0, bad cond, bad workers.
+    php_daemon._warmup_persistent_runtime_pool({"min_warm": 0})
+    php_daemon._warmup_persistent_runtime_pool({"min_warm": 1, "cond": "bad"})
+    lock = _threading.Lock()
+    cond = _threading.Condition(lock)
+    php_daemon._warmup_persistent_runtime_pool({"min_warm": 1, "cond": cond, "workers": "bad"})
+
+    # _checkout_persistent_runtime_worker: bad cond and bad workers.
+    try:
+        php_daemon._checkout_persistent_runtime_worker({"cond": "bad"}, 100)
+    except RuntimeError as exc:
+        assert "invalid persistent" in str(exc).lower()
+    else:
+        raise AssertionError("expected invalid persistent runtime pool error")
+
+    lock2 = _threading.Lock()
+    cond2 = _threading.Condition(lock2)
+    try:
+        php_daemon._checkout_persistent_runtime_worker({"cond": cond2, "workers": "bad"}, 100)
+    except RuntimeError as exc:
+        assert "workers" in str(exc).lower()
+    else:
+        raise AssertionError("expected invalid workers error")
+
+    # _checkout_persistent_runtime_worker: timeout when all workers are busy and max reached.
+    lock3 = _threading.Lock()
+    cond3 = _threading.Condition(lock3)
+
+    # Create a fake worker that passes isinstance check by subclassing.
+    _OrigPhpWorker = php_daemon._PersistentPhpWorker
+
+    class _FakePhpWorker(_OrigPhpWorker):
+        __slots__ = ()
+
+        def __init__(self, is_alive=True):
+            # Skip real __init__ to avoid subprocess spawn.
+            self._dead = not is_alive
+            self.lock = _threading.Lock()
+
+        @property
+        def alive(self):
+            return not self._dead
+
+        def shutdown(self):
+            self._dead = True
+
+    alive_worker = _FakePhpWorker(True)
+    busy_entry = {"worker": alive_worker, "busy": True, "last_used": 0.0}
+    pool = {"cond": cond3, "workers": [busy_entry], "max_workers": 1, "last_used": 0.0, "handler_path": Path("/tmp/test.php")}
+    try:
+        php_daemon._checkout_persistent_runtime_worker(pool, 50)
+    except TimeoutError:
+        pass
+    else:
+        raise AssertionError("expected timeout on busy pool")
+
+    # _checkout_persistent_runtime_worker: stale worker cleanup.
+    lock4 = _threading.Lock()
+    cond4 = _threading.Condition(lock4)
+    dead_worker = _FakePhpWorker(False)
+    alive_worker2 = _FakePhpWorker(True)
+    stale_entry = {"worker": dead_worker, "busy": False, "last_used": 0.0}
+    free_entry = {"worker": alive_worker2, "busy": False, "last_used": 0.0}
+    pool2 = {"cond": cond4, "workers": [stale_entry, free_entry], "max_workers": 2, "last_used": 0.0}
+    result = php_daemon._checkout_persistent_runtime_worker(pool2, 1000)
+    assert result is free_entry
+    assert result["busy"] is True
+
+    # _release_persistent_runtime_worker: normal release, discard, bad cond, bad workers, entry not in workers.
+    php_daemon._release_persistent_runtime_worker({"cond": "bad"}, {})
+    lock5 = _threading.Lock()
+    cond5 = _threading.Condition(lock5)
+    php_daemon._release_persistent_runtime_worker({"cond": cond5, "workers": "bad"}, {})
+
+    alive_worker3 = _FakePhpWorker(True)
+    entry3 = {"worker": alive_worker3, "busy": True, "last_used": 0.0}
+    pool3 = {"cond": cond5, "workers": [entry3], "last_used": 0.0}
+    php_daemon._release_persistent_runtime_worker(pool3, entry3, discard=False)
+    assert entry3["busy"] is False
+
+    alive_worker4 = _FakePhpWorker(True)
+    entry4 = {"worker": alive_worker4, "busy": True, "last_used": 0.0}
+    pool4 = {"cond": cond5, "workers": [entry4], "last_used": 0.0}
+    php_daemon._release_persistent_runtime_worker(pool4, entry4, discard=True)
+    assert entry4 not in pool4["workers"]
+
+    # _release_persistent_runtime_worker: dead worker gets discarded even without discard=True.
+    dead_worker2 = _FakePhpWorker(False)
+    entry5 = {"worker": dead_worker2, "busy": True, "last_used": 0.0}
+    pool5 = {"cond": cond5, "workers": [entry5], "last_used": 0.0}
+    php_daemon._release_persistent_runtime_worker(pool5, entry5, discard=False)
+    assert entry5 not in pool5["workers"]
+
+    # _release_persistent_runtime_worker: entry not in workers list (no-op).
+    pool6 = {"cond": cond5, "workers": [], "last_used": 0.0}
+    php_daemon._release_persistent_runtime_worker(pool6, {"worker": _FakePhpWorker(True), "busy": True})
+
+    # _start_persistent_runtime_pool_reaper: early exits and reaper run.
+    old_started = php_daemon._PERSISTENT_RUNTIME_POOL_REAPER_STARTED
+    old_interval = php_daemon.RUNTIME_POOL_REAPER_INTERVAL_MS
+    try:
+        php_daemon._PERSISTENT_RUNTIME_POOL_REAPER_STARTED = True
+        php_daemon._start_persistent_runtime_pool_reaper()
+        php_daemon._PERSISTENT_RUNTIME_POOL_REAPER_STARTED = False
+        php_daemon.RUNTIME_POOL_REAPER_INTERVAL_MS = 0
+        php_daemon._start_persistent_runtime_pool_reaper()
+    finally:
+        php_daemon._PERSISTENT_RUNTIME_POOL_REAPER_STARTED = old_started
+        php_daemon.RUNTIME_POOL_REAPER_INTERVAL_MS = old_interval
+
+    # _start_persistent_runtime_pool_reaper: actual eviction.
+    old_started = php_daemon._PERSISTENT_RUNTIME_POOL_REAPER_STARTED
+    old_interval = php_daemon.RUNTIME_POOL_REAPER_INTERVAL_MS
+    old_thread = php_daemon.threading.Thread
+    old_sleep = php_daemon.time.sleep
+    old_monotonic = php_daemon.time.monotonic
+    old_shutdown = php_daemon._shutdown_persistent_runtime_pool
+    old_pools = php_daemon._PERSISTENT_RUNTIME_POOLS
+    try:
+        php_daemon._PERSISTENT_RUNTIME_POOL_REAPER_STARTED = False
+        php_daemon.RUNTIME_POOL_REAPER_INTERVAL_MS = 1
+        evicted_pools: list[str] = []
+
+        persistent_pool = {
+            "pending": 0,
+            "min_warm": 0,
+            "idle_ttl_ms": 1,
+            "last_used": 1.0,
+            "workers": [],
+        }
+        php_daemon._PERSISTENT_RUNTIME_POOLS = {"idle-persistent@v1": persistent_pool}
+        php_daemon._shutdown_persistent_runtime_pool = lambda _p: evicted_pools.append("evicted")
+
+        sleep_calls = {"n": 0}
+
+        def fake_sleep(_seconds):
+            sleep_calls["n"] += 1
+            if sleep_calls["n"] > 1:
+                raise StopIteration("stop")
+
+        php_daemon.time.sleep = fake_sleep
+        php_daemon.time.monotonic = lambda: 9999.0
+
+        class InlineThread:
+            def __init__(self, target=None, **_kwargs):
+                self._target = target
+
+            def start(self):
+                try:
+                    if self._target:
+                        self._target()
+                except StopIteration:
+                    pass
+
+        php_daemon.threading.Thread = InlineThread
+        php_daemon._start_persistent_runtime_pool_reaper()
+        assert php_daemon._PERSISTENT_RUNTIME_POOL_REAPER_STARTED is True
+        assert evicted_pools, "persistent reaper should evict idle pools"
+    finally:
+        php_daemon._PERSISTENT_RUNTIME_POOL_REAPER_STARTED = old_started
+        php_daemon.RUNTIME_POOL_REAPER_INTERVAL_MS = old_interval
+        php_daemon.threading.Thread = old_thread
+        php_daemon.time.sleep = old_sleep
+        php_daemon.time.monotonic = old_monotonic
+        php_daemon._shutdown_persistent_runtime_pool = old_shutdown
+        php_daemon._PERSISTENT_RUNTIME_POOLS = old_pools
+
+    # persistent reaper skips pools with pending > 0 or min_warm > 0.
+    old_started = php_daemon._PERSISTENT_RUNTIME_POOL_REAPER_STARTED
+    old_interval = php_daemon.RUNTIME_POOL_REAPER_INTERVAL_MS
+    old_thread = php_daemon.threading.Thread
+    old_sleep = php_daemon.time.sleep
+    old_monotonic = php_daemon.time.monotonic
+    old_shutdown = php_daemon._shutdown_persistent_runtime_pool
+    old_pools = php_daemon._PERSISTENT_RUNTIME_POOLS
+    try:
+        php_daemon._PERSISTENT_RUNTIME_POOL_REAPER_STARTED = False
+        php_daemon.RUNTIME_POOL_REAPER_INTERVAL_MS = 1
+        shutdown_calls_inner = {"n": 0}
+
+        php_daemon._PERSISTENT_RUNTIME_POOLS = {
+            "pending@v1": {"pending": 1, "min_warm": 0, "idle_ttl_ms": 1, "last_used": 0.0, "workers": []},
+            "warm@v1": {"pending": 0, "min_warm": 1, "idle_ttl_ms": 1, "last_used": 0.0, "workers": []},
+        }
+        php_daemon._shutdown_persistent_runtime_pool = lambda _p: shutdown_calls_inner.update(n=shutdown_calls_inner["n"] + 1)
+
+        sleep_calls2 = {"n": 0}
+
+        def fake_sleep2(_seconds):
+            sleep_calls2["n"] += 1
+            if sleep_calls2["n"] > 1:
+                raise RuntimeError("stop-reaper")
+
+        php_daemon.time.sleep = fake_sleep2
+        php_daemon.time.monotonic = lambda: 10.0
+
+        class InlineThread2:
+            def __init__(self, *, target=None, **_kwargs):
+                self._target = target
+
+            def start(self):
+                try:
+                    if self._target is not None:
+                        self._target()
+                except RuntimeError as exc:
+                    if str(exc) != "stop-reaper":
+                        raise
+
+        php_daemon.threading.Thread = InlineThread2
+        php_daemon._start_persistent_runtime_pool_reaper()
+        assert shutdown_calls_inner["n"] == 0
+    finally:
+        php_daemon._PERSISTENT_RUNTIME_POOLS = old_pools
+        php_daemon._PERSISTENT_RUNTIME_POOL_REAPER_STARTED = old_started
+        php_daemon.RUNTIME_POOL_REAPER_INTERVAL_MS = old_interval
+        php_daemon.threading.Thread = old_thread
+        php_daemon.time.sleep = old_sleep
+        php_daemon.time.monotonic = old_monotonic
+        php_daemon._shutdown_persistent_runtime_pool = old_shutdown
+
+    # _ensure_persistent_runtime_pool: create new, reuse existing, replace with different max_workers.
+    old_pools = php_daemon._PERSISTENT_RUNTIME_POOLS
+    old_lock = php_daemon._PERSISTENT_RUNTIME_POOLS_LOCK
+    old_start_reaper = php_daemon._start_persistent_runtime_pool_reaper
+    old_warmup = php_daemon._warmup_persistent_runtime_pool
+    old_shutdown = php_daemon._shutdown_persistent_runtime_pool
+    try:
+        php_daemon._PERSISTENT_RUNTIME_POOLS = {}
+        php_daemon._PERSISTENT_RUNTIME_POOLS_LOCK = _threading.Lock()
+        php_daemon._start_persistent_runtime_pool_reaper = lambda: None
+        php_daemon._warmup_persistent_runtime_pool = lambda _pool: None
+        stale_shutdowns: list[str] = []
+        php_daemon._shutdown_persistent_runtime_pool = lambda _p: stale_shutdowns.append("x")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            handler = Path(tmp) / "app.php"
+            handler.write_text("<?php", encoding="utf-8")
+
+            p1 = php_daemon._ensure_persistent_runtime_pool(
+                "test@v1", handler,
+                {"max_workers": 2, "min_warm": 0, "idle_ttl_ms": 1000, "acquire_timeout_ms": 5000}
+            )
+            assert p1["max_workers"] == 2
+
+            p2 = php_daemon._ensure_persistent_runtime_pool(
+                "test@v1", handler,
+                {"max_workers": 2, "min_warm": 1, "idle_ttl_ms": 2000, "acquire_timeout_ms": 5000}
+            )
+            assert p2 is p1
+            assert p2["min_warm"] == 1
+            assert p2["idle_ttl_ms"] == 2000
+
+            p3 = php_daemon._ensure_persistent_runtime_pool(
+                "test@v1", handler,
+                {"max_workers": 4, "min_warm": 0, "idle_ttl_ms": 1000, "acquire_timeout_ms": 5000}
+            )
+            assert p3 is not p1
+            assert p3["max_workers"] == 4
+            assert stale_shutdowns, "old pool should be shut down when max_workers changes"
+    finally:
+        php_daemon._PERSISTENT_RUNTIME_POOLS = old_pools
+        php_daemon._PERSISTENT_RUNTIME_POOLS_LOCK = old_lock
+        php_daemon._start_persistent_runtime_pool_reaper = old_start_reaper
+        php_daemon._warmup_persistent_runtime_pool = old_warmup
+        php_daemon._shutdown_persistent_runtime_pool = old_shutdown
+
+    # _run_prepared_request_persistent: timeout and generic exception paths.
+    old_ensure = php_daemon._ensure_persistent_runtime_pool
+    old_checkout = php_daemon._checkout_persistent_runtime_worker
+    old_release = php_daemon._release_persistent_runtime_worker
+    old_pools = php_daemon._PERSISTENT_RUNTIME_POOLS
+    try:
+        fake_pool = {
+            "cond": _threading.Condition(_threading.Lock()),
+            "workers": [],
+            "max_workers": 1,
+            "pending": 0,
+            "last_used": 0.0,
+        }
+        php_daemon._ensure_persistent_runtime_pool = lambda *_a, **_k: fake_pool
+        php_daemon._PERSISTENT_RUNTIME_POOLS = {"test-key": fake_pool}
+
+        php_daemon._checkout_persistent_runtime_worker = lambda *_a, **_k: (_ for _ in ()).throw(TimeoutError("timeout"))
+        resp = php_daemon._run_prepared_request_persistent(
+            "test-key", Path("/tmp/app.php"), {}, 100, {"acquire_timeout_ms": 50}
+        )
+        assert resp["status"] == 504
+
+        php_daemon._checkout_persistent_runtime_worker = lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("generic error"))
+        resp2 = php_daemon._run_prepared_request_persistent(
+            "test-key", Path("/tmp/app.php"), {}, 100, {"acquire_timeout_ms": 50}
+        )
+        assert resp2["status"] == 500
+    finally:
+        php_daemon._ensure_persistent_runtime_pool = old_ensure
+        php_daemon._checkout_persistent_runtime_worker = old_checkout
+        php_daemon._release_persistent_runtime_worker = old_release
+        php_daemon._PERSISTENT_RUNTIME_POOLS = old_pools
+
+    # _append_runtime_log: cover writing to file and exception path.
+    old_log = php_daemon.RUNTIME_LOG_FILE
+    try:
+        php_daemon.RUNTIME_LOG_FILE = ""
+        php_daemon._append_runtime_log("php", "should no-op")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = str(Path(tmp) / "test.log")
+            php_daemon.RUNTIME_LOG_FILE = log_path
+            php_daemon._append_runtime_log("php", "test line")
+            assert Path(log_path).read_text(encoding="utf-8") == "[php] test line\n"
+
+        php_daemon.RUNTIME_LOG_FILE = "/nonexistent/path/log.txt"
+        php_daemon._append_runtime_log("php", "should not crash")
+    finally:
+        php_daemon.RUNTIME_LOG_FILE = old_log
+
+    # _emit_handler_logs: non-dict resp and empty/missing stdout/stderr.
+    stdout_buf = io.StringIO()
+    stderr_buf = io.StringIO()
+    with redirect_stdout(stdout_buf), redirect_stderr(stderr_buf):
+        php_daemon._emit_handler_logs({}, "bad-resp")
+        php_daemon._emit_handler_logs({}, {"stdout": "", "stderr": ""})
+        php_daemon._emit_handler_logs({}, {"stdout": None, "stderr": None})
+        php_daemon._emit_handler_logs({}, {})
+    assert stdout_buf.getvalue() == ""
+    assert stderr_buf.getvalue() == ""
+
+    # _resolve_command: path-based, name-based, and missing.
+    old_env = os.environ.get("FN_TEST_RESOLVE")
+    old_which = php_daemon.shutil.which
+    try:
+        os.environ["FN_TEST_RESOLVE"] = "/usr/bin/python3"
+        if Path("/usr/bin/python3").is_file():
+            result = php_daemon._resolve_command("FN_TEST_RESOLVE", "python3")
+            assert result == "/usr/bin/python3"
+
+        os.environ["FN_TEST_RESOLVE"] = "/nonexistent/binary"
+        try:
+            php_daemon._resolve_command("FN_TEST_RESOLVE", "python3")
+        except RuntimeError as exc:
+            assert "not executable" in str(exc).lower()
+        else:
+            raise AssertionError("expected not executable error")
+
+        os.environ["FN_TEST_RESOLVE"] = "nonexistent-binary-name"
+        php_daemon.shutil.which = lambda _name: None
+        try:
+            php_daemon._resolve_command("FN_TEST_RESOLVE", "python3")
+        except RuntimeError as exc:
+            assert "not found" in str(exc).lower()
+        else:
+            raise AssertionError("expected not found error")
+
+        os.environ.pop("FN_TEST_RESOLVE", None)
+        php_daemon.shutil.which = lambda _name: None
+        try:
+            php_daemon._resolve_command("FN_TEST_RESOLVE", "nonexistent-default")
+        except RuntimeError as exc:
+            assert "not found" in str(exc).lower()
+        else:
+            raise AssertionError("expected default not found error")
+
+        os.environ.pop("FN_TEST_RESOLVE", None)
+        php_daemon.shutil.which = lambda _name: "/usr/bin/python3"
+        result = php_daemon._resolve_command("FN_TEST_RESOLVE", "python3")
+        assert result == "/usr/bin/python3"
+    finally:
+        if old_env is None:
+            os.environ.pop("FN_TEST_RESOLVE", None)
+        else:
+            os.environ["FN_TEST_RESOLVE"] = old_env
+        php_daemon.shutil.which = old_which
+
+    # _recvall: partial read with connection close.
+    left, right = socket.socketpair()
+    with left, right:
+        right.sendall(b"\x01\x02")
+        right.shutdown(socket.SHUT_WR)
+        data = php_daemon._recvall(left, 4)
+        assert len(data) == 2
+
+    # _error_response shape check.
+    err = php_daemon._error_response("test error", status=418)
+    assert err["status"] == 418
+    assert "test error" in err["body"]
+
+    # _patched_process_env with empty dict (no-op yield).
+    with php_daemon._patched_process_env({}):
+        pass
+    with php_daemon._patched_process_env(None):
+        pass
+
+    # _normalize_worker_pool_settings: context is not dict.
+    s = php_daemon._normalize_worker_pool_settings({"event": {"context": "bad"}})
+    assert s["enabled"] is False
+    assert s["max_workers"] == 0
+
+    # _normalize_worker_pool_settings: worker_pool is not dict.
+    s2 = php_daemon._normalize_worker_pool_settings({"event": {"context": {"worker_pool": "bad"}}})
+    assert s2["enabled"] is False
+
+    # _normalize_worker_pool_settings: enabled explicitly False.
+    s3 = php_daemon._normalize_worker_pool_settings(
+        {"event": {"context": {"worker_pool": {"enabled": False, "max_workers": 2}}}}
+    )
+    assert s3["enabled"] is False
+
+    # _bool_env: empty string returns default.
+    old_env_val = os.environ.get("UNIT_BOOL_EMPTY")
+    try:
+        os.environ["UNIT_BOOL_EMPTY"] = ""
+        assert php_daemon._bool_env("UNIT_BOOL_EMPTY", True) is True
+        assert php_daemon._bool_env("UNIT_BOOL_EMPTY", False) is False
+    finally:
+        if old_env_val is None:
+            os.environ.pop("UNIT_BOOL_EMPTY", None)
+        else:
+            os.environ["UNIT_BOOL_EMPTY"] = old_env_val
+
+    # _ensure_composer_deps: subprocess.TimeoutExpired path.
+    with tempfile.TemporaryDirectory() as tmp:
+        fn_dir = Path(tmp)
+        handler = fn_dir / "app.php"
+        handler.write_text("<?php", encoding="utf-8")
+        composer_json = fn_dir / "composer.json"
+        composer_json.write_text(json.dumps({"require": {}}), encoding="utf-8")
+
+        old_auto = php_daemon.AUTO_COMPOSER_DEPS
+        old_which = php_daemon.shutil.which
+        old_run = php_daemon.subprocess.run
+        old_cache = dict(php_daemon._COMPOSER_CACHE)
+        try:
+            php_daemon.AUTO_COMPOSER_DEPS = True
+            php_daemon.shutil.which = lambda _name: "/usr/bin/composer"
+            php_daemon._COMPOSER_CACHE.clear()
+
+            def timeout_run(*_a, **_k):
+                raise php_daemon.subprocess.TimeoutExpired(cmd="composer", timeout=180)
+
+            php_daemon.subprocess.run = timeout_run
+            try:
+                php_daemon._ensure_composer_deps(handler)
+            except php_daemon.subprocess.TimeoutExpired:
+                pass
+        finally:
+            php_daemon.AUTO_COMPOSER_DEPS = old_auto
+            php_daemon.shutil.which = old_which
+            php_daemon.subprocess.run = old_run
+            php_daemon._COMPOSER_CACHE.clear()
+            php_daemon._COMPOSER_CACHE.update(old_cache)
+
+
 def main() -> None:
     test_bool_env()
     test_parse_extra_allow_roots_and_function_env()
@@ -1070,6 +1548,7 @@ def main() -> None:
     test_additional_edge_branches()
     test_php_worker_has_reflection_param_injection()
     test_php_handle_request_passes_params_through()
+    test_persistent_pool_lifecycle()
     print("php daemon unit tests passed")
 
 

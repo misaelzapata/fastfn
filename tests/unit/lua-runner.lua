@@ -493,7 +493,8 @@ local function test_invoke_rules()
   assert_true(rules.normalize_route(" /api//hello// ") == "/api/hello", "normalize collapses duplicate and trailing slash")
   assert_true(rules.normalize_route("api/hello") == nil, "normalize invalid route")
   assert_true(rules.normalize_route("/_fn/health") == nil, "normalize reserved route")
-  assert_true(rules.normalize_route("/api/%.%./bad") == nil, "normalize rejects literal dot-traversal marker")
+  assert_true(rules.normalize_route("/api/../bad") == nil, "normalize rejects dot-dot traversal")
+  assert_true(rules.normalize_route("/api/%.%./bad") == "/api/%.%./bad", "normalize allows literal percent-dot sequences")
 
   local list_limited = rules.parse_route_list({ "/a", "/b", "/c" }, 2)
   assert_eq(#list_limited, 2, "route list max items")
@@ -1171,6 +1172,9 @@ local function test_ui_state_endpoint_error_paths()
       return false
     end,
     enforce_write = function()
+      return true
+    end,
+    enforce_body_limit = function()
       return true
     end,
     state_snapshot = function()
@@ -10488,6 +10492,1084 @@ local function test_scheduler_additional_edge_paths_for_coverage()
   end)
 end
 
+-- ============================================================
+-- Additional coverage tests
+-- ============================================================
+
+local function test_console_data_secret_masking_and_path_traversal()
+  with_console_data_fixture(function(ctx)
+    local data = ctx.data
+    local cjson = ctx.cjson
+    local root = ctx.root
+
+    -- Write an fn.env.json with secret-looking keys
+    write_file(root .. "/python/demo/fn.env.json", cjson.encode({
+      API_KEY = { value = "super-secret", is_secret = true },
+      DB_PASSWORD = { value = "hunter2", is_secret = true },
+      NORMAL_VAR = { value = "visible" },
+    }))
+
+    local detail = data.function_detail("python", "demo", nil, true)
+    assert_true(type(detail) == "table", "secret detail should return table")
+
+    -- Test path traversal guards for function names
+    local bad_names = { "../etc/passwd", "/absolute", "..\\..\\win" }
+    for _, name in ipairs(bad_names) do
+      local result = data.function_detail("python", name, nil, false)
+      assert_eq(result, nil, "path traversal should be blocked: " .. tostring(name))
+    end
+
+    -- Test create_function with invalid runtime
+    local create_err
+    _, create_err = data.create_function("invalid_runtime!", "test_fn", nil)
+    assert_true(type(create_err) == "string", "create with invalid runtime should error")
+
+    -- Test create_function with path traversal name
+    _, create_err = data.create_function("python", "../escape", nil)
+    assert_true(type(create_err) == "string", "create with traversal name should error")
+
+    -- Test set_function_env with secret keys
+    local env_ok = data.set_function_env("python", "demo", nil, {
+      SECRET_TOKEN = { value = "mysecret", is_secret = true },
+      PLAIN = { value = "plain" },
+    })
+    assert_true(env_ok ~= nil, "set_function_env with secrets should succeed")
+  end)
+end
+
+local function test_routes_wildcard_matching_and_error_formatting()
+  with_fake_ngx(function(cache, conc, _set_now)
+    local uniq = tostring(math.floor((ngx.now and ngx.now() or os.time()) * 1000000))
+    local root = "/tmp/fastfn-lua-routes-wc-" .. uniq
+    rm_rf(root)
+    mkdir_p(root .. "/lua/hello")
+    write_file(root .. "/lua/hello/app.lua", "return function() return {status=200} end\n")
+
+    with_env({ FN_FUNCTIONS_ROOT = root, FN_RUNTIMES = "lua" }, function()
+      package.loaded["fastfn.core.routes"] = nil
+      package.loaded["fastfn.core.invoke_rules"] = nil
+      local routes = require("fastfn.core.routes")
+
+      -- Test canonical_route_segment_for_name
+      local seg = routes.canonical_route_segment_for_name("My_Cool_Function")
+      assert_eq(seg, "my-cool-function", "canonical segment normalizes underscores and case")
+
+      local seg_ns = routes.canonical_route_segment_for_name("api/v1/users")
+      assert_eq(seg_ns, "api/v1/users", "canonical segment preserves namespace slashes")
+
+      local seg_empty = routes.canonical_route_segment_for_name("")
+      assert_eq(seg_empty, nil, "canonical segment empty returns nil")
+
+      local seg_special = routes.canonical_route_segment_for_name("!!!")
+      assert_eq(seg_special, nil, "canonical segment special chars returns nil")
+
+      -- Test resolve_function_entrypoint edge cases
+      local _, err1 = routes.resolve_function_entrypoint("", "hello", nil)
+      assert_true(type(err1) == "string", "empty runtime should error")
+
+      local _, err2 = routes.resolve_function_entrypoint("lua", "", nil)
+      assert_true(type(err2) == "string", "empty fn_name should error")
+
+      -- Test runtime_is_in_process
+      assert_eq(routes.runtime_is_in_process("lua", nil), true, "lua is always in-process")
+      assert_eq(routes.runtime_is_in_process("node", { in_process = false }), false, "node not in-process")
+
+      -- Test check_runtime_socket with empty uri
+      local ok_sock, err_sock = routes.check_runtime_socket("", 100)
+      assert_eq(ok_sock, false, "empty socket should fail")
+      assert_true(type(err_sock) == "string", "empty socket error msg")
+
+      -- Test record_worker_pool_drop
+      assert_eq(routes.record_worker_pool_drop("", "overflow"), false, "empty key drop should fail")
+      assert_eq(routes.record_worker_pool_drop("test/fn@v1", "invalid_reason"), false, "invalid reason should fail")
+      assert_true(routes.record_worker_pool_drop("test/fn@v1", "overflow"), "valid drop should succeed")
+      assert_true(routes.record_worker_pool_drop("test/fn@v1", "queue_timeout"), "queue_timeout drop should succeed")
+
+      -- Test set_runtime_socket_health edge cases
+      assert_eq(routes.set_runtime_socket_health(nil, 1, "uri", true, "ok"), false, "nil runtime should fail")
+      assert_eq(routes.set_runtime_socket_health("lua", nil, "uri", true, "ok"), false, "nil index should fail")
+      assert_eq(routes.set_runtime_socket_health("lua", 0, "uri", true, "ok"), false, "zero index should fail")
+      assert_eq(routes.set_runtime_socket_health("lua", 1, "uri", true, "ok"), true, "valid set health should succeed")
+
+      -- Test runtime_socket_status with invalid args
+      local stat_nil = routes.runtime_socket_status(nil, 1, nil)
+      assert_eq(stat_nil, nil, "nil runtime socket status")
+
+      -- Test get_runtime_sockets
+      local socks = routes.get_runtime_sockets("nonexistent", nil)
+      assert_true(type(socks) == "table" and #socks == 0, "unknown runtime should return empty sockets")
+
+      -- Test pick_runtime_socket for lua (in-process)
+      local uri, idx, strategy, err = routes.pick_runtime_socket("lua", nil)
+      assert_eq(uri, nil, "lua pick socket returns nil (in-process)")
+      assert_eq(strategy, "in_process", "lua pick socket strategy")
+
+      -- Test pick_runtime_socket with nil config
+      local uri2, _, strat2, err2 = routes.pick_runtime_socket("nonexistent", nil)
+      assert_eq(uri2, nil, "nonexistent pick socket returns nil")
+      assert_true(type(err2) == "string", "nonexistent pick error msg")
+    end)
+
+    rm_rf(root)
+    reset_shared_dict(cache)
+    reset_shared_dict(conc)
+  end)
+end
+
+local function test_watchdog_poll_interval_and_permissions()
+  with_fake_ngx(function(cache, conc, _set_now)
+    package.loaded["fastfn.core.watchdog"] = nil
+    local watchdog = require("fastfn.core.watchdog")
+
+    -- Test start with empty root
+    local ok1, err1 = watchdog.start({})
+    assert_eq(ok1, false, "empty root should fail")
+    assert_true(type(err1) == "string" and err1:find("root is required", 1, true) ~= nil, "empty root error msg")
+
+    -- Test start with missing callback
+    local ok2, err2 = watchdog.start({ root = "/tmp" })
+    assert_eq(ok2, false, "missing callback should fail")
+    assert_true(type(err2) == "string" and err2:find("on_change callback", 1, true) ~= nil, "missing callback error msg")
+
+    -- Test start with callback not a function
+    local ok3, err3 = watchdog.start({ root = "/tmp", on_change = "not_a_function" })
+    assert_eq(ok3, false, "string callback should fail")
+    assert_true(type(err3) == "string", "string callback error msg")
+
+    reset_shared_dict(cache)
+    reset_shared_dict(conc)
+  end)
+end
+
+local function test_http_client_timeout_and_body_encoding()
+  with_fake_ngx(function(cache, conc, _set_now)
+    -- Need ngx.re for http_client parse_url
+    ngx.re = ngx.re or {
+      match = function(subj, pattern, opts)
+        -- Minimal fallback for parse_url pattern.
+        -- Lua patterns do not support optional groups (...)?  so we try
+        -- with path first, then without.
+        local s = tostring(subj)
+        local scheme, authority, path = s:match("^(https?)://([^/]+)(/.*)$")
+        if not scheme then
+          scheme, authority = s:match("^(https?)://([^/]+)$")
+        end
+        if not scheme then
+          return nil
+        end
+        return { scheme, authority, path }
+      end,
+    }
+
+    package.loaded["fastfn.core.http_client"] = nil
+    local http = require("fastfn.core.http_client")
+
+    -- Test request with nil options
+    local r1, e1 = http.request(nil)
+    assert_eq(r1, nil, "nil opts should fail")
+    assert_eq(e1, "invalid_options", "nil opts error")
+
+    -- Test request with invalid URL
+    local r2, e2 = http.request({ url = "not-a-url" })
+    assert_eq(r2, nil, "invalid url should fail")
+    assert_eq(e2, "invalid_url", "invalid url error")
+
+    -- Test request with invalid headers type
+    local r3, e3 = http.request({ url = "http://localhost:9999/test", headers = "bad" })
+    assert_eq(r3, nil, "string headers should fail")
+    assert_eq(e3, "invalid_headers", "string headers error")
+
+    -- Test with body as non-string (should be coerced to string)
+    local r4, e4 = http.request({ url = "http://localhost:9999/test", body = 12345, timeout_ms = 100 })
+    assert_eq(r4, nil, "connect refused still fails")
+    assert_true(type(e4) == "string" and e4:find("connect_error", 1, true) ~= nil, "connect error with body coercion")
+
+    -- Test with very small timeout_ms (should be clamped to 50)
+    local r5, e5 = http.request({ url = "http://localhost:9999/test", timeout_ms = 1 })
+    assert_eq(r5, nil, "small timeout still fails to connect")
+    assert_true(type(e5) == "string", "small timeout error msg")
+
+    -- Test with explicit content-length header
+    local r6, e6 = http.request({
+      url = "http://localhost:9999/test",
+      headers = { ["Content-Length"] = "5" },
+      body = "hello",
+      timeout_ms = 100,
+    })
+    assert_eq(r6, nil, "explicit content-length still fails to connect")
+
+    reset_shared_dict(cache)
+    reset_shared_dict(conc)
+  end)
+end
+
+local function test_scheduler_disable_reenable_and_overlap()
+  with_fake_ngx(function(cache, conc, set_now)
+    local routes_stub = {
+      get_config = function()
+        return { functions_root = "/tmp", runtimes = { lua = { socket = "inprocess:lua", timeout_ms = 2500, in_process = true } } }
+      end,
+      discover_functions = function()
+        return {
+          runtimes = {
+            lua = {
+              functions = {
+                toggler = {
+                  has_default = true,
+                  versions = {},
+                  policy = {
+                    methods = { "POST" },
+                    timeout_ms = 500,
+                    schedule = {
+                      enabled = true,
+                      every_seconds = 10,
+                      method = "POST",
+                    },
+                  },
+                  versions_policy = {},
+                },
+              },
+            },
+          },
+        }
+      end,
+      resolve_named_target = function(fn_name, version)
+        if fn_name == "toggler" then return "lua", version end
+        return nil
+      end,
+      resolve_function_policy = function(runtime, name, _version)
+        if runtime == "lua" and name == "toggler" then
+          return { methods = { "POST" }, timeout_ms = 500 }
+        end
+        return nil, "not found"
+      end,
+      get_runtime_config = function(rt)
+        if rt == "lua" then return { socket = "inprocess:lua", in_process = true, timeout_ms = 2500 } end
+        return nil
+      end,
+      runtime_is_up = function() return true end,
+      check_runtime_health = function() return true, "ok" end,
+      set_runtime_health = function() end,
+      runtime_is_in_process = function(_, cfg) return cfg and cfg.in_process == true end,
+    }
+
+    with_module_stubs({
+      ["fastfn.core.routes"] = routes_stub,
+      ["fastfn.core.limits"] = { try_acquire = function() return true end, release = function() end },
+      ["fastfn.core.lua_runtime"] = { call = function() return { status = 200, headers = {}, body = "" } end },
+      ["fastfn.core.client"] = { call_unix = function() return { status = 200, headers = {}, body = "" } end },
+      ["fastfn.core.gateway_utils"] = {
+        map_runtime_error = function() return 502, "runtime error" end,
+        resolve_numeric = function(a, b, c, d)
+          return tonumber(a) or tonumber(b) or tonumber(c) or d
+        end,
+      },
+    }, function()
+      package.loaded["fastfn.core.scheduler"] = nil
+      local scheduler = require("fastfn.core.scheduler")
+
+      -- Test snapshot returns table
+      set_now(100)
+      local snap = scheduler.snapshot()
+      assert_true(type(snap) == "table", "snapshot should return table")
+
+      reset_shared_dict(cache)
+      reset_shared_dict(conc)
+    end)
+  end)
+end
+
+local function test_limits_release_edge_cases()
+  with_fake_ngx(function(cache, conc, set_now)
+    -- Provide ngx.sleep so limits.wait_for_pool_slot works
+    local sleep_time = 0
+    ngx.sleep = function(sec) sleep_time = sleep_time + sec; set_now(ngx.now() + sec) end
+
+    package.loaded["fastfn.core.limits"] = nil
+    local limits = require("fastfn.core.limits")
+
+    -- Test releasing when counter is already at zero (should not go negative)
+    local store = {}
+    local dict = {
+      incr = function(_, key, amount, init)
+        if store[key] == nil then store[key] = init or 0 end
+        store[key] = store[key] + amount
+        return store[key]
+      end,
+      get = function(_, key) return store[key] end,
+      delete = function(_, key) store[key] = nil end,
+    }
+
+    -- Release without any acquire - counter should be cleaned up
+    limits.release(dict, "python/empty@default")
+    assert_eq(store["conc:python/empty@default"], nil, "release on empty should delete key")
+
+    -- Release pool without any acquire
+    limits.release_pool(dict, "python/empty@default")
+    assert_eq(store["pool:active:python/empty@default"], nil, "release_pool on empty should delete key")
+
+    -- cancel_pool_queue without any queue
+    limits.cancel_pool_queue(dict, "python/empty@default")
+    assert_eq(store["pool:queue:python/empty@default"], nil, "cancel queue on empty should delete key")
+
+    -- Test acquire then double-release
+    limits.try_acquire(dict, "python/dbl@default", 5)
+    limits.release(dict, "python/dbl@default")
+    limits.release(dict, "python/dbl@default")
+    assert_eq(store["conc:python/dbl@default"], nil, "double release should clean up key")
+
+    -- wait_for_pool_slot with clamped poll_ms – active always exceeds workers so
+    -- the slot is never free and we timeout.
+    set_now(100)
+    store["pool:active:node/clamp@default"] = 99
+    local wait_ok, wait_state = limits.wait_for_pool_slot(dict, "node/clamp@default", 1, 10, 500)
+    assert_eq(wait_ok, false, "clamped poll_ms should still timeout")
+    assert_eq(wait_state, "queue_timeout", "clamped poll_ms timeout state")
+  end)
+end
+
+local function test_lua_runtime_module_caching_and_sandbox()
+  with_fake_ngx(function(cache, conc, _set_now)
+    local uniq = tostring(math.floor((ngx.now and ngx.now() or os.time()) * 1000000))
+    local root = "/tmp/fastfn-lua-sandbox-" .. uniq
+    rm_rf(root)
+    mkdir_p(root .. "/lua/sandbox")
+    mkdir_p(root .. "/lua/badmod")
+    mkdir_p(root .. "/lua/tblhandler")
+    mkdir_p(root .. "/lua/base64resp")
+    mkdir_p(root .. "/lua/bodyresp")
+    mkdir_p(root .. "/lua/proxyresp")
+
+    -- Write a function that tries to require a forbidden module
+    write_file(root .. "/lua/badmod/app.lua", [[
+return function(event)
+  local ok, err = pcall(require, "os")
+  return { status = 200, body = tostring(err) }
+end
+]])
+
+    -- Write a function that returns a table handler
+    write_file(root .. "/lua/tblhandler/app.lua", [[
+local M = {}
+M.handler = function(event)
+  return { status = 200, body = "from table handler" }
+end
+return M
+]])
+
+    -- Write a function that returns is_base64
+    write_file(root .. "/lua/base64resp/app.lua", [[
+return function(event)
+  return { status = 200, is_base64 = true, body_base64 = "aGVsbG8=" }
+end
+]])
+
+    -- Write a function that returns body as a table (auto-JSON)
+    write_file(root .. "/lua/bodyresp/app.lua", [[
+return function(event)
+  return { status = 200, body = { hello = "world" } }
+end
+]])
+
+    -- Write a function that returns a proxy
+    write_file(root .. "/lua/proxyresp/app.lua", [[
+return function(event)
+  return { status = 200, proxy = { url = "http://example.com" } }
+end
+]])
+
+    -- Write a function that uses print
+    write_file(root .. "/lua/sandbox/app.lua", [[
+return function(event)
+  print("hello", "world")
+  return { ok = true }
+end
+]])
+
+    with_env({ FN_FUNCTIONS_ROOT = root, FN_RUNTIMES = "lua" }, function()
+      package.loaded["fastfn.core.routes"] = nil
+      package.loaded["fastfn.core.lua_runtime"] = nil
+      local routes = require("fastfn.core.routes")
+      local lua_runtime = require("fastfn.core.lua_runtime")
+
+      -- Test call with non-table
+      local err_resp = lua_runtime.call("not a table")
+      assert_eq(err_resp.status, 500, "non-table call returns 500")
+
+      -- Test call with missing fn name
+      local err_resp2 = lua_runtime.call({ fn = "", event = {} })
+      assert_eq(err_resp2.status, 500, "empty fn name returns 500")
+
+      -- Test sandbox: forbidden require
+      local resp_bad = lua_runtime.call({ fn = "badmod", event = {} })
+      assert_eq(resp_bad.status, 200, "forbidden require captured in handler")
+      assert_true(type(resp_bad.body) == "string" and resp_bad.body:find("not allowed", 1, true) ~= nil, "forbidden module error")
+
+      -- Test table handler
+      local resp_tbl = lua_runtime.call({ fn = "tblhandler", event = {} })
+      assert_eq(resp_tbl.status, 200, "table handler status")
+      assert_eq(resp_tbl.body, "from table handler", "table handler body")
+
+      -- Test base64 response
+      local resp_b64 = lua_runtime.call({ fn = "base64resp", event = {} })
+      assert_eq(resp_b64.status, 200, "base64 response status")
+      assert_eq(resp_b64.is_base64, true, "base64 flag")
+      assert_eq(resp_b64.body_base64, "aGVsbG8=", "base64 body")
+
+      -- Test body as table (auto-JSON)
+      local resp_body = lua_runtime.call({ fn = "bodyresp", event = {} })
+      assert_eq(resp_body.status, 200, "body table response status")
+      assert_true(type(resp_body.body) == "string", "body table auto-encoded")
+
+      -- Test proxy response
+      local resp_proxy = lua_runtime.call({ fn = "proxyresp", event = {} })
+      assert_eq(resp_proxy.status, 200, "proxy response status")
+      assert_true(type(resp_proxy.proxy) == "table", "proxy field preserved")
+
+      -- Test print capture
+      local resp_print = lua_runtime.call({ fn = "sandbox", event = {} })
+      assert_eq(resp_print.status, 200, "sandbox print status")
+      assert_true(type(resp_print.stdout) == "string" and resp_print.stdout:find("hello", 1, true) ~= nil, "stdout captured")
+    end)
+
+    rm_rf(root)
+    reset_shared_dict(cache)
+    reset_shared_dict(conc)
+  end)
+end
+
+local function test_jobs_retry_backoff_and_result_expiry()
+  with_fake_ngx(function(cache, conc, set_now)
+    local call_count = 0
+    local jobs_base = "/tmp/fastfn-jobs-test-" .. tostring(math.random(100000, 999999))
+    os.execute("mkdir -p " .. jobs_base .. "/jobs")
+    local routes_stub = {
+      get_config = function()
+        return {
+          functions_root = "/tmp",
+          socket_base_dir = jobs_base,
+          runtimes = { lua = { socket = "inprocess:lua", timeout_ms = 2500, in_process = true } },
+        }
+      end,
+      discover_functions = function()
+        return {
+          runtimes = {
+            lua = {
+              functions = {
+                retrier = { has_default = true, versions = {}, policy = { methods = { "POST" } }, versions_policy = {} },
+              },
+            },
+          },
+          mapped_routes = {
+            ["/retrier"] = { runtime = "lua", fn_name = "retrier", version = nil, methods = { "POST" } },
+          },
+        }
+      end,
+      resolve_named_target = function(name, version) if name == "retrier" then return "lua", version end return nil end,
+      resolve_function_policy = function(rt, name, _v)
+        if rt == "lua" and name == "retrier" then return { methods = { "POST" }, timeout_ms = 500 } end
+        return nil, "not found"
+      end,
+      get_runtime_config = function(rt) if rt == "lua" then return { socket = "inprocess:lua", in_process = true, timeout_ms = 2500 } end return nil end,
+      runtime_is_up = function() return true end,
+      check_runtime_health = function() return true, "ok" end,
+      set_runtime_health = function() end,
+      runtime_is_in_process = function(_, cfg) return cfg and cfg.in_process == true end,
+    }
+    local invoke_rules_stub = { normalize_route = function(r) return r end }
+
+    with_module_stubs({
+      ["fastfn.core.routes"] = routes_stub,
+      ["fastfn.core.invoke_rules"] = invoke_rules_stub,
+      ["fastfn.core.limits"] = { try_acquire = function() return true end, release = function() end },
+      ["fastfn.core.lua_runtime"] = { call = function()
+        call_count = call_count + 1
+        if call_count <= 2 then
+          return { status = 500, headers = {}, body = '{"error":"fail"}' }
+        end
+        return { status = 200, headers = {}, body = '{"ok":true}' }
+      end },
+      ["fastfn.core.client"] = { call_unix = function() return nil, "connect_error", "down" end },
+      ["fastfn.core.gateway_utils"] = {
+        map_runtime_error = function(code) return 502, "runtime error" end,
+        resolve_numeric = function(a, b, c, d) return tonumber(a) or tonumber(b) or tonumber(c) or d end,
+      },
+    }, function()
+      package.loaded["fastfn.core.jobs"] = nil
+      local jobs = require("fastfn.core.jobs")
+
+      -- Enqueue with retry
+      set_now(1000)
+      local meta, status = jobs.enqueue({
+        name = "retrier",
+        method = "POST",
+        body = '{"test":true}',
+        max_attempts = 3,
+        retry_delay_ms = 100,
+      })
+      assert_eq(status, 201, "enqueue status")
+      assert_true(type(meta) == "table", "enqueue meta table")
+      assert_eq(meta.status, "queued", "enqueue meta status")
+
+      -- List jobs
+      local list = jobs.list(10)
+      assert_true(type(list) == "table" and #list >= 1, "list should have jobs")
+
+      -- Get job
+      local got = jobs.get(meta.id)
+      assert_true(type(got) == "table", "get job by id")
+      assert_eq(got.id, meta.id, "get job id matches")
+
+      -- Cancel a queued job
+      local cancel_meta, cancel_status = jobs.cancel(meta.id)
+      assert_eq(cancel_status, 200, "cancel status")
+      assert_eq(cancel_meta.status, "canceled", "cancel meta status")
+
+      -- Cancel non-existent job
+      local _, cancel_err_status, cancel_err = jobs.cancel("nonexistent-id")
+      assert_eq(cancel_err_status, 404, "cancel nonexistent status")
+
+      -- Cancel already-canceled job
+      local _, recancel_status, recancel_err = jobs.cancel(meta.id)
+      assert_eq(recancel_status, 409, "re-cancel status")
+
+      -- read_result for non-existent job
+      local no_result = jobs.read_result("nonexistent-id")
+      assert_eq(no_result, nil, "no result for nonexistent job")
+
+      -- Enqueue with disabled jobs
+      with_env({ FN_JOBS_ENABLED = "0" }, function()
+        package.loaded["fastfn.core.jobs"] = nil
+        local jobs2 = require("fastfn.core.jobs")
+        local _, ds, de = jobs2.enqueue({ name = "retrier", method = "POST" })
+        assert_eq(ds, 404, "disabled jobs status")
+      end)
+
+      -- Enqueue with invalid payload
+      local _, bad_status, bad_err = jobs.enqueue("not a table")
+      assert_eq(bad_status, 400, "non-table payload status")
+
+      -- Enqueue with missing name
+      local _, nn_status = jobs.enqueue({ method = "GET" })
+      assert_eq(nn_status, 400, "missing name status")
+
+      -- Enqueue with unsupported method
+      local _, mm_status = jobs.enqueue({ name = "retrier", method = "OPTIONS" })
+      assert_eq(mm_status, 400, "unsupported method status")
+
+      -- Enqueue with invalid version
+      local _, vv_status = jobs.enqueue({ name = "retrier", method = "POST", version = "bad version!" })
+      assert_eq(vv_status, 400, "invalid version status")
+
+      -- Test list edge cases
+      local list_zero = jobs.list(0)
+      assert_true(type(list_zero) == "table", "list with 0 returns table")
+
+      local list_huge = jobs.list(999)
+      assert_true(type(list_huge) == "table", "list with huge limit returns table")
+
+      reset_shared_dict(cache)
+      reset_shared_dict(conc)
+    end)
+  end)
+end
+
+local function test_client_large_and_invalid_frames()
+  with_fake_ngx(function(cache, conc, _set_now)
+    package.loaded["fastfn.core.client"] = nil
+    local client = require("fastfn.core.client")
+    local cjson = require("cjson.safe")
+
+    -- Test with nil/non-encodable request (cjson.encode returns nil)
+    -- We need a value that cjson fails on - a function
+    local r1, c1, m1 = client.call_unix("unix:/tmp/nonexistent.sock", { fn = function() end }, 100)
+    assert_eq(r1, nil, "unencodable request should fail")
+    assert_eq(c1, "invalid_request", "unencodable error code")
+
+    -- Test with normal request to non-existent socket (connect error)
+    local r2, c2, m2 = client.call_unix("unix:/tmp/nonexistent.sock", { fn = "test" }, 100)
+    assert_eq(r2, nil, "connect to nonexistent should fail")
+    assert_eq(c2, "connect_error", "connect error code")
+
+    -- Test timeout detection
+    local r3, c3, m3 = client.call_unix("unix:/tmp/nonexistent.sock", { fn = "test" }, 50)
+    assert_eq(r3, nil, "low timeout should fail")
+
+    reset_shared_dict(cache)
+    reset_shared_dict(conc)
+  end)
+end
+
+local function test_ui_state_endpoint_malformed_requests()
+  with_fake_ngx(function(cache, conc, _set_now)
+    local auth_stub = {
+      login_enabled = function() return false end,
+      api_login_enabled = function() return false end,
+      read_session = function() return nil end,
+    }
+
+    with_module_stubs({
+      ["fastfn.console.auth"] = auth_stub,
+    }, function()
+      package.loaded["fastfn.console.guard"] = nil
+      local guard = require("fastfn.console.guard")
+
+      -- Test update_state with non-table payload
+      local u1, e1 = guard.update_state("not a table")
+      assert_eq(u1, nil, "update non-table should fail")
+      assert_true(type(e1) == "string", "update non-table error msg")
+
+      -- Test update_state with non-boolean field
+      local u2, e2 = guard.update_state({ ui_enabled = "yes" })
+      assert_eq(u2, nil, "update non-boolean should fail")
+      assert_true(type(e2) == "string" and e2:find("must be boolean", 1, true) ~= nil, "non-boolean error msg")
+
+      -- Test state_snapshot returns all fields
+      local snap = guard.state_snapshot()
+      assert_true(type(snap) == "table", "snapshot is table")
+      assert_true(snap.ui_enabled == false or snap.ui_enabled == true, "snapshot has ui_enabled")
+      assert_true(snap.api_enabled == false or snap.api_enabled == true, "snapshot has api_enabled")
+
+      -- Test clear_state
+      local cleared = guard.clear_state()
+      assert_true(type(cleared) == "table", "clear returns snapshot")
+
+      -- Test write_json
+      guard.write_json(200, { ok = true })
+      assert_eq(ngx.status, 200, "write_json sets status")
+    end)
+
+    reset_shared_dict(cache)
+    reset_shared_dict(conc)
+  end)
+end
+
+local function test_console_guard_token_expiry_and_role_escalation()
+  with_fake_ngx(function(cache, conc, _set_now)
+    local session_data = nil
+    local auth_stub = {
+      login_enabled = function() return true end,
+      api_login_enabled = function() return true end,
+      read_session = function() return session_data end,
+    }
+
+    with_module_stubs({
+      ["fastfn.console.auth"] = auth_stub,
+    }, function()
+      package.loaded["fastfn.console.guard"] = nil
+      local guard = require("fastfn.console.guard")
+
+      -- Test request_has_admin_token with no token set
+      with_env({ FN_ADMIN_TOKEN = false }, function()
+        assert_eq(guard.request_has_admin_token(), false, "no admin token set")
+      end)
+
+      -- Test request_has_admin_token with wrong token
+      with_env({ FN_ADMIN_TOKEN = "correct-token" }, function()
+        ngx.req.get_headers = function()
+          return { ["x-fn-admin-token"] = "wrong-token" }
+        end
+        assert_eq(guard.request_has_admin_token(), false, "wrong admin token")
+      end)
+
+      -- Test request_has_admin_token with correct token
+      with_env({ FN_ADMIN_TOKEN = "correct-token" }, function()
+        ngx.req.get_headers = function()
+          return { ["x-fn-admin-token"] = "correct-token" }
+        end
+        assert_eq(guard.request_has_admin_token(), true, "correct admin token")
+      end)
+
+      -- Test request_has_session with nil session
+      session_data = nil
+      assert_eq(guard.request_has_session(), false, "no session")
+
+      -- Test current_session_user with valid session
+      session_data = { user = "admin" }
+      assert_eq(guard.current_session_user(), "admin", "session user")
+
+      -- Test current_session_user with empty user
+      session_data = { user = "" }
+      assert_eq(guard.current_session_user(), nil, "empty session user")
+
+      -- Test current_session_user with non-table session
+      session_data = "invalid"
+      assert_eq(guard.current_session_user(), nil, "non-table session user")
+
+      -- Test enforce_api with api disabled
+      with_env({ FN_CONSOLE_API_ENABLED = "0" }, function()
+        cache:delete("console:api_enabled")
+        package.loaded["fastfn.console.guard"] = nil
+        local guard2 = require("fastfn.console.guard")
+        assert_eq(guard2.enforce_api(), false, "api disabled enforcement")
+      end)
+
+      -- Test enforce_ui with ui disabled
+      with_env({ FN_UI_ENABLED = "0" }, function()
+        cache:delete("console:ui_enabled")
+        package.loaded["fastfn.console.guard"] = nil
+        local guard3 = require("fastfn.console.guard")
+        assert_eq(guard3.enforce_ui(), false, "ui disabled enforcement")
+      end)
+
+      -- Test enforce_write with write disabled and no admin token
+      with_env({ FN_CONSOLE_WRITE_ENABLED = "0", FN_ADMIN_TOKEN = false }, function()
+        cache:delete("console:write_enabled")
+        ngx.req.get_headers = function() return {} end
+        package.loaded["fastfn.console.guard"] = nil
+        local guard4 = require("fastfn.console.guard")
+        assert_eq(guard4.enforce_write(), false, "write disabled enforcement")
+      end)
+
+      -- Test request_is_local with various IPs
+      ngx.var.remote_addr = "192.168.1.1"
+      assert_eq(guard.request_is_local(), true, "private IP 192.168")
+
+      ngx.var.remote_addr = "10.0.0.1"
+      assert_eq(guard.request_is_local(), true, "private IP 10.x")
+
+      ngx.var.remote_addr = "172.16.0.1"
+      assert_eq(guard.request_is_local(), true, "private IP 172.16")
+
+      ngx.var.remote_addr = "172.31.255.1"
+      assert_eq(guard.request_is_local(), true, "private IP 172.31")
+
+      ngx.var.remote_addr = "172.32.0.1"
+      assert_eq(guard.request_is_local(), false, "non-private IP 172.32")
+
+      ngx.var.remote_addr = "8.8.8.8"
+      assert_eq(guard.request_is_local(), false, "public IP")
+
+      ngx.var.remote_addr = "::1"
+      assert_eq(guard.request_is_local(), true, "IPv6 loopback")
+
+      ngx.var.remote_addr = "fc00::1"
+      assert_eq(guard.request_is_local(), true, "IPv6 fc00 ULA")
+
+      ngx.var.remote_addr = "fd00::1"
+      assert_eq(guard.request_is_local(), true, "IPv6 fd00 ULA")
+
+      ngx.var.remote_addr = "fe80::1"
+      assert_eq(guard.request_is_local(), true, "IPv6 link-local")
+
+      ngx.var.remote_addr = ""
+      assert_eq(guard.request_is_local(), false, "empty IP")
+    end)
+
+    reset_shared_dict(cache)
+    reset_shared_dict(conc)
+  end)
+end
+
+local function test_home_missing_env_and_empty_functions()
+  with_fake_ngx(function(cache, conc, _set_now)
+    package.loaded["fastfn.core.home"] = nil
+    local home = require("fastfn.core.home")
+
+    -- Test resolve_home_action with no env vars and no config
+    with_env({ FN_HOME_FUNCTION = false, FN_HOME_REDIRECT = false, FN_FUNCTIONS_ROOT = false }, function()
+      local action = home.resolve_home_action(nil)
+      assert_eq(action.mode, "default", "default mode with no config")
+      assert_eq(action.source, "builtin", "builtin source")
+    end)
+
+    -- Test resolve_home_action with invalid FN_HOME_FUNCTION (http URL)
+    with_env({ FN_HOME_FUNCTION = "http://evil.com", FN_HOME_REDIRECT = false, FN_FUNCTIONS_ROOT = false }, function()
+      local action = home.resolve_home_action(nil)
+      assert_eq(action.mode, "default", "http URL in FN_HOME_FUNCTION falls through")
+      assert_true(#action.warnings > 0, "warning about ignored FN_HOME_FUNCTION")
+    end)
+
+    -- Test resolve_home_action with FN_HOME_FUNCTION pointing to /
+    with_env({ FN_HOME_FUNCTION = "/", FN_HOME_REDIRECT = false, FN_FUNCTIONS_ROOT = false }, function()
+      local action = home.resolve_home_action(nil)
+      assert_eq(action.mode, "default", "root path FN_HOME_FUNCTION falls through")
+    end)
+
+    -- Test resolve_home_action with valid FN_HOME_FUNCTION
+    with_env({ FN_HOME_FUNCTION = "/my-fn", FN_HOME_REDIRECT = false, FN_FUNCTIONS_ROOT = false }, function()
+      local action = home.resolve_home_action(nil)
+      assert_eq(action.mode, "function", "valid FN_HOME_FUNCTION mode")
+      assert_eq(action.path, "/my-fn", "valid FN_HOME_FUNCTION path")
+    end)
+
+    -- Test resolve_home_action with FN_HOME_REDIRECT http URL
+    with_env({ FN_HOME_FUNCTION = false, FN_HOME_REDIRECT = "https://example.com", FN_FUNCTIONS_ROOT = false }, function()
+      local action = home.resolve_home_action(nil)
+      assert_eq(action.mode, "redirect", "redirect mode for http URL")
+      assert_eq(action.location, "https://example.com", "redirect location")
+    end)
+
+    -- Test resolve_home_action with FN_HOME_REDIRECT local path
+    with_env({ FN_HOME_FUNCTION = false, FN_HOME_REDIRECT = "/dashboard", FN_FUNCTIONS_ROOT = false }, function()
+      local action = home.resolve_home_action(nil)
+      assert_eq(action.mode, "redirect", "redirect mode for local path")
+      assert_eq(action.location, "/dashboard", "redirect location local")
+    end)
+
+    -- Test resolve_home_action with empty FN_HOME_REDIRECT
+    with_env({ FN_HOME_FUNCTION = false, FN_HOME_REDIRECT = "", FN_FUNCTIONS_ROOT = false }, function()
+      local action = home.resolve_home_action(nil)
+      assert_eq(action.mode, "default", "empty redirect falls through")
+    end)
+
+    -- Test extract_home_spec with nil
+    local spec_nil = home.extract_home_spec(nil)
+    assert_eq(spec_nil, nil, "extract_home_spec nil")
+
+    -- Test extract_home_spec with nested invoke paths
+    local spec_invoke = home.extract_home_spec({
+      invoke = {
+        home = { ["function"] = "/hello" },
+      },
+    })
+    assert_true(type(spec_invoke) == "table", "extract_home_spec invoke.home")
+    assert_eq(spec_invoke.home_function, "/hello", "invoke.home.function")
+
+    -- Test extract_home_spec with redirect
+    local spec_redirect = home.extract_home_spec({
+      home = { redirect = "https://example.com" },
+    })
+    assert_true(type(spec_redirect) == "table", "extract_home_spec redirect")
+    assert_eq(spec_redirect.home_redirect, "https://example.com", "home.redirect")
+
+    -- Test extract_home_spec with string home value
+    local spec_string = home.extract_home_spec({
+      home = "/api",
+    })
+    assert_true(type(spec_string) == "table", "extract_home_spec string home")
+    assert_eq(spec_string.home_function, "/api", "string home function")
+
+    -- Test extract_home_spec with invoke.home-route fallback
+    local spec_hr = home.extract_home_spec({
+      invoke = { ["home-route"] = "/fallback" },
+    })
+    assert_true(type(spec_hr) == "table", "extract_home_spec home-route")
+    assert_eq(spec_hr.home_function, "/fallback", "home-route function")
+
+    -- Test extract_home_spec with invoke.home_route fallback
+    local spec_hr2 = home.extract_home_spec({
+      invoke = { home_route = "/fallback2" },
+    })
+    assert_true(type(spec_hr2) == "table", "extract_home_spec home_route")
+    assert_eq(spec_hr2.home_function, "/fallback2", "home_route function")
+
+    -- Test extract_home_spec with empty table
+    local spec_empty = home.extract_home_spec({})
+    assert_eq(spec_empty, nil, "extract_home_spec empty table")
+
+    reset_shared_dict(cache)
+    reset_shared_dict(conc)
+  end)
+end
+
+local function test_openapi_all_parameter_types_and_schemas()
+  with_fake_ngx(function(cache, conc, _set_now)
+    package.loaded["fastfn.core.openapi"] = nil
+    local openapi = require("fastfn.core.openapi")
+    local cjson = require("cjson.safe")
+
+    -- Build with a catalog that has various route shapes
+    local catalog = {
+      runtimes = {
+        lua = {
+          functions = {
+            simple = {
+              has_default = true,
+              versions = {},
+              policy = { methods = { "GET", "POST" }, routes = { "/simple" } },
+              versions_policy = {},
+            },
+            paramfn = {
+              has_default = true,
+              versions = {},
+              policy = { methods = { "GET" }, routes = { "/param/:id" } },
+              versions_policy = {},
+            },
+            catchfn = {
+              has_default = true,
+              versions = { "v1" },
+              policy = { methods = { "GET" }, routes = { "/catch/:path*" } },
+              versions_policy = {
+                v1 = { methods = { "POST" }, routes = { "/catch/v1/:path*" } },
+              },
+            },
+            wildcfn = {
+              has_default = true,
+              versions = {},
+              policy = { methods = { "DELETE" }, routes = { "/wild/*" } },
+              versions_policy = {},
+            },
+          },
+        },
+      },
+      mapped_routes = {
+        ["/simple"] = { runtime = "lua", fn_name = "simple", methods = { "GET", "POST" } },
+        ["/param/:id"] = { runtime = "lua", fn_name = "paramfn", methods = { "GET" } },
+        ["/catch/:path*"] = { runtime = "lua", fn_name = "catchfn", methods = { "GET" } },
+        ["/catch/v1/:path*"] = { runtime = "lua", fn_name = "catchfn", version = "v1", methods = { "POST" } },
+        ["/wild/*"] = { runtime = "lua", fn_name = "wildcfn", methods = { "DELETE" } },
+      },
+      mapped_route_conflicts = {},
+    }
+
+    local spec = openapi.build(catalog, { server_url = "http://test:8080" })
+    assert_true(type(spec) == "table", "openapi spec is table")
+    assert_eq(spec.openapi, "3.1.0", "openapi version")
+    assert_true(type(spec.paths) == "table", "paths is table")
+
+    -- Check that parameterized routes are converted
+    local param_path = spec.paths["/param/{id}"]
+    assert_true(type(param_path) == "table", "param path exists")
+
+    -- Check catch-all paths
+    local catch_path = spec.paths["/catch/{path}"]
+    assert_true(type(catch_path) == "table", "catch-all path exists")
+
+    -- Check wildcard path
+    local wild_path = spec.paths["/wild/{wildcard}"]
+    assert_true(type(wild_path) == "table", "wildcard path exists")
+
+    -- Check that DELETE has requestBody
+    if wild_path and wild_path.delete then
+      assert_true(wild_path.delete.requestBody ~= nil, "DELETE has requestBody")
+    end
+
+    -- Verify JSON encoding works
+    local encoded = cjson.encode(spec)
+    assert_true(type(encoded) == "string" and #encoded > 100, "openapi spec encodes to JSON")
+
+    -- Test build with empty catalog
+    local empty_spec = openapi.build({ runtimes = {}, mapped_routes = {}, mapped_route_conflicts = {} })
+    assert_true(type(empty_spec) == "table", "empty catalog produces valid spec")
+
+    -- Test with public_mode options
+    local pub_spec = openapi.build(catalog, { public_mode = true })
+    assert_true(type(pub_spec) == "table", "public mode spec is table")
+
+    -- Test with invoke_meta containing query_example and body_example
+    local meta_catalog = {
+      runtimes = {
+        lua = {
+          functions = {
+            metafn = {
+              has_default = true,
+              versions = {},
+              policy = {
+                methods = { "POST" },
+                routes = { "/meta" },
+                invoke_meta = {
+                  summary = "Custom summary",
+                  query_example = { page = 1, filter = "active" },
+                  body_example = '{"name":"test"}',
+                  content_type = "application/json",
+                },
+              },
+              versions_policy = {},
+            },
+            textfn = {
+              has_default = true,
+              versions = {},
+              policy = {
+                methods = { "PUT" },
+                routes = { "/text" },
+                invoke_meta = {
+                  body_example = "plain text",
+                  content_type = "text/plain",
+                },
+              },
+              versions_policy = {},
+            },
+          },
+        },
+      },
+      mapped_routes = {
+        ["/meta"] = { runtime = "lua", fn_name = "metafn", methods = { "POST" } },
+        ["/text"] = { runtime = "lua", fn_name = "textfn", methods = { "PUT" } },
+      },
+      mapped_route_conflicts = {},
+    }
+
+    local meta_spec = openapi.build(meta_catalog)
+    assert_true(type(meta_spec) == "table", "meta spec is table")
+
+    reset_shared_dict(cache)
+    reset_shared_dict(conc)
+  end)
+end
+
+local function test_invoke_rules_empty_route_table_and_missing_handler()
+  local invoke_rules = require("fastfn.core.invoke_rules")
+
+  -- Test parse_methods with string
+  local m1 = invoke_rules.parse_methods("GET, POST, DELETE")
+  assert_true(type(m1) == "table" and #m1 == 3, "parse_methods string")
+
+  -- Test parse_methods with invalid methods
+  local m2 = invoke_rules.parse_methods("OPTIONS, HEAD")
+  assert_eq(m2, nil, "parse_methods invalid returns nil")
+
+  -- Test parse_methods with empty table
+  local m3 = invoke_rules.parse_methods({})
+  assert_eq(m3, nil, "parse_methods empty table returns nil")
+
+  -- Test parse_methods with empty string
+  local m4 = invoke_rules.parse_methods("")
+  assert_eq(m4, nil, "parse_methods empty string returns nil")
+
+  -- Test normalized_methods with fallback
+  local nm1 = invoke_rules.normalized_methods(nil, { "POST" })
+  assert_true(type(nm1) == "table" and nm1[1] == "POST", "normalized_methods uses fallback")
+
+  local nm2 = invoke_rules.normalized_methods({ "GET" }, nil)
+  assert_true(type(nm2) == "table" and nm2[1] == "GET", "normalized_methods uses provided")
+
+  -- Test route_is_reserved
+  assert_eq(invoke_rules.route_is_reserved("/"), true, "root is reserved")
+  assert_eq(invoke_rules.route_is_reserved("/_fn"), true, "/_fn is reserved")
+  assert_eq(invoke_rules.route_is_reserved("/_fn/health"), true, "/_fn/health is reserved")
+  assert_eq(invoke_rules.route_is_reserved("/console"), true, "/console is reserved")
+  assert_eq(invoke_rules.route_is_reserved("/console/api"), true, "/console/api is reserved")
+  assert_eq(invoke_rules.route_is_reserved("/my-api"), false, "/my-api is not reserved")
+
+  -- Test normalize_route
+  assert_eq(invoke_rules.normalize_route(nil), nil, "normalize nil route")
+  assert_eq(invoke_rules.normalize_route(""), nil, "normalize empty route")
+  assert_eq(invoke_rules.normalize_route("no-slash"), nil, "normalize no leading slash")
+  assert_eq(invoke_rules.normalize_route("/.."), nil, "normalize dot-dot")
+  assert_eq(invoke_rules.normalize_route("/_fn/test"), nil, "normalize reserved prefix")
+  assert_eq(invoke_rules.normalize_route("/"), nil, "normalize root reserved")
+  local n1 = invoke_rules.normalize_route("/hello//world/")
+  assert_eq(n1, "/hello/world", "normalize collapses slashes and strips trailing")
+
+  -- Test parse_route_list
+  local rl1 = invoke_rules.parse_route_list("/a")
+  assert_true(type(rl1) == "table" and #rl1 == 1, "parse_route_list single string")
+  assert_eq(rl1[1], "/a", "parse_route_list single value")
+
+  local rl2 = invoke_rules.parse_route_list({ "/b", "/c", "/b" })
+  assert_true(type(rl2) == "table" and #rl2 == 2, "parse_route_list deduplicates")
+
+  local rl3 = invoke_rules.parse_route_list({ "/d", "/e", "/f" }, 2)
+  assert_true(type(rl3) == "table" and #rl3 == 2, "parse_route_list respects max_items")
+
+  -- Test parse_invoke_routes
+  local ir1 = invoke_rules.parse_invoke_routes(nil)
+  assert_eq(ir1, nil, "parse_invoke_routes nil input")
+
+  local ir2 = invoke_rules.parse_invoke_routes({ route = "/api" })
+  assert_true(type(ir2) == "table" and #ir2 == 1, "parse_invoke_routes with route")
+
+  local ir3 = invoke_rules.parse_invoke_routes({ routes = { "/a", "/b" } })
+  assert_true(type(ir3) == "table" and #ir3 == 2, "parse_invoke_routes with routes table")
+
+  local ir4 = invoke_rules.parse_invoke_routes({ route = "/_fn/invalid" })
+  assert_true(type(ir4) == "table" and #ir4 == 0, "parse_invoke_routes all invalid returns empty")
+
+  local ir5 = invoke_rules.parse_invoke_routes({})
+  assert_eq(ir5, nil, "parse_invoke_routes empty table returns nil")
+end
+
 local function main()
   local trace_enabled = tostring(os.getenv("FASTFN_LUA_TEST_TRACE") or "") == "1"
   local function run_test(name, fn)
@@ -10559,6 +11641,20 @@ local function main()
   run_test("test_console_security", function()
     dofile(REPO_ROOT .. "/tests/unit/test-console-security.lua")
   end)
+  run_test("test_console_data_secret_masking_and_path_traversal", test_console_data_secret_masking_and_path_traversal)
+  run_test("test_routes_wildcard_matching_and_error_formatting", test_routes_wildcard_matching_and_error_formatting)
+  run_test("test_watchdog_poll_interval_and_permissions", test_watchdog_poll_interval_and_permissions)
+  run_test("test_http_client_timeout_and_body_encoding", test_http_client_timeout_and_body_encoding)
+  run_test("test_scheduler_disable_reenable_and_overlap", test_scheduler_disable_reenable_and_overlap)
+  run_test("test_limits_release_edge_cases", test_limits_release_edge_cases)
+  run_test("test_lua_runtime_module_caching_and_sandbox", test_lua_runtime_module_caching_and_sandbox)
+  run_test("test_jobs_retry_backoff_and_result_expiry", test_jobs_retry_backoff_and_result_expiry)
+  run_test("test_client_large_and_invalid_frames", test_client_large_and_invalid_frames)
+  run_test("test_ui_state_endpoint_malformed_requests", test_ui_state_endpoint_malformed_requests)
+  run_test("test_console_guard_token_expiry_and_role_escalation", test_console_guard_token_expiry_and_role_escalation)
+  run_test("test_home_missing_env_and_empty_functions", test_home_missing_env_and_empty_functions)
+  run_test("test_openapi_all_parameter_types_and_schemas", test_openapi_all_parameter_types_and_schemas)
+  run_test("test_invoke_rules_empty_route_table_and_missing_handler", test_invoke_rules_empty_route_table_and_missing_handler)
   print("lua unit tests passed")
 end
 

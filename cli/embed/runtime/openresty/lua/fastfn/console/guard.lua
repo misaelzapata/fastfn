@@ -2,6 +2,15 @@ local cjson = require "cjson.safe"
 local auth = require "fastfn.console.auth"
 
 local M = {}
+
+local function constant_time_eq(a, b)
+  if type(a) ~= "string" or type(b) ~= "string" or #a ~= #b then return false end
+  local acc = 0
+  for i = 1, #a do
+    acc = bit.bor(acc, bit.bxor(string.byte(a, i), string.byte(b, i)))
+  end
+  return acc == 0
+end
 local STATE_KEYS = {
   ui_enabled = "console:ui_enabled",
   api_enabled = "console:api_enabled",
@@ -104,6 +113,15 @@ function M.request_is_local()
     return false
   end
 
+  -- If X-Forwarded-For is present, the request came through a proxy.
+  -- NEVER trust it as local — proxied traffic can spoof private IPs.
+  local xff = ngx.req.get_headers()["x-forwarded-for"]
+  if xff and xff ~= "" then
+    ngx.log(ngx.WARN, "[SECURITY] X-Forwarded-For detected (", tostring(xff),
+      "), refusing local trust for remote_addr=", ip)
+    return false
+  end
+
   if ip == "127.0.0.1" or ip == "::1" then
     return true
   end
@@ -132,7 +150,7 @@ function M.request_has_admin_token()
     return false
   end
   local provided = ngx.req.get_headers()["x-fn-admin-token"]
-  return provided == token
+  return constant_time_eq(provided, token)
 end
 
 function M.request_has_session()
@@ -175,6 +193,10 @@ function M.enforce_api(opts)
     return false
   end
 
+  if not M.enforce_csrf() then
+    return false
+  end
+
   return true
 end
 
@@ -186,6 +208,10 @@ function M.enforce_ui()
 
   if M.local_only() and not (M.request_is_local() or M.request_has_admin_token()) then
     json_error(403, "console ui local-only")
+    return false
+  end
+
+  if not M.enforce_csrf() then
     return false
   end
 
@@ -264,6 +290,33 @@ function M.clear_state()
   end
 
   return M.state_snapshot()
+end
+
+function M.enforce_body_limit(max_bytes)
+  max_bytes = max_bytes or 131072  -- 128KB default
+  local cl = tonumber(ngx.req.get_headers()["content-length"])
+  if cl and cl > max_bytes then
+    M.write_json(413, { error = "payload too large" })
+    return false
+  end
+  return true
+end
+
+function M.enforce_csrf()
+  local method = ngx.req.get_method()
+  if method == "GET" or method == "HEAD" or method == "OPTIONS" then
+    return true
+  end
+  -- Skip CSRF check when authenticating via admin token header
+  if M.request_has_admin_token() then
+    return true
+  end
+  local hdr = ngx.req.get_headers()["x-fn-request"]
+  if hdr ~= "1" then
+    M.write_json(403, { error = "missing CSRF header" })
+    return false
+  end
+  return true
 end
 
 return M

@@ -1,22 +1,13 @@
 {
-  "timeout_ms": 20000,
+  "timeout_ms": 30000,
   "invoke": {
-    "summary": "Scheduled Telegram digest (weather + news) with AI",
-    "methods": ["GET", "POST"],
-    "query": {"chat_id": "123"},
+    "summary": "Telegram AI digest: fetches group messages, summarizes with OpenAI, sends digest",
+    "methods": ["GET"],
     "content_type": "application/json"
   },
   "schedule": {
-    "enabled": false,
-    "every_seconds": 60,
-    "method": "GET",
-    "query": {
-      "dry_run": "false",
-      "min_interval_secs": "60",
-      "include_ai": "false"
-    },
-    "context": {
-      "type": "cron"
-    }
+    "enabled": true,
+    "every_seconds": 3600,
+    "method": "GET"
   }
 }

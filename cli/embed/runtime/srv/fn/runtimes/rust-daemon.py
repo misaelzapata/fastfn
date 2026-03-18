@@ -36,6 +36,15 @@ RUNTIME_FUNCTIONS_DIR = FUNCTIONS_DIR / "rust"
 _NAME_RE = re.compile(r"^[A-Za-z0-9._/\-\[\]]+$")
 _VERSION_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 
+# Env var prefixes that must NEVER be passed to user function worker processes.
+_BLOCKED_ENV_PREFIXES = ("FN_ADMIN_", "FN_CONSOLE_", "FN_TRUSTED_")
+
+
+def _sanitize_worker_env(env: Dict[str, str]) -> Dict[str, str]:
+    """Remove sensitive system env vars from a worker process environment."""
+    return {k: v for k, v in env.items() if not k.startswith(_BLOCKED_ENV_PREFIXES)}
+
+
 _BINARY_CACHE: Dict[str, Dict[str, Any]] = {}
 _BINARY_CACHE_LOCK = threading.Lock()
 _RUNTIME_POOLS: Dict[str, Dict[str, Any]] = {}
@@ -258,33 +267,47 @@ def _read_function_env(handler_path: Path) -> Dict[str, str]:
     return out
 
 
+_thread_local_env = threading.local()
+
+
 @contextmanager
 def _patched_process_env(env: Dict[str, Any]) -> Any:
+    """Store per-request env overrides in thread-local storage instead of
+    mutating the global os.environ.  This prevents env var leakage between
+    concurrent requests handled by different threads."""
     if not isinstance(env, dict) or not env:
         yield
         return
 
-    tracked: list[str] = []
-    previous: Dict[str, str] = {}
+    overrides: Dict[str, str | None] = {}
     for raw_key, raw_value in env.items():
         if not isinstance(raw_key, str) or not raw_key:
             continue
-        tracked.append(raw_key)
-        if raw_key in os.environ:
-            previous[raw_key] = os.environ[raw_key]
-        if raw_value is None:
-            os.environ.pop(raw_key, None)
-        else:
-            os.environ[raw_key] = str(raw_value)
+        overrides[raw_key] = None if raw_value is None else str(raw_value)
 
+    _thread_local_env.env_overrides = overrides
     try:
         yield
     finally:
-        for key in tracked:
-            if key in previous:
-                os.environ[key] = previous[key]
+        _thread_local_env.env_overrides = None
+
+
+def _build_subprocess_env(extra: Dict[str, Any] | None = None) -> Dict[str, str]:
+    """Build an env dict for subprocess calls that merges the real os.environ
+    with any thread-local overrides and optional extra vars."""
+    result = _sanitize_worker_env(os.environ.copy())
+    overrides = getattr(_thread_local_env, "env_overrides", None)
+    if overrides:
+        for k, v in overrides.items():
+            if v is None:
+                result.pop(k, None)
             else:
-                os.environ.pop(key, None)
+                result[k] = v
+    if extra and isinstance(extra, dict):
+        for k, v in extra.items():
+            if isinstance(k, str) and k:
+                result[k] = str(v) if v is not None else ""
+    return result
 
 
 def _recvall(conn: socket.socket, size: int) -> bytes:
@@ -569,6 +592,7 @@ class _PersistentRustWorker:
             stderr=subprocess.DEVNULL,
             bufsize=0,
             cwd=str(binary.parent),
+            env=_sanitize_worker_env(dict(os.environ)),
         )
 
     @property

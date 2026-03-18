@@ -16,6 +16,28 @@ if not auth.login_enabled() then
   return
 end
 
+-- Brute-force protection: track failed attempts per IP
+local LOGIN_MAX_ATTEMPTS = 5
+local LOGIN_WINDOW_S = 300  -- 5 minutes
+
+local function login_rate_key(ip)
+  return "login:fail:" .. (ip or "unknown")
+end
+
+local client_ip = ngx.var.remote_addr or "unknown"
+local rate_store = ngx.shared.fn_cache
+if rate_store then
+  local fail_count = rate_store:get(login_rate_key(client_ip))
+  if type(fail_count) == "number" and fail_count >= LOGIN_MAX_ATTEMPTS then
+    guard.write_json(429, { error = "too many login attempts, try again later" })
+    return
+  end
+end
+
+if not guard.enforce_body_limit() then
+  return
+end
+
 ngx.req.read_body()
 local payload = cjson.decode(ngx.req.get_body_data() or "")
 if type(payload) ~= "table" then
@@ -38,6 +60,13 @@ if not expected_user or not expected_pass then
 end
 
 if username ~= expected_user or password ~= expected_pass then
+  if rate_store then
+    local key = login_rate_key(client_ip)
+    local newval, err = rate_store:incr(key, 1, 0, LOGIN_WINDOW_S)
+    if not newval and err then
+      ngx.log(ngx.WARN, "[login] failed to track login attempt: ", err)
+    end
+  end
   guard.write_json(401, { error = "invalid credentials" })
   return
 end

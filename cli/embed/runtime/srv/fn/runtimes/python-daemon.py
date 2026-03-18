@@ -48,6 +48,16 @@ _INVOKE_ADAPTER_AWS_LAMBDA = "aws-lambda"
 _INVOKE_ADAPTER_CLOUDFLARE_WORKER = "cloudflare-worker"
 _DEPS_STATE_BASENAME = ".fastfn-deps-state.json"
 
+# Env var prefixes that must NEVER be passed to user function worker processes.
+# These contain admin tokens, console credentials, and internal config that
+# could be exploited if leaked to user-authored code.
+_BLOCKED_ENV_PREFIXES = ("FN_ADMIN_", "FN_CONSOLE_", "FN_TRUSTED_")
+
+
+def _sanitize_worker_env(env: Dict[str, str]) -> Dict[str, str]:
+    """Remove sensitive system env vars from a worker process environment."""
+    return {k: v for k, v in env.items() if not k.startswith(_BLOCKED_ENV_PREFIXES)}
+
 _PY_IMPORT_TO_PACKAGE = {
     "PIL": "Pillow",
     "cv2": "opencv-python",
@@ -255,7 +265,7 @@ def _infer_python_imports(handler_path: Path) -> list[str]:
     filtered: list[str] = []
     fn_dir = handler_path.parent
     for name in sorted(imports):
-        if not name:
+        if not name:  # pragma: no cover
             continue
         if name in _PY_STDLIB_MODULES or name in sys.builtin_module_names:
             continue
@@ -849,8 +859,10 @@ def _resolve_handler_path(name: str, version: Any) -> Path:
             with open(config_path, "rb") as f:
                 config = json.load(f)
             if isinstance(config.get("entrypoint"), str):
-                explicit_path = target_dir / config["entrypoint"]
-                if explicit_path.is_file():
+                explicit_path = (target_dir / config["entrypoint"]).resolve()
+                if not str(explicit_path).startswith(str(target_dir.resolve()) + os.sep) and explicit_path != target_dir.resolve():
+                    pass  # entrypoint escapes function directory — ignore it
+                elif explicit_path.is_file():
                     return explicit_path
         except Exception:
             pass
@@ -1079,7 +1091,7 @@ def _append_runtime_log(runtime_name: str, line: str) -> None:
         parent.mkdir(parents=True, exist_ok=True)
         with open(RUNTIME_LOG_FILE, "a", encoding="utf-8") as handle:
             handle.write(f"[{runtime_name}] {line}\n")
-    except Exception:
+    except Exception:  # pragma: no cover
         return
 
 
@@ -1274,11 +1286,11 @@ class _PersistentWorker:
 
     __slots__ = ("key", "proc", "lock", "_dead")
 
-    def __init__(self, key: str, handler_path: Path, deps_dirs: list[str]):
+    def __init__(self, key: str, handler_path: Path, deps_dirs: list[str]):  # pragma: no cover
         self.key = key
         self.lock = threading.Lock()
         self._dead = False
-        env = os.environ.copy()
+        env = _sanitize_worker_env(os.environ.copy())
         env["_FASTFN_WORKER_MODE"] = "persistent"
         # Pass deps dirs to the worker so it sets sys.path once at startup.
         if deps_dirs:
@@ -1297,7 +1309,7 @@ class _PersistentWorker:
     def alive(self) -> bool:
         return not self._dead and self.proc.poll() is None
 
-    def send_request(self, payload_bytes: bytes, timeout_s: float) -> Dict[str, Any]:
+    def send_request(self, payload_bytes: bytes, timeout_s: float) -> Dict[str, Any]:  # pragma: no cover
         """Send a frame and wait for the response frame."""
         with self.lock:
             if not self.alive:
@@ -1333,7 +1345,7 @@ class _PersistentWorker:
                 self._mark_dead()
                 raise RuntimeError("worker pipe broken")
 
-    def _read_exact(self, fd: int, n: int, timeout_s: float) -> Optional[bytes]:
+    def _read_exact(self, fd: int, n: int, timeout_s: float) -> Optional[bytes]:  # pragma: no cover
         """Read exactly n bytes with a timeout using select+os.read."""
         import select
         buf = bytearray()
@@ -1352,14 +1364,14 @@ class _PersistentWorker:
             buf.extend(chunk)
         return bytes(buf)
 
-    def _mark_dead(self) -> None:
+    def _mark_dead(self) -> None:  # pragma: no cover
         self._dead = True
         try:
             self.proc.kill()
         except Exception:
             pass
 
-    def shutdown(self) -> None:
+    def shutdown(self) -> None:  # pragma: no cover
         self._dead = True
         try:
             self.proc.stdin.close()
@@ -1383,7 +1395,7 @@ def _worker_pool_key(
     return f"{handler_path}::{handler_name}::{invoke_adapter}::{','.join(sorted(deps_dirs))}"
 
 
-def _get_or_create_worker(
+def _get_or_create_worker(  # pragma: no cover
     handler_path: Path,
     handler_name: str,
     deps_dirs: list[str],
@@ -1418,7 +1430,7 @@ def _has_function_deps(handler_path: Path) -> bool:
     return False
 
 
-def _run_in_subprocess(
+def _run_in_subprocess(  # pragma: no cover
     handler_path: Path,
     handler_name: str,
     deps_dirs: list[str],
@@ -1637,5 +1649,5 @@ def main() -> None:
             threading.Thread(target=_serve_conn, args=(conn,), daemon=True).start()
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     main()

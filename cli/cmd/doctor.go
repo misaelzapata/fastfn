@@ -99,6 +99,14 @@ var (
 	doctorGOOS           = runtime.GOOS
 	doctorGOARCH         = runtime.GOARCH
 
+	doctorResolveDockerBinaryFn = func() (process.BinaryResolution, error) {
+		return process.ResolveConfiguredBinary("docker")
+	}
+	doctorDockerInfoFn = func(dockerPath string) (string, error) {
+		out, err := exec.Command(dockerPath, "info", "--format", "{{.ServerVersion}}").CombinedOutput()
+		return strings.TrimSpace(string(out)), err
+	}
+
 	runGeneralDoctorChecksFn = runGeneralDoctorChecks
 	printDoctorReportFn      = printDoctorReport
 	resolveDomainTargetsFn   = resolveDoctorDomainTargets
@@ -799,7 +807,7 @@ func checkConfiguredExecutable(binaryKey string, versionArgs []string, id, label
 }
 
 func checkDockerDaemon() doctorCheck {
-	dockerBin, err := process.ResolveConfiguredBinary("docker")
+	dockerBin, err := doctorResolveDockerBinaryFn()
 	if err != nil {
 		return doctorCheck{
 			ID:      "docker.daemon",
@@ -807,9 +815,7 @@ func checkDockerDaemon() doctorCheck {
 			Message: "Docker daemon check skipped (docker CLI not found)",
 		}
 	}
-	cmd := exec.Command(dockerBin.Path, "info", "--format", "{{.ServerVersion}}")
-	out, err := cmd.CombinedOutput()
-	output := strings.TrimSpace(string(out))
+	output, err := doctorDockerInfoFn(dockerBin.Path)
 	lower := strings.ToLower(output)
 	if err != nil ||
 		strings.Contains(lower, "permission denied") ||

@@ -32,6 +32,7 @@ import builtins
 import io
 import inspect
 import subprocess
+import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -67,7 +68,7 @@ def _resolve_candidate_path(target) -> Path | None:
     if isinstance(target, bytes):
         try:
             target = target.decode("utf-8", errors="ignore")
-        except Exception:
+        except Exception:  # pragma: no cover
             return None
     if isinstance(target, os.PathLike):
         target = os.fspath(target)
@@ -179,6 +180,9 @@ def _strict_fs_guard(handler_path: Path, deps_dirs: list[str]):
     def blocked_system(*_args, **_kwargs):
         raise PermissionError("os.system disabled by strict function sandbox")
 
+    def blocked_spawn(*_args, **_kwargs):
+        raise PermissionError("os.spawn* disabled by strict function sandbox")
+
     builtins.open = guarded_open
     io.open = guarded_io_open
     os.open = guarded_os_open
@@ -191,6 +195,55 @@ def _strict_fs_guard(handler_path: Path, deps_dirs: list[str]):
     subprocess.check_output = blocked_subprocess
     subprocess.Popen = blocked_subprocess
     Path.open = guarded_path_open
+
+    # Block os.spawn* family — additional process-creation vectors beyond
+    # subprocess and os.system.
+    _orig_spawn_fns = {}
+    for _spawn_name in ("spawnl", "spawnle", "spawnlp", "spawnlpe",
+                        "spawnv", "spawnve", "spawnvp", "spawnvpe"):
+        fn = getattr(os, _spawn_name, None)
+        if fn is not None:
+            _orig_spawn_fns[_spawn_name] = fn
+            setattr(os, _spawn_name, blocked_spawn)
+    _orig_execvpe = getattr(os, "execvpe", None)
+    if _orig_execvpe is not None:
+        setattr(os, "execvpe", blocked_spawn)
+    _orig_execvp = getattr(os, "execvp", None)
+    if _orig_execvp is not None:
+        setattr(os, "execvp", blocked_spawn)
+
+    # Block pty.spawn (pseudo-terminal process creation).
+    _orig_pty_spawn = None
+    try:
+        import pty as _pty_mod
+        _orig_pty_spawn = getattr(_pty_mod, "spawn", None)
+        if _orig_pty_spawn is not None:
+            _pty_mod.spawn = blocked_spawn
+    except ImportError:  # pragma: no cover
+        _pty_mod = None
+
+    # Block ctypes.CDLL / ctypes.cdll.LoadLibrary — prevents loading arbitrary
+    # shared libraries to call system functions directly.
+    _orig_ctypes_cdll = None
+    _orig_ctypes_cdll_load = None
+    try:
+        import ctypes as _ctypes_mod
+        _orig_ctypes_cdll = _ctypes_mod.CDLL
+
+        def blocked_cdll(*_a, **_kw):
+            raise PermissionError("ctypes.CDLL disabled by strict function sandbox")
+
+        _ctypes_mod.CDLL = blocked_cdll
+        if hasattr(_ctypes_mod, "cdll") and hasattr(_ctypes_mod.cdll, "LoadLibrary"):
+            _orig_ctypes_cdll_load = _ctypes_mod.cdll.LoadLibrary
+            _ctypes_mod.cdll.LoadLibrary = blocked_cdll
+    except ImportError:  # pragma: no cover
+        _ctypes_mod = None
+
+    # NOTE: Full multi-tenant isolation requires OS-level sandboxing (seccomp,
+    # namespaces, containers).  Application-level monkey-patching blocks common
+    # escape vectors but cannot prevent all bypasses (e.g., direct syscalls via
+    # inline assembly or mmap tricks).
 
     try:
         yield
@@ -207,6 +260,18 @@ def _strict_fs_guard(handler_path: Path, deps_dirs: list[str]):
         subprocess.check_output = orig_subprocess_check_output
         subprocess.Popen = orig_subprocess_popen
         Path.open = orig_path_open
+        for _spawn_name, _fn in _orig_spawn_fns.items():
+            setattr(os, _spawn_name, _fn)
+        if _orig_execvpe is not None:
+            os.execvpe = _orig_execvpe
+        if _orig_execvp is not None:
+            os.execvp = _orig_execvp
+        if _orig_pty_spawn is not None and _pty_mod is not None:
+            _pty_mod.spawn = _orig_pty_spawn
+        if _orig_ctypes_cdll is not None and _ctypes_mod is not None:
+            _ctypes_mod.CDLL = _orig_ctypes_cdll
+            if _orig_ctypes_cdll_load is not None and hasattr(_ctypes_mod, "cdll"):
+                _ctypes_mod.cdll.LoadLibrary = _orig_ctypes_cdll_load
 
 
 def _read_frame() -> bytes | None:
@@ -532,6 +597,106 @@ def _normalize_response_like_object(resp):
     return out
 
 
+_thread_local_env = threading.local()
+
+
+class _EnvOverrideProxy:
+    """A proxy for os.environ that checks thread-local overrides first.
+
+    This prevents environment variable leakage between concurrent requests
+    in persistent worker mode, where multiple requests may be handled by the
+    same process (and potentially different threads in the future).
+    Instead of mutating the global os.environ, per-request env vars are stored
+    in threading.local() and looked up transparently.
+    """
+
+    def __init__(self, real_environ):
+        object.__setattr__(self, "_real", real_environ)
+
+    def _get_overrides(self):
+        return getattr(_thread_local_env, "env_overrides", None)
+
+    def __getitem__(self, key):
+        overrides = self._get_overrides()
+        if overrides is not None and key in overrides:
+            val = overrides[key]
+            if val is None:
+                raise KeyError(key)
+            return val
+        return self._real[key]
+
+    def __setitem__(self, key, value):
+        self._real[key] = value
+
+    def __delitem__(self, key):
+        del self._real[key]
+
+    def __contains__(self, key):
+        overrides = self._get_overrides()
+        if overrides is not None and key in overrides:
+            return overrides[key] is not None
+        return key in self._real
+
+    def get(self, key, default=None):
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+    def __iter__(self):
+        overrides = self._get_overrides()
+        if overrides is None:
+            yield from self._real
+            return
+        seen = set()
+        for k in self._real:
+            if k in overrides:
+                if overrides[k] is not None:
+                    seen.add(k)
+                    yield k
+            else:
+                seen.add(k)
+                yield k
+        for k, v in overrides.items():
+            if k not in seen and v is not None:
+                yield k
+
+    def keys(self):
+        return list(self)
+
+    def values(self):
+        return [self[k] for k in self]
+
+    def items(self):
+        return [(k, self[k]) for k in self]
+
+    def __len__(self):
+        return sum(1 for _ in self.__iter__())
+
+    def pop(self, key, *args):
+        return self._real.pop(key, *args)
+
+    def copy(self):
+        result = self._real.copy()
+        overrides = self._get_overrides()
+        if overrides:
+            for k, v in overrides.items():
+                if v is None:
+                    result.pop(k, None)
+                else:
+                    result[k] = v
+        return result
+
+    def __getattr__(self, name):
+        return getattr(self._real, name)
+
+
+# Install the proxy over os.environ so handler code transparently sees
+# per-request overrides without any global mutation.
+if not isinstance(os.environ, _EnvOverrideProxy):
+    os.environ = _EnvOverrideProxy(os.environ)
+
+
 @contextmanager
 def _patched_process_env(event: dict):
     env = event.get("env") if isinstance(event.get("env"), dict) else {}
@@ -539,28 +704,17 @@ def _patched_process_env(event: dict):
         yield
         return
 
-    tracked: list[str] = []
-    previous: dict[str, str] = {}
-
+    overrides: dict[str, str | None] = {}
     for raw_key, raw_value in env.items():
         if not isinstance(raw_key, str) or raw_key == "":
             continue
-        tracked.append(raw_key)
-        if raw_key in os.environ:
-            previous[raw_key] = os.environ[raw_key]
-        if raw_value is None:
-            os.environ.pop(raw_key, None)
-        else:
-            os.environ[raw_key] = str(raw_value)
+        overrides[raw_key] = None if raw_value is None else str(raw_value)
 
+    _thread_local_env.env_overrides = overrides
     try:
         yield
     finally:
-        for key in tracked:
-            if key in previous:
-                os.environ[key] = previous[key]
-            else:
-                os.environ.pop(key, None)
+        _thread_local_env.env_overrides = None
 
 
 def _invoke_handler(handler, invoke_adapter: str, event: dict):
@@ -681,5 +835,5 @@ def main() -> None:
         _run_oneshot()
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     main()

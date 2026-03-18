@@ -14,6 +14,13 @@ import (
 	"time"
 )
 
+// Injectable functions for testing.
+var (
+	stdoutPipeFn = func(cmd *exec.Cmd) (io.ReadCloser, error) { return cmd.StdoutPipe() }
+	stderrPipeFn = func(cmd *exec.Cmd) (io.ReadCloser, error) { return cmd.StderrPipe() }
+	osEnvironFn  = os.Environ
+)
+
 type RestartPolicy struct {
 	Enabled        bool
 	MaxAttempts    int // 0 means unlimited
@@ -104,12 +111,12 @@ func (m *Manager) startProcess(svc *Service) (*exec.Cmd, context.Context, contex
 	cmd.Env = mergedServiceEnv(svc.Env)
 
 	// Create pipes for stdout/stderr to stream logs with prefix
-	stdout, err := cmd.StdoutPipe()
+	stdout, err := stdoutPipeFn(cmd)
 	if err != nil {
 		cancel()
 		return nil, nil, nil, fmt.Errorf("failed to get stdout pipe: %w", err)
 	}
-	stderr, err := cmd.StderrPipe()
+	stderr, err := stderrPipeFn(cmd)
 	if err != nil {
 		cancel()
 		return nil, nil, nil, fmt.Errorf("failed to get stderr pipe: %w", err)
@@ -234,7 +241,7 @@ func (m *Manager) Done() <-chan struct{} {
 
 func mergedServiceEnv(extra []string) []string {
 	envMap := map[string]string{}
-	for _, kv := range os.Environ() {
+	for _, kv := range osEnvironFn() {
 		key, val, ok := splitEnvKV(kv)
 		if !ok {
 			continue

@@ -96,6 +96,7 @@ func patchRunnerDeps(t *testing.T) {
 	origWriteSession := writeNativeSessionFn
 	origClearSession := clearNativeSessionForPID
 	origNotify := notifySignalFn
+	origRuntimeSocketURIs := runtimeSocketURIsFn
 	origNewManager := newNativeManagerFn
 	origAwait := awaitNativeStopFn
 	origBinaryOutput := binaryOutputFn
@@ -117,6 +118,7 @@ func patchRunnerDeps(t *testing.T) {
 		writeNativeSessionFn = origWriteSession
 		clearNativeSessionForPID = origClearSession
 		notifySignalFn = origNotify
+		runtimeSocketURIsFn = origRuntimeSocketURIs
 		newNativeManagerFn = origNewManager
 		awaitNativeStopFn = origAwait
 		binaryOutputFn = origBinaryOutput
@@ -655,6 +657,226 @@ func TestRunNative_DefaultHostPortAndClearSessionWarning(t *testing.T) {
 	}
 	if capturedPort != "8080" {
 		t.Fatalf("expected default host port 8080, got %q", capturedPort)
+	}
+}
+
+func TestRunNative_RemoveAllWarningInDefer(t *testing.T) {
+	patchRunnerDeps(t)
+	runtimeDir, nginxConf := prepareRuntimeDir(t)
+	functionsDir := t.TempDir()
+	t.Setenv("FN_HOST_PORT", reserveFreePort(t))
+	t.Setenv("FN_RUNTIMES", "")
+
+	checkDependenciesFn = func() error { return nil }
+	runtimeExtractFn = func() (string, error) { return runtimeDir, nil }
+	generateNativeConfigFn = func(string, string) (string, error) { return nginxConf, nil }
+	lookPathFn = func(string) (string, error) { return "", errors.New("missing") }
+	ensureSocketPathAvailFn = func(string) error { return nil }
+	writeNativeSessionFn = func(NativeSession) error { return nil }
+	clearNativeSessionForPID = func(int) error { return nil }
+
+	// Track calls. The socketDir removeAll is called at two points:
+	// 1. Initial cleanup (line 216) - must succeed
+	// 2. Deferred cleanup (line 223) - we want this to fail to trigger warning
+	socketDirCallCount := 0
+	removeAllFn = func(path string) error {
+		if strings.Contains(path, "s-") {
+			socketDirCallCount++
+			if socketDirCallCount >= 2 {
+				// Second call is the deferred cleanup - return error to trigger warning
+				return errors.New("remove-socket-dir-fail")
+			}
+		}
+		return nil
+	}
+
+	mgr := newFakeNativeManager()
+	newNativeManagerFn = func() nativeServiceManager { return mgr }
+	awaitNativeStopFn = func(nativeServiceManager) error { return nil }
+
+	// This should not fail even though socketDir removal fails (it's just a warning)
+	if err := RunNative(RunConfig{FnDir: functionsDir}); err != nil {
+		t.Fatalf("RunNative() error = %v", err)
+	}
+}
+
+func TestRunNative_SocketDirRemoveAllError(t *testing.T) {
+	patchRunnerDeps(t)
+	runtimeDir, nginxConf := prepareRuntimeDir(t)
+	t.Setenv("FN_HOST_PORT", reserveFreePort(t))
+	t.Setenv("FN_RUNTIMES", "")
+
+	checkDependenciesFn = func() error { return nil }
+	runtimeExtractFn = func() (string, error) { return runtimeDir, nil }
+	generateNativeConfigFn = func(string, string) (string, error) { return nginxConf, nil }
+	lookPathFn = func(string) (string, error) { return "", errors.New("missing") }
+	ensurePortAvailableFn = func(string) error { return nil }
+
+	callCount := 0
+	removeAllFn = func(path string) error {
+		callCount++
+		if strings.Contains(path, "s-") && callCount == 1 {
+			// First call to remove socketDir (initial cleanup) returns a non-ErrNotExist error
+			return errors.New("remove-fail")
+		}
+		return nil
+	}
+
+	err := RunNative(RunConfig{FnDir: t.TempDir()})
+	if err == nil || !strings.Contains(err.Error(), "failed to clear native socket dir") {
+		t.Fatalf("expected socket dir clear error, got %v", err)
+	}
+}
+
+func TestRunNative_EnvVarOverrideError(t *testing.T) {
+	patchRunnerDeps(t)
+	runtimeDir, nginxConf := prepareRuntimeDir(t)
+	t.Setenv("FN_HOST_PORT", reserveFreePort(t))
+	t.Setenv("FN_RUNTIMES", "")
+	// Set an explicit env var override that is invalid
+	t.Setenv("FN_OPENRESTY_BIN", "/nonexistent/openresty")
+
+	checkDependenciesFn = func() error { return nil }
+	runtimeExtractFn = func() (string, error) { return runtimeDir, nil }
+	generateNativeConfigFn = func(string, string) (string, error) { return nginxConf, nil }
+	ensurePortAvailableFn = func(string) error { return nil }
+	lookPathFn = func(bin string) (string, error) {
+		return "", errors.New("missing")
+	}
+
+	err := RunNative(RunConfig{FnDir: t.TempDir()})
+	if err == nil {
+		t.Fatal("expected error when env var override points to invalid binary")
+	}
+}
+
+func TestRunNative_InvalidRuntimeDaemons(t *testing.T) {
+	patchRunnerDeps(t)
+	runtimeDir, nginxConf := prepareRuntimeDir(t)
+	t.Setenv("FN_HOST_PORT", reserveFreePort(t))
+	t.Setenv("FN_RUNTIMES", "")
+	t.Setenv("FN_RUNTIME_DAEMONS", "node=abc") // invalid count
+
+	checkDependenciesFn = func() error { return nil }
+	runtimeExtractFn = func() (string, error) { return runtimeDir, nil }
+	generateNativeConfigFn = func(string, string) (string, error) { return nginxConf, nil }
+	lookPathFn = func(string) (string, error) { return "", errors.New("missing") }
+	ensurePortAvailableFn = func(string) error { return nil }
+	ensureSocketPathAvailFn = func(string) error { return nil }
+	removeAllFn = func(string) error { return nil }
+
+	err := RunNative(RunConfig{FnDir: t.TempDir()})
+	if err == nil {
+		t.Fatal("expected error for invalid FN_RUNTIME_DAEMONS")
+	}
+}
+
+func TestRunNative_OpenrestyBinaryResolved(t *testing.T) {
+	patchRunnerDeps(t)
+	runtimeDir, nginxConf := prepareRuntimeDir(t)
+	functionsDir := t.TempDir()
+	t.Setenv("FN_HOST_PORT", reserveFreePort(t))
+	t.Setenv("FN_RUNTIMES", "")
+
+	checkDependenciesFn = func() error { return nil }
+	runtimeExtractFn = func() (string, error) { return runtimeDir, nil }
+	generateNativeConfigFn = func(string, string) (string, error) { return nginxConf, nil }
+	ensurePortAvailableFn = func(string) error { return nil }
+	ensureSocketPathAvailFn = func(string) error { return nil }
+	writeNativeSessionFn = func(NativeSession) error { return nil }
+	clearNativeSessionForPID = func(int) error { return nil }
+
+	// Make openresty resolvable so the openrestyCommand uses the resolved path
+	lookPathFn = func(bin string) (string, error) {
+		if bin == "openresty" {
+			return "/usr/local/bin/openresty", nil
+		}
+		return "", errors.New("missing")
+	}
+
+	mgr := newFakeNativeManager()
+	newNativeManagerFn = func() nativeServiceManager { return mgr }
+	awaitNativeStopFn = func(nativeServiceManager) error { return nil }
+
+	if err := RunNative(RunConfig{FnDir: functionsDir}); err != nil {
+		t.Fatalf("RunNative() error = %v", err)
+	}
+
+	// Verify openresty service uses the resolved path
+	if cmd, ok := mgr.commandByName["openresty"]; ok {
+		if cmd != "/usr/local/bin/openresty" {
+			t.Fatalf("expected openresty command to be resolved path, got %q", cmd)
+		}
+	}
+}
+
+func TestRunNative_SocketPreflightSkipsUnselectedRuntime(t *testing.T) {
+	patchRunnerDeps(t)
+	runtimeDir, nginxConf := prepareRuntimeDir(t)
+	functionsDir := t.TempDir()
+	t.Setenv("FN_HOST_PORT", reserveFreePort(t))
+	t.Setenv("FN_RUNTIMES", "")
+
+	checkDependenciesFn = func() error { return nil }
+	runtimeExtractFn = func() (string, error) { return runtimeDir, nil }
+	generateNativeConfigFn = func(string, string) (string, error) { return nginxConf, nil }
+	ensurePortAvailableFn = func(string) error { return nil }
+	lookPathFn = func(string) (string, error) { return "", errors.New("missing") }
+	writeNativeSessionFn = func(NativeSession) error { return nil }
+	clearNativeSessionForPID = func(int) error { return nil }
+
+	// Inject runtimeSocketURIsFn to return an extra runtime not in selected
+	runtimeSocketURIsFn = func(socketDir string, selected []string, counts map[string]int) map[string][]string {
+		result := runtimeSocketURIsByRuntime(socketDir, selected, counts)
+		// Add an extra runtime that is NOT in the selected list
+		result["phantom"] = []string{"unix:/tmp/phantom.sock"}
+		return result
+	}
+
+	preflightSockets := make([]string, 0)
+	ensureSocketPathAvailFn = func(path string) error {
+		preflightSockets = append(preflightSockets, path)
+		return nil
+	}
+
+	mgr := newFakeNativeManager()
+	newNativeManagerFn = func() nativeServiceManager { return mgr }
+	awaitNativeStopFn = func(nativeServiceManager) error { return nil }
+
+	if err := RunNative(RunConfig{FnDir: functionsDir}); err != nil {
+		t.Fatalf("RunNative() error = %v", err)
+	}
+
+	// Verify that "phantom" socket was NOT preflighted (skipped by !selected check)
+	for _, sock := range preflightSockets {
+		if strings.Contains(sock, "phantom") {
+			t.Fatal("expected phantom runtime sockets to be skipped in preflight")
+		}
+	}
+}
+
+func TestRunNative_EncodeRuntimeSocketMapError(t *testing.T) {
+	patchRunnerDeps(t)
+	runtimeDir, nginxConf := prepareRuntimeDir(t)
+	t.Setenv("FN_HOST_PORT", reserveFreePort(t))
+	t.Setenv("FN_RUNTIMES", "")
+
+	checkDependenciesFn = func() error { return nil }
+	runtimeExtractFn = func() (string, error) { return runtimeDir, nil }
+	generateNativeConfigFn = func(string, string) (string, error) { return nginxConf, nil }
+	ensurePortAvailableFn = func(string) error { return nil }
+	lookPathFn = func(string) (string, error) { return "", errors.New("missing") }
+	ensureSocketPathAvailFn = func(string) error { return nil }
+
+	origMarshal := jsonMarshalFn
+	t.Cleanup(func() { jsonMarshalFn = origMarshal })
+	jsonMarshalFn = func(v any) ([]byte, error) {
+		return nil, errors.New("encode-fail")
+	}
+
+	err := RunNative(RunConfig{FnDir: t.TempDir()})
+	if err == nil || !strings.Contains(err.Error(), "failed to encode runtime socket map") {
+		t.Fatalf("expected encode error, got %v", err)
 	}
 }
 

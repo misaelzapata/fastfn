@@ -33,6 +33,15 @@ RUNTIME_FUNCTIONS_DIR = FUNCTIONS_DIR / "go"
 _VERSION_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 _FILE_TOKEN_RE = re.compile(r"^[A-Za-z0-9._/\-\[\]]+$")
 
+# Env var prefixes that must NEVER be passed to user function worker processes.
+_BLOCKED_ENV_PREFIXES = ("FN_ADMIN_", "FN_CONSOLE_", "FN_TRUSTED_")
+
+
+def _sanitize_worker_env(env: Dict[str, str]) -> Dict[str, str]:
+    """Remove sensitive system env vars from a worker process environment."""
+    return {k: v for k, v in env.items() if not k.startswith(_BLOCKED_ENV_PREFIXES)}
+
+
 _BINARY_CACHE: Dict[str, Dict[str, Any]] = {}
 _BINARY_CACHE_LOCK = threading.Lock()
 _PERSISTENT_RUNTIME_POOLS: Dict[str, Dict[str, Any]] = {}
@@ -213,7 +222,7 @@ def _read_function_env(handler_path: Path) -> Dict[str, str]:
 
 
 def _build_process_env(env: Any) -> Dict[str, str]:
-    merged = dict(os.environ)
+    merged = _sanitize_worker_env(dict(os.environ))
     if not isinstance(env, dict):
         return merged
 
@@ -702,6 +711,7 @@ class _PersistentGoWorker:
             stderr=subprocess.DEVNULL,
             bufsize=0,
             cwd=str(binary.parent),
+            env=_sanitize_worker_env(dict(os.environ)),
         )
 
     @property

@@ -185,9 +185,6 @@ func normalizeRuntimeDaemonConfigValue(raw any) (string, bool) {
 	seen := map[string]bool{}
 	parts := make([]string, 0, len(source))
 	appendPart := func(runtimeName string) {
-		if seen[runtimeName] {
-			return
-		}
 		rawCount, ok := source[runtimeName]
 		if !ok {
 			return

@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -144,5 +145,80 @@ func TestEnsureImageReturnsBuildError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "failed to build docker image") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestEnsureImageReturnsExtractError(t *testing.T) {
+	origRunner := commandRunner
+	origExtractor := runtimeExtractor
+	origRemoveAll := removeAll
+	t.Cleanup(func() {
+		commandRunner = origRunner
+		runtimeExtractor = origExtractor
+		removeAll = origRemoveAll
+	})
+
+	commandRunner = func(name string, args ...string) *exec.Cmd {
+		return failCmd()
+	}
+	runtimeExtractor = func() (string, error) {
+		return "", fmt.Errorf("extract boom")
+	}
+	removeAll = func(string) error { return nil }
+
+	err := EnsureImage()
+	if err == nil {
+		t.Fatalf("expected extract error")
+	}
+	if !strings.Contains(err.Error(), "failed to extract build context") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestGenerateComposeFile_EnsureImageError(t *testing.T) {
+	origEnsureImage := ensureImageFn
+	t.Cleanup(func() {
+		ensureImageFn = origEnsureImage
+	})
+
+	ensureImageFn = func() error {
+		return fmt.Errorf("image build failed")
+	}
+
+	_, err := GenerateComposeFile(t.TempDir(), "/functions")
+	if err == nil {
+		t.Fatalf("expected error from EnsureImage failure")
+	}
+	if !strings.Contains(err.Error(), "image build failed") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestGenerateComposeFile_HappyPath(t *testing.T) {
+	origEnsureImage := ensureImageFn
+	t.Cleanup(func() {
+		ensureImageFn = origEnsureImage
+	})
+
+	ensureImageFn = func() error {
+		return nil
+	}
+
+	workDir := t.TempDir()
+	composePath, err := GenerateComposeFile(workDir, "/my/functions")
+	if err != nil {
+		t.Fatalf("GenerateComposeFile() error = %v", err)
+	}
+
+	if composePath == "" {
+		t.Fatalf("expected non-empty compose file path")
+	}
+
+	data, err := os.ReadFile(composePath)
+	if err != nil {
+		t.Fatalf("read compose file: %v", err)
+	}
+	if len(data) == 0 {
+		t.Fatalf("compose file is empty")
 	}
 }

@@ -30,6 +30,10 @@ if method == "DELETE" then
   return
 end
 
+if not guard.enforce_body_limit() then
+  return
+end
+
 ngx.req.read_body()
 local payload = cjson.decode(ngx.req.get_body_data() or "")
 if type(payload) ~= "table" then

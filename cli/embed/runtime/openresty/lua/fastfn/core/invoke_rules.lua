@@ -87,7 +87,7 @@ function M.normalize_route(raw)
       route = "/"
     end
   end
-  if route:find("%.%.", 1, true) then
+  if route:find("..", 1, true) then
     return nil
   end
   if M.route_is_reserved(route) then

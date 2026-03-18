@@ -80,37 +80,6 @@ curl -sS -X POST 'http://127.0.0.1:8080/whatsapp?action=chat' \
   --data '{"to":"15551234567","text":"Write a short friendly reply in Spanish"}' | jq .
 ```
 
-### 8.1 WhatsApp tools and auto-tools
-
-See also: [Tools (Function-to-Function + Limited HTTP)](../how-to/tools.md)
-
-Add optional tool env values in `<FN_FUNCTIONS_ROOT>/whatsapp/fn.env.json`:
-
-```json
-{
-  "WHATSAPP_TOOLS_ENABLED": {"value":"true","is_secret":false},
-  "WHATSAPP_AUTO_TOOLS": {"value":"true","is_secret":false},
-  "WHATSAPP_TOOL_ALLOW_FN": {"value":"request-inspector,telegram-ai-digest","is_secret":false},
-  "WHATSAPP_TOOL_ALLOW_HTTP_HOSTS": {"value":"api.ipify.org,wttr.in,ipapi.co","is_secret":false},
-  "WHATSAPP_TOOL_TIMEOUT_MS": {"value":"5000","is_secret":false}
-}
-```
-
-Manual tool directives:
-
-```bash
-curl -sS -X POST 'http://127.0.0.1:8080/whatsapp?action=chat' \
-  -H 'Content-Type: application/json' \
-  --data '{"text":"Use [[http:https://api.ipify.org?format=json]] and [[fn:request-inspector?key=wa|GET]]"}' | jq .
-```
-
-Auto tools from natural text:
-
-```bash
-curl -sS -X POST 'http://127.0.0.1:8080/whatsapp?action=chat' \
-  -H 'Content-Type: application/json' \
-  --data '{"text":"How is the weather today and what is my IP?"}' | jq .
-```
 
 ## 9. Reset session
 
