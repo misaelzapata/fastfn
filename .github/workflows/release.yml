@@ -26,7 +26,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: "1.21"
           cache: true
@@ -34,7 +34,7 @@ jobs:
 
       - name: Release (with Homebrew tap)
         if: ${{ env.HOMEBREW_TAP_GITHUB_TOKEN != '' }}
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7
         with:
           # Explicitly pin major to avoid "latest" ambiguity/noise.
           version: "~> v2"
@@ -46,7 +46,7 @@ jobs:
 
       - name: Release (skip Homebrew tap)
         if: ${{ env.HOMEBREW_TAP_GITHUB_TOKEN == '' }}
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7
         with:
           version: "~> v2"
           workdir: cli
