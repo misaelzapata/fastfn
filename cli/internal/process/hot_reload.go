@@ -102,6 +102,7 @@ func TriggerCatalogReload(endpoint string, timeout time.Duration) error {
 			lastErr = err
 			continue
 		}
+		req.Header.Set("X-Fn-Request", "1")
 		resp, err := client.Do(req)
 		if err != nil {
 			lastErr = err
