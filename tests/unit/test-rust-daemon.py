@@ -1525,6 +1525,265 @@ def test_persistent_pool_lifecycle() -> None:
     assert rust_daemon._runtime_pool_key("fn", "v2") == "fn@v2"
 
 
+def test_remaining_coverage_gaps() -> None:
+    """Cover remaining uncovered lines to reach 100% coverage."""
+    import threading as _threading
+    import time as _time
+
+    # Line 206: _resolve_command where env is a bare name and shutil.which succeeds.
+    old_env = os.environ.get("FN_TEST_RESOLVE_BARE")
+    old_which = rust_daemon.shutil.which
+    try:
+        os.environ["FN_TEST_RESOLVE_BARE"] = "some-bare-cmd"
+        rust_daemon.shutil.which = lambda _name: "/usr/bin/found-it"
+        result = rust_daemon._resolve_command("FN_TEST_RESOLVE_BARE", "default")
+        assert result == "/usr/bin/found-it"
+    finally:
+        os.environ.pop("FN_TEST_RESOLVE_BARE", None)
+        if old_env is not None:
+            os.environ["FN_TEST_RESOLVE_BARE"] = old_env
+        rust_daemon.shutil.which = old_which
+
+    # Lines 307-309: _build_subprocess_env with extra dict.
+    env = rust_daemon._build_subprocess_env(extra={"MY_EXTRA_VAR": "hello", "": "skip", "ANOTHER": None})
+    assert env.get("MY_EXTRA_VAR") == "hello"
+    assert env.get("ANOTHER") == ""
+    assert "" not in env
+
+    # Lines 473-474: _load_metadata returns None on invalid JSON.
+    # We trigger this by writing bad JSON to the metadata file and calling _ensure_rust_binary.
+    with tempfile.TemporaryDirectory() as tmp:
+        handler = Path(tmp) / "app.rs"
+        handler.write_text("pub fn handler(_e: serde_json::Value) -> serde_json::Value { serde_json::json!({}) }\n", encoding="utf-8")
+        build_dir = Path(tmp) / ".rust-build"
+        src_dir = build_dir / "src"
+        src_dir.mkdir(parents=True, exist_ok=True)
+        meta_path = build_dir / ".fastfn-build-meta.json"
+        meta_path.write_text("{{{invalid json", encoding="utf-8")
+
+        old_which = rust_daemon.shutil.which
+        old_run = rust_daemon.subprocess.run
+        old_cache = dict(rust_daemon._BINARY_CACHE)
+        try:
+            rust_daemon._BINARY_CACHE.clear()
+            rust_daemon.shutil.which = lambda _name: "/usr/bin/cargo"
+
+            class Proc:
+                returncode = 0
+                stdout = ""
+                stderr = ""
+
+            def fake_run(cmd, capture_output, text, cwd, timeout, check):
+                out = Path(cwd) / "target" / "release"
+                out.mkdir(parents=True, exist_ok=True)
+                bin_path = out / "fn_handler"
+                bin_path.write_bytes(b"\x7fELF" + b"\x00" * 100)
+                bin_path.chmod(0o755)
+                return Proc()
+
+            rust_daemon.subprocess.run = fake_run
+            result = rust_daemon._ensure_rust_binary(handler)
+            assert result.name == "fn_handler"
+        finally:
+            rust_daemon.shutil.which = old_which
+            rust_daemon.subprocess.run = old_run
+            rust_daemon._BINARY_CACHE.clear()
+            rust_daemon._BINARY_CACHE.update(old_cache)
+
+    # Lines 956, 958: _ensure_persistent_runtime_pool min_warm clamping.
+    old_pools = rust_daemon._PERSISTENT_RUNTIME_POOLS
+    old_lock = rust_daemon._PERSISTENT_RUNTIME_POOLS_LOCK
+    old_start_reaper = rust_daemon._start_persistent_runtime_pool_reaper
+    old_warmup = rust_daemon._warmup_persistent_runtime_pool
+    old_shutdown = rust_daemon._shutdown_persistent_runtime_pool
+    try:
+        rust_daemon._PERSISTENT_RUNTIME_POOLS = {}
+        rust_daemon._PERSISTENT_RUNTIME_POOLS_LOCK = _threading.Lock()
+        rust_daemon._start_persistent_runtime_pool_reaper = lambda: None
+        rust_daemon._warmup_persistent_runtime_pool = lambda _pool: None
+        rust_daemon._shutdown_persistent_runtime_pool = lambda _p: None
+
+        with tempfile.TemporaryDirectory() as tmp:
+            handler = Path(tmp) / "app.rs"
+            handler.write_text("fn main(){}", encoding="utf-8")
+            binary = Path(tmp) / "fn_handler"
+            binary.write_text("bin", encoding="utf-8")
+
+            # min_warm < 0 => clamped to 0 (line 956)
+            p = rust_daemon._ensure_persistent_runtime_pool(
+                "clamp-neg@v1", handler, binary,
+                {"max_workers": 2, "min_warm": -5, "idle_ttl_ms": 1000, "acquire_timeout_ms": 5000}
+            )
+            assert p["min_warm"] == 0
+
+            # min_warm > max_workers => clamped to max_workers (line 958)
+            rust_daemon._PERSISTENT_RUNTIME_POOLS = {}
+            p2 = rust_daemon._ensure_persistent_runtime_pool(
+                "clamp-high@v1", handler, binary,
+                {"max_workers": 2, "min_warm": 10, "idle_ttl_ms": 1000, "acquire_timeout_ms": 5000}
+            )
+            assert p2["min_warm"] == 2
+    finally:
+        rust_daemon._PERSISTENT_RUNTIME_POOLS = old_pools
+        rust_daemon._PERSISTENT_RUNTIME_POOLS_LOCK = old_lock
+        rust_daemon._start_persistent_runtime_pool_reaper = old_start_reaper
+        rust_daemon._warmup_persistent_runtime_pool = old_warmup
+        rust_daemon._shutdown_persistent_runtime_pool = old_shutdown
+
+    # Line 805: _shutdown_persistent_runtime_pool with a real _FakeRustWorker that passes isinstance.
+    _OrigRustWorker = rust_daemon._PersistentRustWorker
+
+    class _FakeRustWorker2(_OrigRustWorker):
+        __slots__ = ()
+
+        def __init__(self):
+            self._dead = False
+            self.lock = _threading.Lock()
+
+        @property
+        def alive(self):
+            return not self._dead
+
+        def shutdown(self):
+            self._dead = True
+
+    fake_w = _FakeRustWorker2()
+    assert not fake_w._dead
+    rust_daemon._shutdown_persistent_runtime_pool({"workers": [{"worker": fake_w}]})
+    assert fake_w._dead
+
+    # Lines 1125-1128, 1131-1132, 1136-1137, 1141: _run_prepared_request_persistent paths.
+    old_ensure = rust_daemon._ensure_persistent_runtime_pool
+    old_checkout = rust_daemon._checkout_persistent_runtime_worker
+    old_release = rust_daemon._release_persistent_runtime_worker
+    old_pools_2 = rust_daemon._PERSISTENT_RUNTIME_POOLS
+    try:
+        fake_pool = {
+            "cond": _threading.Condition(_threading.Lock()),
+            "workers": [],
+            "max_workers": 1,
+            "pending": 0,
+            "last_used": 0.0,
+        }
+        rust_daemon._ensure_persistent_runtime_pool = lambda *_a, **_k: fake_pool
+        rust_daemon._PERSISTENT_RUNTIME_POOLS = {"test-key-2": fake_pool}
+
+        # Success path (lines 1125-1128, 1141): checkout returns an entry with a working fake worker.
+        class _FakeWorkerSuccess(_OrigRustWorker):
+            __slots__ = ()
+
+            def __init__(self):
+                self._dead = False
+                self.lock = _threading.Lock()
+
+            @property
+            def alive(self):
+                return not self._dead
+
+            def send_request(self, event, timeout_ms):
+                return {"status": 200, "body": "ok"}
+
+            def shutdown(self):
+                self._dead = True
+
+        fake_send_worker = _FakeWorkerSuccess()
+        fake_entry = {"worker": fake_send_worker, "busy": True, "last_used": 0.0}
+        released = {"called": False, "discard": None}
+
+        def track_release(pool, entry, discard=False):
+            released["called"] = True
+            released["discard"] = discard
+
+        rust_daemon._checkout_persistent_runtime_worker = lambda *_a, **_k: fake_entry
+        rust_daemon._release_persistent_runtime_worker = track_release
+
+        resp = rust_daemon._run_prepared_request_persistent(
+            "test-key-2", Path("/tmp/handler.rs"), Path("/tmp/fn_handler"), {}, 2500, {"acquire_timeout_ms": 5000}
+        )
+        assert resp["status"] == 200
+        assert released["called"]
+        assert released["discard"] is False  # finally block releases without discard
+
+        # Timeout path with entry not None (lines 1131-1132).
+        class _FakeWorkerTimeout(_OrigRustWorker):
+            __slots__ = ()
+
+            def __init__(self):
+                self._dead = False
+                self.lock = _threading.Lock()
+
+            @property
+            def alive(self):
+                return not self._dead
+
+            def send_request(self, event, timeout_ms):
+                raise TimeoutError("test timeout")
+
+            def shutdown(self):
+                self._dead = True
+
+        release_calls = []
+
+        def track_release_2(pool, entry, discard=False):
+            release_calls.append(("release", discard))
+
+        timeout_worker = _FakeWorkerTimeout()
+        timeout_entry = {"worker": timeout_worker, "busy": True, "last_used": 0.0}
+        rust_daemon._checkout_persistent_runtime_worker = lambda *_a, **_k: timeout_entry
+        rust_daemon._release_persistent_runtime_worker = track_release_2
+
+        resp2 = rust_daemon._run_prepared_request_persistent(
+            "test-key-2", Path("/tmp/handler.rs"), Path("/tmp/fn_handler"), {}, 100, {"acquire_timeout_ms": 50}
+        )
+        assert resp2["status"] == 504
+        assert any(d for _, d in release_calls if d is True)
+
+        # Exception path with entry not None (lines 1136-1137).
+        class _FakeWorkerError(_OrigRustWorker):
+            __slots__ = ()
+
+            def __init__(self):
+                self._dead = False
+                self.lock = _threading.Lock()
+
+            @property
+            def alive(self):
+                return not self._dead
+
+            def send_request(self, event, timeout_ms):
+                raise RuntimeError("boom")
+
+            def shutdown(self):
+                self._dead = True
+
+        release_calls.clear()
+        exc_worker = _FakeWorkerError()
+        exc_entry = {"worker": exc_worker, "busy": True, "last_used": 0.0}
+        rust_daemon._checkout_persistent_runtime_worker = lambda *_a, **_k: exc_entry
+
+        resp3 = rust_daemon._run_prepared_request_persistent(
+            "test-key-2", Path("/tmp/handler.rs"), Path("/tmp/fn_handler"), {}, 100, {"acquire_timeout_ms": 50}
+        )
+        assert resp3["status"] == 500
+        assert any(d for _, d in release_calls if d is True)
+
+        # Invalid worker type (line 1126-1127): entry has no valid worker object.
+        release_calls.clear()
+        bad_entry = {"worker": "not-a-worker", "busy": True, "last_used": 0.0}
+        rust_daemon._checkout_persistent_runtime_worker = lambda *_a, **_k: bad_entry
+
+        resp4 = rust_daemon._run_prepared_request_persistent(
+            "test-key-2", Path("/tmp/handler.rs"), Path("/tmp/fn_handler"), {}, 100, {"acquire_timeout_ms": 50}
+        )
+        assert resp4["status"] == 500
+        assert "invalid persistent worker" in resp4["body"]
+    finally:
+        rust_daemon._ensure_persistent_runtime_pool = old_ensure
+        rust_daemon._checkout_persistent_runtime_worker = old_checkout
+        rust_daemon._release_persistent_runtime_worker = old_release
+        rust_daemon._PERSISTENT_RUNTIME_POOLS = old_pools_2
+
+
 def main() -> None:
     test_read_function_env_and_resolve_path()
     test_read_write_frame_and_normalize_response()
@@ -1535,6 +1794,7 @@ def main() -> None:
     test_rust_main_rs_merges_params_into_event()
     test_rust_handle_request_passes_params_through()
     test_persistent_pool_lifecycle()
+    test_remaining_coverage_gaps()
     print("rust daemon unit tests passed")
 
 

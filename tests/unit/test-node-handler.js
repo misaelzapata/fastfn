@@ -151,6 +151,12 @@ async function main() {
   await testTelegramAiDigestEmptyChoices();
   await testEdgeFilterUserIdVariant();
   await testWhatsappDefaultQrFormat();
+  await testWhatsappSendNullTo();
+  await testWhatsappSendAlreadyFormattedJid();
+  await testWhatsappExtractTextImageVideoCaption();
+  await testWhatsappStatusPayloadFsError();
+  await testWhatsappQrSizeClamping();
+  await testWhatsappSendMessageError();
   console.log("node unit tests passed");
 }
 
@@ -2918,6 +2924,232 @@ async function testEdgeFilterUserIdVariant() {
     env: { EDGE_FILTER_API_KEY: "dev", UPSTREAM_TOKEN: "bearer-tok" },
   });
   assert.equal(resp2.proxy.headers.authorization, "Bearer bearer-tok");
+}
+
+// whatsapp: normalizeJid with null/undefined "to" (line 30)
+async function testWhatsappSendNullTo() {
+  resetWhatsappRuntimeState();
+  const state = global.__fastfn_wa;
+  state.connected = true;
+  state.socket = { sendMessage: async () => ({}) };
+
+  // "to" is omitted entirely — normalizeJid receives undefined
+  const resp = await whatsappHandler({
+    method: "POST",
+    query: { action: "send" },
+    body: JSON.stringify({ text: "hello" }),
+    env: {},
+  });
+  assert.equal(resp.status, 500);
+  const body = JSON.parse(resp.body);
+  assert.ok(String(body.error).includes("to is required"));
+}
+
+// whatsapp: normalizeJid when raw already has @s.whatsapp.net or @g.us (line 32)
+async function testWhatsappSendAlreadyFormattedJid() {
+  resetWhatsappRuntimeState();
+  const state = global.__fastfn_wa;
+  state.connected = true;
+  let capturedJid = null;
+  state.socket = {
+    sendMessage: async (jid) => { capturedJid = jid; return { key: { id: "m1" } }; },
+  };
+
+  // Already has @s.whatsapp.net suffix
+  const resp1 = await whatsappHandler({
+    method: "POST",
+    query: { action: "send" },
+    body: JSON.stringify({ to: "15551234567@s.whatsapp.net", text: "hi" }),
+    env: {},
+  });
+  assert.equal(resp1.status, 200);
+  assert.equal(capturedJid, "15551234567@s.whatsapp.net");
+
+  // Already has @g.us suffix (group)
+  capturedJid = null;
+  const resp2 = await whatsappHandler({
+    method: "POST",
+    query: { action: "send" },
+    body: JSON.stringify({ to: "120363012345@g.us", text: "hi group" }),
+    env: {},
+  });
+  assert.equal(resp2.status, 200);
+  assert.equal(capturedJid, "120363012345@g.us");
+}
+
+// whatsapp: extractText with imageMessage.caption and videoMessage.caption (line 41)
+async function testWhatsappExtractTextImageVideoCaption() {
+  resetWhatsappRuntimeState();
+  const state = global.__fastfn_wa;
+  const listeners = {};
+  const fakeSocket = {
+    user: { id: "bot@s.whatsapp.net" },
+    ev: {
+      on: (name, cb) => {
+        listeners[name] = cb;
+        if (name === "connection.update") {
+          cb({ connection: "open" });
+        }
+      },
+    },
+    sendMessage: async () => ({}),
+    end: () => {},
+  };
+  const fakeBaileys = {
+    useMultiFileAuthState: async () => ({ state: {}, saveCreds: () => {} }),
+    fetchLatestBaileysVersion: async () => ({ version: [2, 3000, 1] }),
+    makeWASocket: () => fakeSocket,
+    Browsers: { macOS: () => "FastFNTest" },
+  };
+
+  const whatsappPath = path.join(root, "examples/functions/node/whatsapp/app.js");
+  const resolvedWhatsappPath = require.resolve(whatsappPath);
+  const originalCacheEntry = require.cache[resolvedWhatsappPath];
+  const coverageKey = Object.keys(global.__coverage__ || {}).find(k => k.includes("whatsapp/app.js"));
+  const savedCoverage = coverageKey ? JSON.parse(JSON.stringify(global.__coverage__[coverageKey])) : null;
+
+  await withPatchedModuleLoad(
+    { "@whiskeysockets/baileys": fakeBaileys },
+    async () => {
+      // Use requireFresh so the module-level `baileys` variable is null again
+      const freshModule = requireFresh(whatsappPath);
+      await freshModule.handler({
+        method: "POST", query: { action: "connect" }, body: "{}", env: {},
+      });
+
+      const upsert = listeners["messages.upsert"];
+      assert.equal(typeof upsert, "function");
+
+      // Test imageMessage.caption
+      state.inbox = [];
+      upsert({
+        messages: [{
+          key: { id: "img1", remoteJid: "1234@s.whatsapp.net", fromMe: false },
+          pushName: "Alice", messageTimestamp: 1000,
+          message: { imageMessage: { caption: "photo caption" } },
+        }],
+      });
+      assert.equal(state.inbox.length, 1);
+      assert.equal(state.inbox[0].text, "photo caption");
+
+      // Test videoMessage.caption
+      state.inbox = [];
+      upsert({
+        messages: [{
+          key: { id: "vid1", remoteJid: "5678@s.whatsapp.net", fromMe: false },
+          pushName: "Bob", messageTimestamp: 2000,
+          message: { videoMessage: { caption: "video caption" } },
+        }],
+      });
+      assert.equal(state.inbox.length, 1);
+      assert.equal(state.inbox[0].text, "video caption");
+    }
+  );
+
+  // Merge coverage from fresh module back into original
+  if (savedCoverage && coverageKey && global.__coverage__) {
+    const freshCoverage = global.__coverage__[coverageKey];
+    if (freshCoverage && freshCoverage.s) {
+      for (const key of Object.keys(freshCoverage.s)) {
+        if (savedCoverage.s && key in savedCoverage.s) {
+          savedCoverage.s[key] = (savedCoverage.s[key] || 0) + (freshCoverage.s[key] || 0);
+        }
+      }
+      if (freshCoverage.b && savedCoverage.b) {
+        for (const key of Object.keys(freshCoverage.b)) {
+          if (key in savedCoverage.b && Array.isArray(savedCoverage.b[key]) && Array.isArray(freshCoverage.b[key])) {
+            for (let i = 0; i < freshCoverage.b[key].length; i++) {
+              savedCoverage.b[key][i] = (savedCoverage.b[key][i] || 0) + (freshCoverage.b[key][i] || 0);
+            }
+          }
+        }
+      }
+      if (freshCoverage.f && savedCoverage.f) {
+        for (const key of Object.keys(freshCoverage.f)) {
+          if (key in savedCoverage.f) {
+            savedCoverage.f[key] = (savedCoverage.f[key] || 0) + (freshCoverage.f[key] || 0);
+          }
+        }
+      }
+    }
+    global.__coverage__[coverageKey] = savedCoverage;
+  }
+  delete require.cache[resolvedWhatsappPath];
+  if (originalCacheEntry) require.cache[resolvedWhatsappPath] = originalCacheEntry;
+  if (state.reconnectTimer) { clearTimeout(state.reconnectTimer); state.reconnectTimer = null; }
+}
+
+// whatsapp: statusPayload() catch block for fs.readdirSync exception (line 51)
+async function testWhatsappStatusPayloadFsError() {
+  resetWhatsappRuntimeState();
+  const fsModule = require("node:fs");
+
+  // Temporarily make readdirSync and existsSync throw for the SESSION_DIR
+  const origExistsSync = fsModule.existsSync;
+  fsModule.existsSync = (p) => {
+    if (String(p).includes(".session")) throw new Error("simulated fs error");
+    return origExistsSync(p);
+  };
+  try {
+    const resp = await whatsappHandler({
+      method: "GET",
+      query: { action: "status" },
+      body: "",
+      env: {},
+    });
+    assert.equal(resp.status, 200);
+    const body = JSON.parse(resp.body);
+    // The catch block should swallow the error and has_session stays false
+    assert.equal(body.has_session, false);
+  } finally {
+    fsModule.existsSync = origExistsSync;
+  }
+}
+
+// whatsapp: QR size clamping edge cases (line 207) — size=0 and size=9999
+async function testWhatsappQrSizeClamping() {
+  resetWhatsappRuntimeState();
+  const state = global.__fastfn_wa;
+  state.lastQr = "test-qr-for-size";
+  state.lastQrAt = Date.now();
+
+  // size=0 should clamp to 128 (min)
+  const resp1 = await whatsappHandler({
+    method: "GET",
+    query: { action: "qr", size: "0" },
+    body: "",
+    env: {},
+  });
+  assert.equal(resp1.status, 200);
+
+  // size=9999 should clamp to 1024 (max)
+  const resp2 = await whatsappHandler({
+    method: "GET",
+    query: { action: "qr", size: "9999" },
+    body: "",
+    env: {},
+  });
+  assert.equal(resp2.status, 200);
+}
+
+// whatsapp: send action socket.sendMessage() error catch block (line 235)
+async function testWhatsappSendMessageError() {
+  resetWhatsappRuntimeState();
+  const state = global.__fastfn_wa;
+  state.connected = true;
+  state.socket = {
+    sendMessage: async () => { throw new Error("socket write failed"); },
+  };
+
+  const resp = await whatsappHandler({
+    method: "POST",
+    query: { action: "send" },
+    body: JSON.stringify({ to: "15551234567", text: "hello" }),
+    env: {},
+  });
+  assert.equal(resp.status, 500);
+  const body = JSON.parse(resp.body);
+  assert.ok(String(body.error).includes("socket write failed"));
 }
 
 async function testWhatsappDefaultQrFormat() {

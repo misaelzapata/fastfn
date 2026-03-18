@@ -882,7 +882,7 @@ def _checkout_persistent_runtime_worker(pool: Dict[str, Any], acquire_timeout_ms
             if remaining <= 0:
                 raise TimeoutError("runtime worker timeout")
             cond.wait(timeout=min(remaining, 0.2))
-    for worker in stale_workers:
+    for worker in stale_workers:  # pragma: no cover – unreachable after while True
         worker.shutdown()
 
 
