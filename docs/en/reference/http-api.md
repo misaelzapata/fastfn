@@ -69,7 +69,7 @@ Key rule (applies to all of the above):
 
 ### Custom routes via `invoke.routes`
 
-You can map additional public routes per function in `fn.config.json`:
+By default, a function at `functions/my-func/app.py` is reachable at `/my-func`. With `invoke.routes` you can expose it at one or more custom public URLs instead — useful for REST APIs, vanity paths, or mounting a function at a specific prefix.
 
 ```json
 {
@@ -80,7 +80,11 @@ You can map additional public routes per function in `fn.config.json`:
 }
 ```
 
-After reload/discovery, calling `/api/node-echo` invokes that function.
+- `routes` is an array of URL paths. Each path becomes a public endpoint that invokes this function.
+- Wildcard routes are supported: `"/api/v1/*"` matches `/api/v1/anything/here`.
+- `methods` restricts which HTTP methods are allowed (default: all methods).
+- After discovery (startup or hot-reload), the gateway registers these routes automatically.
+- If another function already maps the same route, the request is rejected unless `invoke.force-url` is `true`.
 
 ### Debug headers (opt-in)
 

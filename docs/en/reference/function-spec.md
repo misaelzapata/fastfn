@@ -40,7 +40,7 @@ Implemented and runnable now:
 - `python`
 - `node`
 - `php`
-- `lua` (in-process)
+- `lua` (runs in-process inside OpenResty — no external daemon needed)
 
 Experimental (opt-in via `FN_RUNTIMES`):
 
@@ -488,16 +488,14 @@ Current runtime behavior:
 | Rust | supported | runtime dispatch happens through the compiled binary launcher |
 | Lua | not applicable | runs in-process inside OpenResty |
 
-Observed native benchmark on **March 13, 2026** (`6` concurrent requests to a `200ms` sleep handler, local host, `1` vs `3` runtime daemons):
+Observed native benchmark on **March 14, 2026** (`6` concurrent requests to a `200ms` sleep handler, local host, `1` vs `3` runtime daemons):
 
-- Node: `267.2ms` -> `232.4ms` (`13.0%` faster)
-- Python: `1281.9ms` -> `447.4ms` (`65.1%` faster)
-- PHP: `629.4ms` -> `862.5ms` (`37.0%` slower)
-- Rust: `384.6ms` -> `417.7ms` (`8.6%` slower)
+- Node: `276.7ms` → `243.1ms` (`12.1%` faster)
+- Python: `1283.3ms` → `451.6ms` (`64.8%` faster)
+- Rust: `529.2ms` → `423.3ms` (`20.0%` faster)
+- PHP: `872.9ms` → `953.0ms` (`9.2%` slower — see [benchmarks](../explanation/performance-benchmarks.md) for context)
 
-Raw artifact:
-
-- `tests/stress/results/2026-03-13-runtime-daemon-scaling-native.json`
+Raw artifact: `tests/stress/results/2026-03-14-runtime-daemon-scaling-native.json`
 
 Use those numbers as a reminder to measure your own workload before enabling extra daemons everywhere.
 

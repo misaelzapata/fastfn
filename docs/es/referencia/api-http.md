@@ -69,7 +69,7 @@ Regla clave (aplica a todas):
 
 ### Rutas custom via `invoke.routes`
 
-Endpoints mapeados opcionales por funcion desde `fn.config.json`:
+Por defecto, una función en `functions/mi-func/app.py` es accesible en `/mi-func`. Con `invoke.routes` puedes exponerla en una o más URLs públicas personalizadas — útil para APIs REST, rutas vanity, o montar una función en un prefijo específico.
 
 ```json
 {
@@ -80,7 +80,11 @@ Endpoints mapeados opcionales por funcion desde `fn.config.json`:
 }
 ```
 
-Despues de recargar/discovery, llamar `/api/node-echo` invoca esa funcion.
+- `routes` es un array de rutas URL. Cada ruta se convierte en un endpoint público que invoca esta función.
+- Se soportan rutas wildcard: `"/api/v1/*"` matchea `/api/v1/cualquier/cosa`.
+- `methods` restringe qué métodos HTTP están permitidos (default: todos).
+- Después del discovery (inicio o hot-reload), el gateway registra estas rutas automáticamente.
+- Si otra función ya mapea la misma ruta, la petición es rechazada a menos que `invoke.force-url` sea `true`.
 
 ### Debug headers (opt-in)
 
