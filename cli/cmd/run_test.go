@@ -51,6 +51,7 @@ func saveRunGlobals(t *testing.T) {
 	origAbs := runAbsFn
 	origNative := runNativeMode
 	origForce := runForceURL
+	origHotReload := runHotReload
 	t.Cleanup(func() {
 		runProcessRunner = origRunner
 		runFatalf = origFatalf
@@ -58,6 +59,7 @@ func saveRunGlobals(t *testing.T) {
 		runAbsFn = origAbs
 		runNativeMode = origNative
 		runForceURL = origForce
+		runHotReload = origHotReload
 		viper.Reset()
 	})
 }
@@ -88,11 +90,11 @@ func TestRunCmd_NativeMode_HappyPath(t *testing.T) {
 	if !captured.VerifyTLS {
 		t.Error("expected VerifyTLS=true")
 	}
-	if captured.HotReload {
-		t.Error("expected HotReload=false")
+	if !captured.HotReload {
+		t.Error("expected HotReload=true (default)")
 	}
-	if captured.Watch {
-		t.Error("expected Watch=false")
+	if !captured.Watch {
+		t.Error("expected Watch=true (follows HotReload)")
 	}
 }
 
@@ -258,6 +260,149 @@ func TestRunCmd_PublicBaseURLEnvWins(t *testing.T) {
 
 	if got := os.Getenv("FN_PUBLIC_BASE_URL"); got != "https://from-env.com" {
 		t.Fatalf("FN_PUBLIC_BASE_URL = %q, want env value", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runCmd.Run – hot reload tests
+// ---------------------------------------------------------------------------
+
+func TestRunCmd_HotReloadDefaultEnabled(t *testing.T) {
+	saveRunGlobals(t)
+	viper.Reset()
+
+	tmpDir := t.TempDir()
+	runNativeMode = true
+	runForceURL = false
+	runHotReload = false
+
+	var captured process.RunConfig
+	runProcessRunner = func(cfg process.RunConfig) error {
+		captured = cfg
+		return nil
+	}
+	runFatalf = func(format string, args ...interface{}) {}
+	runFatal = func(args ...interface{}) {}
+	runAbsFn = filepath.Abs
+
+	t.Setenv("FN_HOT_RELOAD", "")
+	runCmd.Run(runCmd, []string{tmpDir})
+
+	if !captured.HotReload {
+		t.Error("expected HotReload=true by default")
+	}
+	if !captured.Watch {
+		t.Error("expected Watch=true by default")
+	}
+}
+
+func TestRunCmd_HotReloadDisabledByEnv(t *testing.T) {
+	saveRunGlobals(t)
+	viper.Reset()
+
+	tmpDir := t.TempDir()
+	runNativeMode = true
+	runForceURL = false
+	runHotReload = false
+
+	var captured process.RunConfig
+	runProcessRunner = func(cfg process.RunConfig) error {
+		captured = cfg
+		return nil
+	}
+	runFatalf = func(format string, args ...interface{}) {}
+	runFatal = func(args ...interface{}) {}
+	runAbsFn = filepath.Abs
+
+	t.Setenv("FN_HOT_RELOAD", "0")
+	runCmd.Run(runCmd, []string{tmpDir})
+
+	if captured.HotReload {
+		t.Error("expected HotReload=false when FN_HOT_RELOAD=0")
+	}
+	if captured.Watch {
+		t.Error("expected Watch=false when FN_HOT_RELOAD=0")
+	}
+}
+
+func TestRunCmd_HotReloadDisabledByConfig(t *testing.T) {
+	saveRunGlobals(t)
+	viper.Reset()
+	viper.Set("hot-reload", false)
+
+	tmpDir := t.TempDir()
+	runNativeMode = true
+	runForceURL = false
+	runHotReload = false
+
+	var captured process.RunConfig
+	runProcessRunner = func(cfg process.RunConfig) error {
+		captured = cfg
+		return nil
+	}
+	runFatalf = func(format string, args ...interface{}) {}
+	runFatal = func(args ...interface{}) {}
+	runAbsFn = filepath.Abs
+
+	t.Setenv("FN_HOT_RELOAD", "")
+	runCmd.Run(runCmd, []string{tmpDir})
+
+	if captured.HotReload {
+		t.Error("expected HotReload=false when config hot-reload=false")
+	}
+}
+
+func TestRunCmd_HotReloadFlagOverridesEnv(t *testing.T) {
+	saveRunGlobals(t)
+	viper.Reset()
+
+	tmpDir := t.TempDir()
+	runNativeMode = true
+	runForceURL = false
+	runHotReload = true
+
+	var captured process.RunConfig
+	runProcessRunner = func(cfg process.RunConfig) error {
+		captured = cfg
+		return nil
+	}
+	runFatalf = func(format string, args ...interface{}) {}
+	runFatal = func(args ...interface{}) {}
+	runAbsFn = filepath.Abs
+
+	t.Setenv("FN_HOT_RELOAD", "0")
+	runCmd.Run(runCmd, []string{tmpDir})
+
+	if !captured.HotReload {
+		t.Error("expected HotReload=true when --hot-reload flag is set")
+	}
+}
+
+func TestRunCmd_HotReloadEnvFalseVariants(t *testing.T) {
+	saveRunGlobals(t)
+
+	for _, val := range []string{"false", "off", "no"} {
+		viper.Reset()
+		tmpDir := t.TempDir()
+		runNativeMode = true
+		runForceURL = false
+		runHotReload = false
+
+		var captured process.RunConfig
+		runProcessRunner = func(cfg process.RunConfig) error {
+			captured = cfg
+			return nil
+		}
+		runFatalf = func(format string, args ...interface{}) {}
+		runFatal = func(args ...interface{}) {}
+		runAbsFn = filepath.Abs
+
+		t.Setenv("FN_HOT_RELOAD", val)
+		runCmd.Run(runCmd, []string{tmpDir})
+
+		if captured.HotReload {
+			t.Errorf("expected HotReload=false for FN_HOT_RELOAD=%q", val)
+		}
 	}
 }
 

@@ -11,7 +11,7 @@
 - Outcome: production run mode and edge hardening are correctly configured
 
 
-FastFN is designed to run in production using the same engine as development, but with hot reload disabled and safer defaults.
+FastFN is designed to run in production using the same engine as development, with hot reload enabled by default and safer TLS defaults.
 
 ## Current Status
 
@@ -22,11 +22,23 @@ FastFN is designed to run in production using the same engine as development, bu
 
 ### 1. Self-Hosted (Bare Metal / VM)
 
-The simplest way is to run the binary in `run` mode. This disables hot reload and file watchers.
+The simplest way is to run the binary in `run` mode. Hot reload and file watchers are enabled by default so code changes take effect immediately without restarting.
 
 **Command:**
 ```bash
 fastfn run --native /path/to/your/functions
+```
+
+To disable hot reload (for example in a locked-down deployment):
+
+```bash
+FN_HOT_RELOAD=0 fastfn run --native /path/to/your/functions
+```
+
+Or in `fastfn.json`:
+
+```json
+{ "hot-reload": false }
 ```
 
 **Requirements:**

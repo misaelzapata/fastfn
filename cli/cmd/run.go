@@ -8,10 +8,12 @@ import (
 
 	"github.com/misaelzapata/fastfn/cli/internal/process"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var runNativeMode bool
 var runForceURL bool
+var runHotReload bool
 var runProcessRunner = process.RunNative
 var runFatalf = log.Fatalf
 var runFatal = log.Fatal
@@ -29,15 +31,16 @@ func resolveRunTargetDir(args []string) string {
 
 var runCmd = &cobra.Command{
 	Use:   "run [dir]",
-	Short: "Run with production defaults (no hot reload)",
+	Short: "Run with production defaults",
 	Long: `Start FastFN with production-oriented defaults:
-- hot reload disabled
-- file watcher disabled
+- hot reload enabled by default (disable with FN_HOT_RELOAD=0 or config hot-reload: false)
+- file watcher follows hot reload setting
 - TLS verification enabled
 
 At the moment, production mode is supported through --native.`,
 	Example: `  fastfn run --native .
-  fastfn run --native examples/functions/next-style
+  fastfn run --native --hot-reload .
+  FN_HOT_RELOAD=1 fastfn run --native .
   FN_HOST_PORT=8081 fastfn run --native .`,
 	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -56,6 +59,22 @@ At the moment, production mode is supported through --native.`,
 		if runForceURL {
 			_ = os.Setenv("FN_FORCE_URL", "1")
 			fmt.Println("force-url enabled (will allow config/policy routes to override existing URLs)")
+		}
+
+		// Resolve hot-reload: flag > env > config > default (true)
+		hotReload := true
+		if runHotReload {
+			// Explicit --hot-reload flag always wins
+			hotReload = true
+		} else if envVal := os.Getenv("FN_HOT_RELOAD"); envVal != "" {
+			hotReload = envVal != "0" && envVal != "false" && envVal != "off" && envVal != "no"
+		} else if viper.IsSet("hot-reload") {
+			hotReload = viper.GetBool("hot-reload")
+		}
+		if hotReload {
+			fmt.Println("Hot reload enabled (file changes will trigger handler reload)")
+		} else {
+			fmt.Println("Hot reload disabled")
 		}
 
 		targetDir := resolveRunTargetDir(args)
@@ -80,9 +99,9 @@ At the moment, production mode is supported through --native.`,
 
 			err := runProcessRunner(process.RunConfig{
 				FnDir:     absPath,
-				HotReload: false,
+				HotReload: hotReload,
 				VerifyTLS: true,
-				Watch:     false,
+				Watch:     hotReload,
 			})
 			if err != nil {
 				runFatalf("Native run failed: %v", err)
@@ -97,4 +116,5 @@ func init() {
 	rootCmd.AddCommand(runCmd)
 	runCmd.Flags().BoolVar(&runNativeMode, "native", false, "Run on host (required; Docker production mode is not wired yet)")
 	runCmd.Flags().BoolVar(&runForceURL, "force-url", false, "Allow config/policy routes to override existing mapped URLs (unsafe; prefer fixing route conflicts)")
+	runCmd.Flags().BoolVar(&runHotReload, "hot-reload", false, "Force-enable hot reload (default: enabled; disable with FN_HOT_RELOAD=0)")
 }
