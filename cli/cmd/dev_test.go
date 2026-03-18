@@ -1525,3 +1525,71 @@ func TestDevCmdRun_WatcherCallbackInvoked(t *testing.T) {
 
 	devCmd.Run(devCmd, []string{fnDir})
 }
+
+// TestDevCmdRun_PortableMode covers the portable mode branch (lines 155-176)
+// when no docker-compose.yml is found anywhere.
+func TestDevCmdRun_PortableMode(t *testing.T) {
+	stubDevGlobals(t)
+
+	// Create a temp dir with functions but NO docker-compose.yml
+	tmpDir := t.TempDir()
+	fnDir := filepath.Join(tmpDir, "functions")
+	os.MkdirAll(fnDir, 0755)
+	os.WriteFile(filepath.Join(fnDir, "get.hello.js"), []byte("module.exports = {};"), 0644)
+
+	// Change wd to a dir without compose file
+	origWd, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	t.Cleanup(func() { os.Chdir(origWd) })
+
+	var fatalMsg string
+	devFatal = func(v ...interface{}) {
+		fatalMsg = fmt.Sprint(v...)
+		panic("devFatal called")
+	}
+
+	func() {
+		defer func() { recover() }()
+		devCmd.Run(devCmd, []string{fnDir})
+	}()
+
+	if fatalMsg == "" {
+		t.Fatal("expected devFatal to be called for portable mode")
+	}
+	if !strings.Contains(fatalMsg, "Portable mode") {
+		t.Fatalf("expected portable mode message, got %q", fatalMsg)
+	}
+}
+
+// TestDevCmdRun_ComposeReadError covers line 182-184 when docker-compose.yml
+// exists but cannot be read.
+func TestDevCmdRun_ComposeReadError(t *testing.T) {
+	stubDevGlobals(t)
+
+	projDir := createComposeProject(t)
+	fnDir := filepath.Join(projDir, "functions")
+
+	origWd, _ := os.Getwd()
+	os.Chdir(projDir)
+	t.Cleanup(func() { os.Chdir(origWd) })
+
+	// Make docker-compose.yml unreadable
+	composePath := filepath.Join(projDir, "docker-compose.yml")
+	os.Chmod(composePath, 0000)
+	t.Cleanup(func() { os.Chmod(composePath, 0644) })
+
+	var fatalfCalled bool
+	devFatalf = func(format string, v ...interface{}) {
+		fatalfCalled = true
+		panic("devFatalf called")
+	}
+
+	func() {
+		defer func() { recover() }()
+		devCmd.Run(devCmd, []string{fnDir})
+	}()
+
+	if !fatalfCalled {
+		t.Fatal("expected devFatalf to be called for compose read error")
+	}
+}
