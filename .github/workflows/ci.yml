@@ -42,7 +42,7 @@ jobs:
         run: ./cli/coverage-go.sh
 
       - name: Upload Go coverage artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: go-cli-coverage
           path: |
@@ -63,7 +63,7 @@ jobs:
         run: cd cli && go build -o ../bin/fastfn
 
       - name: Upload CLI build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: fastfn-cli-linux
           path: bin/fastfn
@@ -83,7 +83,7 @@ jobs:
           python-version: "3.12"
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "20"
 
@@ -185,7 +185,7 @@ jobs:
         run: bash tests/unit/test-sdks.sh
 
       - name: Upload coverage artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: coverage-artifacts
           path: |
@@ -269,7 +269,7 @@ jobs:
           python-version: "3.12"
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "20"
 
@@ -347,7 +347,7 @@ jobs:
 
       - name: Upload Playwright artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: playwright-report
           if-no-files-found: ignore
