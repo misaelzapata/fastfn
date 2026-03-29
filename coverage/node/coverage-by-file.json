@@ -1,0 +1,137 @@
+{
+  "format": "c8",
+  "input": "/Users/misaelzapata/Downloads/simpleroute/coverage/node/coverage-summary.json",
+  "total": {
+    "covered": 4268,
+    "total": 4268,
+    "pct": 100.0
+  },
+  "files": [
+    {
+      "file": "/Users/misaelzapata/Downloads/simpleroute/examples/functions/ip-intel/get.remote.js",
+      "covered": 96,
+      "total": 96,
+      "pct": 100.0
+    },
+    {
+      "file": "/Users/misaelzapata/Downloads/simpleroute/examples/functions/node/ai-tool-agent/_internal.js",
+      "covered": 373,
+      "total": 373,
+      "pct": 100.0
+    },
+    {
+      "file": "/Users/misaelzapata/Downloads/simpleroute/examples/functions/node/ai-tool-agent/app.js",
+      "covered": 170,
+      "total": 170,
+      "pct": 100.0
+    },
+    {
+      "file": "/Users/misaelzapata/Downloads/simpleroute/examples/functions/node/echo/handler.js",
+      "covered": 16,
+      "total": 16,
+      "pct": 100.0
+    },
+    {
+      "file": "/Users/misaelzapata/Downloads/simpleroute/examples/functions/node/edge-auth-gateway/app.js",
+      "covered": 59,
+      "total": 59,
+      "pct": 100.0
+    },
+    {
+      "file": "/Users/misaelzapata/Downloads/simpleroute/examples/functions/node/edge-filter/app.js",
+      "covered": 63,
+      "total": 63,
+      "pct": 100.0
+    },
+    {
+      "file": "/Users/misaelzapata/Downloads/simpleroute/examples/functions/node/edge-header-inject/app.js",
+      "covered": 30,
+      "total": 30,
+      "pct": 100.0
+    },
+    {
+      "file": "/Users/misaelzapata/Downloads/simpleroute/examples/functions/node/edge-proxy/app.js",
+      "covered": 24,
+      "total": 24,
+      "pct": 100.0
+    },
+    {
+      "file": "/Users/misaelzapata/Downloads/simpleroute/examples/functions/node/github-webhook-guard/app.js",
+      "covered": 92,
+      "total": 92,
+      "pct": 100.0
+    },
+    {
+      "file": "/Users/misaelzapata/Downloads/simpleroute/examples/functions/node/hello/v2/app.js",
+      "covered": 1,
+      "total": 1,
+      "pct": 100.0
+    },
+    {
+      "file": "/Users/misaelzapata/Downloads/simpleroute/examples/functions/node/node-echo/app.js",
+      "covered": 9,
+      "total": 9,
+      "pct": 100.0
+    },
+    {
+      "file": "/Users/misaelzapata/Downloads/simpleroute/examples/functions/node/request-inspector/app.js",
+      "covered": 41,
+      "total": 41,
+      "pct": 100.0
+    },
+    {
+      "file": "/Users/misaelzapata/Downloads/simpleroute/examples/functions/node/telegram-ai-digest/_internal.js",
+      "covered": 356,
+      "total": 356,
+      "pct": 100.0
+    },
+    {
+      "file": "/Users/misaelzapata/Downloads/simpleroute/examples/functions/node/telegram-ai-digest/app.js",
+      "covered": 168,
+      "total": 168,
+      "pct": 100.0
+    },
+    {
+      "file": "/Users/misaelzapata/Downloads/simpleroute/examples/functions/node/telegram-ai-reply/_internal.js",
+      "covered": 866,
+      "total": 866,
+      "pct": 100.0
+    },
+    {
+      "file": "/Users/misaelzapata/Downloads/simpleroute/examples/functions/node/telegram-ai-reply/app.js",
+      "covered": 477,
+      "total": 477,
+      "pct": 100.0
+    },
+    {
+      "file": "/Users/misaelzapata/Downloads/simpleroute/examples/functions/node/telegram-send/app.js",
+      "covered": 102,
+      "total": 102,
+      "pct": 100.0
+    },
+    {
+      "file": "/Users/misaelzapata/Downloads/simpleroute/examples/functions/node/toolbox-bot/_internal.js",
+      "covered": 287,
+      "total": 287,
+      "pct": 100.0
+    },
+    {
+      "file": "/Users/misaelzapata/Downloads/simpleroute/examples/functions/node/toolbox-bot/app.js",
+      "covered": 105,
+      "total": 105,
+      "pct": 100.0
+    },
+    {
+      "file": "/Users/misaelzapata/Downloads/simpleroute/examples/functions/node/whatsapp/_internal.js",
+      "covered": 632,
+      "total": 632,
+      "pct": 100.0
+    },
+    {
+      "file": "/Users/misaelzapata/Downloads/simpleroute/examples/functions/node/whatsapp/app.js",
+      "covered": 301,
+      "total": 301,
+      "pct": 100.0
+    }
+  ]
+}

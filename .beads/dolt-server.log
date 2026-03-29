@@ -1,0 +1,592 @@
+Starting server with Config HP="127.0.0.1:13490"|T="28800000"|R="false"|L="info"
+time="2026-03-02T12:38:02-03:00" level=info msg="Creating root@localhost superuser"
+time="2026-03-02T12:38:02-03:00" level=info msg="Server ready. Accepting connections."
+time="2026-03-02T12:38:02-03:00" level=warning msg="secure_file_priv is set to \"\", which is insecure."
+time="2026-03-02T12:38:02-03:00" level=warning msg="Any user with GRANT FILE privileges will be able to read any file which the sql-server process can read."
+time="2026-03-02T12:38:02-03:00" level=warning msg="Please consider restarting the server with secure_file_priv set to a safe (or non-existent) directory."
+time="2026-03-02T12:38:02-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=1
+time="2026-03-02T12:38:02-03:00" level=info msg=ConnectionClosed connectionID=1
+time="2026-03-02T12:38:02-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=2
+time="2026-03-02T12:38:02-03:00" level=info msg=ConnectionClosed connectionID=2
+time="2026-03-02T12:38:02-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=3
+time="2026-03-02T12:38:02-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=4
+time="2026-03-02T12:38:02-03:00" level=info msg=ConnectionClosed connectionID=3
+time="2026-03-02T12:38:02-03:00" level=error msg="unable to prepare query: table not found: wisps" query="SELECT id FROM wisps WHERE id IN (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+time="2026-03-02T12:38:02-03:00" level=error msg="unable to prepare query: table not found: wisps (errno 1146) (sqlstate HY000)"
+time="2026-03-02T12:38:02-03:00" level=error msg="unable to prepare query: table not found: wisps" query="\n\t\tSELECT id FROM wisps\n\t\tWHERE status NOT IN (?) AND issue_type NOT IN (?,?,?,?,?) AND (is_template = 0 OR is_template IS NULL)\n\t\tORDER BY priority ASC, created_at DESC\n\t\t LIMIT 50\n\t"
+time="2026-03-02T12:38:02-03:00" level=error msg="unable to prepare query: table not found: wisps (errno 1146) (sqlstate HY000)"
+time="2026-03-02T12:38:02-03:00" level=error msg="unable to prepare query: table not found: wisps" query="SELECT id FROM wisps WHERE id IN (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+time="2026-03-02T12:38:02-03:00" level=error msg="unable to prepare query: table not found: wisps (errno 1146) (sqlstate HY000)"
+time="2026-03-02T12:38:02-03:00" level=error msg="unable to prepare query: table not found: wisps" query="SELECT id FROM wisps WHERE id IN (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+time="2026-03-02T12:38:02-03:00" level=error msg="unable to prepare query: table not found: wisps (errno 1146) (sqlstate HY000)"
+time="2026-03-02T12:38:02-03:00" level=error msg="unable to prepare query: table not found: wisps" query="SELECT id FROM wisps WHERE id IN (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+time="2026-03-02T12:38:02-03:00" level=error msg="unable to prepare query: table not found: wisps (errno 1146) (sqlstate HY000)"
+time="2026-03-02T12:38:03-03:00" level=info msg=ConnectionClosed connectionID=4
+time="2026-03-02T12:40:49-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=5
+time="2026-03-02T12:40:49-03:00" level=info msg=ConnectionClosed connectionID=5
+time="2026-03-02T12:40:49-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=6
+time="2026-03-02T12:40:49-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=7
+time="2026-03-02T12:40:49-03:00" level=info msg=ConnectionClosed connectionID=6
+time="2026-03-02T12:40:49-03:00" level=warning msg="error running query" connectTime="2026-03-02 12:40:49.245856 -0300 -03 m=+167.119348751" connectionDb=beads_simpleroute connectionID=7 error="Duplicate key name 'idx_issues_issue_type'" queryTime="2026-03-02 12:40:49.256671 -0300 -03 m=+167.130163918"
+time="2026-03-02T12:40:49-03:00" level=warning msg="error running query" connectTime="2026-03-02 12:40:49.245856 -0300 -03 m=+167.119348751" connectionDb=beads_simpleroute connectionID=7 error="foreign key `fk_dep_depends_on` was not found on the table `dependencies`" queryTime="2026-03-02 12:40:49.257022 -0300 -03 m=+167.130515043"
+time="2026-03-02T12:40:49-03:00" level=info msg=ConnectionClosed connectionID=7
+time="2026-03-02T12:40:49-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=8
+time="2026-03-02T12:40:49-03:00" level=info msg=ConnectionClosed connectionID=8
+time="2026-03-02T12:40:49-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=9
+time="2026-03-02T12:40:49-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=10
+time="2026-03-02T12:40:49-03:00" level=info msg=ConnectionClosed connectionID=9
+time="2026-03-02T12:40:49-03:00" level=info msg=ConnectionClosed connectionID=10
+time="2026-03-02T12:40:52-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=11
+time="2026-03-02T12:40:52-03:00" level=info msg=ConnectionClosed connectionID=11
+time="2026-03-02T12:40:52-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=12
+time="2026-03-02T12:40:52-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=13
+time="2026-03-02T12:40:52-03:00" level=info msg=ConnectionClosed connectionID=12
+time="2026-03-02T12:40:52-03:00" level=info msg=ConnectionClosed connectionID=13
+time="2026-03-02T12:57:46-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=14
+time="2026-03-02T12:57:46-03:00" level=info msg=ConnectionClosed connectionID=14
+time="2026-03-02T12:57:46-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=15
+time="2026-03-02T12:57:46-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=16
+time="2026-03-02T12:57:46-03:00" level=info msg=ConnectionClosed connectionID=15
+time="2026-03-02T12:57:47-03:00" level=info msg=ConnectionClosed connectionID=16
+time="2026-03-02T13:04:41-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=17
+time="2026-03-02T13:04:41-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=18
+time="2026-03-02T13:04:41-03:00" level=info msg=ConnectionClosed connectionID=17
+time="2026-03-02T13:04:41-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=19
+time="2026-03-02T13:04:41-03:00" level=info msg=ConnectionClosed connectionID=18
+time="2026-03-02T13:04:41-03:00" level=info msg=ConnectionClosed connectionID=19
+time="2026-03-02T13:11:04-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=20
+time="2026-03-02T13:11:04-03:00" level=info msg=ConnectionClosed connectionID=20
+time="2026-03-02T13:11:04-03:00" level=info msg="Server closing listener. No longer accepting connections."
+time="2026-03-02T13:11:04-03:00" level=info msg="stats stopped: context canceled"
+Starting server with Config HP="127.0.0.1:13490"|T="28800000"|R="false"|L="info"
+time="2026-03-02T14:04:25-03:00" level=error msg="invalid journal record at offset 1866289: invalid journal record: CRC checksum does not match"
+time="2026-03-02T14:04:25-03:00" level=info msg="Server ready. Accepting connections."
+time="2026-03-02T14:04:25-03:00" level=warning msg="secure_file_priv is set to \"\", which is insecure."
+time="2026-03-02T14:04:25-03:00" level=warning msg="Any user with GRANT FILE privileges will be able to read any file which the sql-server process can read."
+time="2026-03-02T14:04:25-03:00" level=warning msg="Please consider restarting the server with secure_file_priv set to a safe (or non-existent) directory."
+time="2026-03-02T14:04:25-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=1
+time="2026-03-02T14:04:25-03:00" level=info msg=ConnectionClosed connectionID=1
+time="2026-03-02T14:04:25-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=2
+time="2026-03-02T14:04:25-03:00" level=info msg=ConnectionClosed connectionID=2
+time="2026-03-02T14:04:25-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=3
+time="2026-03-02T14:04:25-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=4
+time="2026-03-02T14:04:25-03:00" level=info msg=ConnectionClosed connectionID=3
+time="2026-03-02T14:04:26-03:00" level=info msg=ConnectionClosed connectionID=4
+time="2026-03-02T14:11:10-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=5
+time="2026-03-02T14:11:10-03:00" level=info msg=ConnectionClosed connectionID=5
+time="2026-03-02T14:11:10-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=6
+time="2026-03-02T14:11:10-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=7
+time="2026-03-02T14:11:10-03:00" level=info msg=ConnectionClosed connectionID=6
+time="2026-03-02T14:11:10-03:00" level=info msg=ConnectionClosed connectionID=7
+time="2026-03-02T14:15:25-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=8
+time="2026-03-02T14:15:25-03:00" level=info msg=ConnectionClosed connectionID=8
+time="2026-03-02T14:15:25-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=9
+time="2026-03-02T14:15:25-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=10
+time="2026-03-02T14:15:25-03:00" level=info msg=ConnectionClosed connectionID=9
+time="2026-03-02T14:15:26-03:00" level=info msg=ConnectionClosed connectionID=10
+time="2026-03-02T14:34:27-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=11
+time="2026-03-02T14:34:27-03:00" level=info msg=ConnectionClosed connectionID=11
+time="2026-03-02T14:34:27-03:00" level=info msg="Server closing listener. No longer accepting connections."
+time="2026-03-02T14:34:27-03:00" level=info msg="stats stopped: context canceled"
+Starting server with Config HP="127.0.0.1:13490"|T="28800000"|R="false"|L="info"
+time="2026-03-02T15:44:07-03:00" level=info msg="Server ready. Accepting connections."
+time="2026-03-02T15:44:07-03:00" level=warning msg="secure_file_priv is set to \"\", which is insecure."
+time="2026-03-02T15:44:07-03:00" level=warning msg="Any user with GRANT FILE privileges will be able to read any file which the sql-server process can read."
+time="2026-03-02T15:44:07-03:00" level=warning msg="Please consider restarting the server with secure_file_priv set to a safe (or non-existent) directory."
+time="2026-03-02T15:44:07-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=1
+time="2026-03-02T15:44:07-03:00" level=info msg=ConnectionClosed connectionID=1
+time="2026-03-02T15:44:07-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=2
+time="2026-03-02T15:44:07-03:00" level=info msg=ConnectionClosed connectionID=2
+time="2026-03-02T15:44:07-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=3
+time="2026-03-02T15:44:07-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=4
+time="2026-03-02T15:44:07-03:00" level=info msg=ConnectionClosed connectionID=3
+time="2026-03-02T15:44:07-03:00" level=info msg=ConnectionClosed connectionID=4
+time="2026-03-02T15:44:07-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=5
+time="2026-03-02T15:44:07-03:00" level=info msg=ConnectionClosed connectionID=5
+time="2026-03-02T15:44:07-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=6
+time="2026-03-02T15:44:07-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=7
+time="2026-03-02T15:44:07-03:00" level=info msg=ConnectionClosed connectionID=6
+time="2026-03-02T15:44:08-03:00" level=info msg=ConnectionClosed connectionID=7
+time="2026-03-02T16:14:09-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=8
+time="2026-03-02T16:14:09-03:00" level=info msg=ConnectionClosed connectionID=8
+time="2026-03-02T16:14:09-03:00" level=info msg="Server closing listener. No longer accepting connections."
+time="2026-03-02T16:14:09-03:00" level=info msg="stats stopped: context canceled"
+Starting server with Config HP="127.0.0.1:13490"|T="28800000"|R="false"|L="info"
+time="2026-03-11T13:39:42-03:00" level=info msg="Server ready. Accepting connections."
+time="2026-03-11T13:39:42-03:00" level=warning msg="secure_file_priv is set to \"\", which is insecure."
+time="2026-03-11T13:39:42-03:00" level=warning msg="Any user with GRANT FILE privileges will be able to read any file which the sql-server process can read."
+time="2026-03-11T13:39:42-03:00" level=warning msg="Please consider restarting the server with secure_file_priv set to a safe (or non-existent) directory."
+time="2026-03-11T13:39:43-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=1
+time="2026-03-11T13:39:43-03:00" level=info msg=ConnectionClosed connectionID=1
+time="2026-03-11T13:39:43-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=2
+time="2026-03-11T13:39:43-03:00" level=info msg=ConnectionClosed connectionID=2
+time="2026-03-11T13:39:43-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=3
+time="2026-03-11T13:39:43-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=4
+time="2026-03-11T13:39:43-03:00" level=info msg=ConnectionClosed connectionID=3
+time="2026-03-11T13:39:43-03:00" level=info msg=ConnectionClosed connectionID=4
+time="2026-03-11T13:47:44-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=5
+time="2026-03-11T13:47:44-03:00" level=info msg=ConnectionClosed connectionID=5
+time="2026-03-11T13:47:44-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=6
+time="2026-03-11T13:47:44-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=7
+time="2026-03-11T13:47:44-03:00" level=info msg=ConnectionClosed connectionID=6
+time="2026-03-11T13:47:44-03:00" level=info msg=ConnectionClosed connectionID=7
+time="2026-03-11T14:08:07-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=9
+time="2026-03-11T14:08:07-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=8
+time="2026-03-11T14:08:07-03:00" level=info msg=ConnectionClosed connectionID=8
+time="2026-03-11T14:08:07-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=10
+time="2026-03-11T14:08:07-03:00" level=info msg=ConnectionClosed connectionID=9
+time="2026-03-11T14:08:07-03:00" level=info msg=ConnectionClosed connectionID=10
+time="2026-03-11T14:08:16-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=11
+time="2026-03-11T14:08:16-03:00" level=info msg=ConnectionClosed connectionID=11
+time="2026-03-11T14:08:16-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=12
+time="2026-03-11T14:08:16-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=13
+time="2026-03-11T14:08:16-03:00" level=info msg=ConnectionClosed connectionID=12
+time="2026-03-11T14:08:16-03:00" level=info msg=ConnectionClosed connectionID=13
+time="2026-03-11T14:09:44-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=14
+time="2026-03-11T14:09:44-03:00" level=info msg=ConnectionClosed connectionID=14
+time="2026-03-11T14:09:44-03:00" level=info msg="Server closing listener. No longer accepting connections."
+time="2026-03-11T14:09:44-03:00" level=info msg="stats stopped: context canceled"
+Starting server with Config HP="127.0.0.1:13490"|T="28800000"|R="false"|L="info"
+time="2026-03-11T14:52:35-03:00" level=info msg="Server ready. Accepting connections."
+time="2026-03-11T14:52:35-03:00" level=warning msg="secure_file_priv is set to \"\", which is insecure."
+time="2026-03-11T14:52:35-03:00" level=warning msg="Any user with GRANT FILE privileges will be able to read any file which the sql-server process can read."
+time="2026-03-11T14:52:35-03:00" level=warning msg="Please consider restarting the server with secure_file_priv set to a safe (or non-existent) directory."
+time="2026-03-11T14:52:36-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=1
+time="2026-03-11T14:52:36-03:00" level=info msg=ConnectionClosed connectionID=1
+time="2026-03-11T14:52:36-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=2
+time="2026-03-11T14:52:36-03:00" level=info msg=ConnectionClosed connectionID=2
+time="2026-03-11T14:52:36-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=3
+time="2026-03-11T14:52:36-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=4
+time="2026-03-11T14:52:36-03:00" level=info msg=ConnectionClosed connectionID=3
+time="2026-03-11T14:52:36-03:00" level=info msg=ConnectionClosed connectionID=4
+time="2026-03-11T14:52:53-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=5
+time="2026-03-11T14:52:53-03:00" level=info msg=ConnectionClosed connectionID=5
+time="2026-03-11T14:52:53-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=6
+time="2026-03-11T14:52:53-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=7
+time="2026-03-11T14:52:53-03:00" level=info msg=ConnectionClosed connectionID=6
+time="2026-03-11T14:52:53-03:00" level=info msg=ConnectionClosed connectionID=7
+time="2026-03-11T15:19:05-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=9
+time="2026-03-11T15:19:05-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=8
+time="2026-03-11T15:19:05-03:00" level=info msg=ConnectionClosed connectionID=8
+time="2026-03-11T15:19:05-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=10
+time="2026-03-11T15:19:05-03:00" level=info msg=ConnectionClosed connectionID=9
+time="2026-03-11T15:19:05-03:00" level=info msg=ConnectionClosed connectionID=10
+time="2026-03-11T15:19:13-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=11
+time="2026-03-11T15:19:13-03:00" level=info msg=ConnectionClosed connectionID=11
+time="2026-03-11T15:19:13-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=12
+time="2026-03-11T15:19:13-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=13
+time="2026-03-11T15:19:13-03:00" level=info msg=ConnectionClosed connectionID=12
+time="2026-03-11T15:19:13-03:00" level=info msg=ConnectionClosed connectionID=13
+time="2026-03-11T15:22:38-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=14
+time="2026-03-11T15:22:38-03:00" level=info msg=ConnectionClosed connectionID=14
+time="2026-03-11T15:22:38-03:00" level=info msg="Server closing listener. No longer accepting connections."
+time="2026-03-11T15:22:38-03:00" level=info msg="stats stopped: context canceled"
+Starting server with Config HP="127.0.0.1:13490"|T="28800000"|R="false"|L="info"
+time="2026-03-11T15:56:10-03:00" level=info msg="Server ready. Accepting connections."
+time="2026-03-11T15:56:10-03:00" level=warning msg="secure_file_priv is set to \"\", which is insecure."
+time="2026-03-11T15:56:10-03:00" level=warning msg="Any user with GRANT FILE privileges will be able to read any file which the sql-server process can read."
+time="2026-03-11T15:56:10-03:00" level=warning msg="Please consider restarting the server with secure_file_priv set to a safe (or non-existent) directory."
+time="2026-03-11T15:56:10-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=1
+time="2026-03-11T15:56:10-03:00" level=info msg=ConnectionClosed connectionID=1
+time="2026-03-11T15:56:10-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=2
+time="2026-03-11T15:56:10-03:00" level=info msg=ConnectionClosed connectionID=2
+time="2026-03-11T15:56:10-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=3
+time="2026-03-11T15:56:10-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=4
+time="2026-03-11T15:56:10-03:00" level=info msg=ConnectionClosed connectionID=3
+time="2026-03-11T15:56:10-03:00" level=info msg=ConnectionClosed connectionID=4
+time="2026-03-11T16:18:39-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=5
+time="2026-03-11T16:18:39-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=6
+time="2026-03-11T16:18:39-03:00" level=info msg=ConnectionClosed connectionID=5
+time="2026-03-11T16:18:39-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=7
+time="2026-03-11T16:18:39-03:00" level=info msg=ConnectionClosed connectionID=6
+time="2026-03-11T16:18:39-03:00" level=info msg=ConnectionClosed connectionID=7
+time="2026-03-11T16:26:14-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=8
+time="2026-03-11T16:26:14-03:00" level=info msg=ConnectionClosed connectionID=8
+time="2026-03-11T16:26:14-03:00" level=info msg="Server closing listener. No longer accepting connections."
+time="2026-03-11T16:26:14-03:00" level=info msg="stats stopped: context canceled"
+Starting server with Config HP="127.0.0.1:13490"|T="28800000"|R="false"|L="info"
+time="2026-03-12T12:28:27-03:00" level=info msg="Server ready. Accepting connections."
+time="2026-03-12T12:28:27-03:00" level=warning msg="secure_file_priv is set to \"\", which is insecure."
+time="2026-03-12T12:28:27-03:00" level=warning msg="Any user with GRANT FILE privileges will be able to read any file which the sql-server process can read."
+time="2026-03-12T12:28:27-03:00" level=warning msg="Please consider restarting the server with secure_file_priv set to a safe (or non-existent) directory."
+time="2026-03-12T12:28:28-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=1
+time="2026-03-12T12:28:28-03:00" level=info msg=ConnectionClosed connectionID=1
+time="2026-03-12T12:28:28-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=2
+time="2026-03-12T12:28:28-03:00" level=info msg=ConnectionClosed connectionID=2
+time="2026-03-12T12:28:28-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=3
+time="2026-03-12T12:28:28-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=4
+time="2026-03-12T12:28:28-03:00" level=info msg=ConnectionClosed connectionID=3
+time="2026-03-12T12:28:28-03:00" level=info msg=ConnectionClosed connectionID=4
+time="2026-03-12T12:28:31-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=5
+time="2026-03-12T12:28:31-03:00" level=info msg=ConnectionClosed connectionID=5
+time="2026-03-12T12:28:31-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=6
+time="2026-03-12T12:28:31-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=7
+time="2026-03-12T12:28:31-03:00" level=info msg=ConnectionClosed connectionID=6
+time="2026-03-12T12:28:31-03:00" level=info msg=ConnectionClosed connectionID=7
+time="2026-03-12T12:58:30-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=8
+time="2026-03-12T12:58:30-03:00" level=info msg=ConnectionClosed connectionID=8
+time="2026-03-12T12:58:30-03:00" level=info msg="Server closing listener. No longer accepting connections."
+time="2026-03-12T12:58:30-03:00" level=info msg="stats stopped: context canceled"
+Starting server with Config HP="127.0.0.1:13490"|T="28800000"|R="false"|L="info"
+time="2026-03-12T23:48:28-03:00" level=info msg="Server ready. Accepting connections."
+time="2026-03-12T23:48:28-03:00" level=warning msg="secure_file_priv is set to \"\", which is insecure."
+time="2026-03-12T23:48:28-03:00" level=warning msg="Any user with GRANT FILE privileges will be able to read any file which the sql-server process can read."
+time="2026-03-12T23:48:28-03:00" level=warning msg="Please consider restarting the server with secure_file_priv set to a safe (or non-existent) directory."
+time="2026-03-12T23:48:28-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=1
+time="2026-03-12T23:48:28-03:00" level=info msg=ConnectionClosed connectionID=1
+time="2026-03-12T23:48:28-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=2
+time="2026-03-12T23:48:28-03:00" level=info msg=ConnectionClosed connectionID=2
+time="2026-03-12T23:48:28-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=3
+time="2026-03-12T23:48:28-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=4
+time="2026-03-12T23:48:28-03:00" level=info msg=ConnectionClosed connectionID=3
+time="2026-03-12T23:48:28-03:00" level=info msg=ConnectionClosed connectionID=4
+time="2026-03-12T23:49:01-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=5
+time="2026-03-12T23:49:01-03:00" level=info msg=ConnectionClosed connectionID=5
+time="2026-03-12T23:49:01-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=6
+time="2026-03-12T23:49:01-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=7
+time="2026-03-12T23:49:01-03:00" level=info msg=ConnectionClosed connectionID=6
+time="2026-03-12T23:49:01-03:00" level=info msg=ConnectionClosed connectionID=7
+time="2026-03-13T00:18:30-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=8
+time="2026-03-13T00:18:30-03:00" level=info msg=ConnectionClosed connectionID=8
+time="2026-03-13T00:18:30-03:00" level=info msg="Server closing listener. No longer accepting connections."
+time="2026-03-13T00:18:30-03:00" level=info msg="stats stopped: context canceled"
+Starting server with Config HP="127.0.0.1:13490"|T="28800000"|R="false"|L="info"
+time="2026-03-13T11:48:16-03:00" level=info msg="Server ready. Accepting connections."
+time="2026-03-13T11:48:16-03:00" level=warning msg="secure_file_priv is set to \"\", which is insecure."
+time="2026-03-13T11:48:16-03:00" level=warning msg="Any user with GRANT FILE privileges will be able to read any file which the sql-server process can read."
+time="2026-03-13T11:48:16-03:00" level=warning msg="Please consider restarting the server with secure_file_priv set to a safe (or non-existent) directory."
+time="2026-03-13T11:48:16-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=1
+time="2026-03-13T11:48:16-03:00" level=info msg=ConnectionClosed connectionID=1
+time="2026-03-13T11:48:16-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=2
+time="2026-03-13T11:48:16-03:00" level=info msg=ConnectionClosed connectionID=2
+time="2026-03-13T11:48:16-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=3
+time="2026-03-13T11:48:16-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=4
+time="2026-03-13T11:48:16-03:00" level=info msg=ConnectionClosed connectionID=3
+time="2026-03-13T11:48:16-03:00" level=info msg=ConnectionClosed connectionID=4
+time="2026-03-13T11:48:35-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=5
+time="2026-03-13T11:48:35-03:00" level=info msg=ConnectionClosed connectionID=5
+time="2026-03-13T11:48:35-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=6
+time="2026-03-13T11:48:35-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=7
+time="2026-03-13T11:48:35-03:00" level=info msg=ConnectionClosed connectionID=6
+time="2026-03-13T11:48:35-03:00" level=info msg=ConnectionClosed connectionID=7
+time="2026-03-13T11:49:18-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=8
+time="2026-03-13T11:49:18-03:00" level=info msg=ConnectionClosed connectionID=8
+time="2026-03-13T11:49:18-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=9
+time="2026-03-13T11:49:18-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=10
+time="2026-03-13T11:49:18-03:00" level=info msg=ConnectionClosed connectionID=9
+time="2026-03-13T11:49:18-03:00" level=info msg=ConnectionClosed connectionID=10
+time="2026-03-13T11:49:26-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=11
+time="2026-03-13T11:49:26-03:00" level=info msg=ConnectionClosed connectionID=11
+time="2026-03-13T11:49:26-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=12
+time="2026-03-13T11:49:26-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=13
+time="2026-03-13T11:49:26-03:00" level=info msg=ConnectionClosed connectionID=12
+time="2026-03-13T11:49:26-03:00" level=info msg=ConnectionClosed connectionID=13
+time="2026-03-13T12:07:26-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=14
+time="2026-03-13T12:07:26-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=15
+time="2026-03-13T12:07:26-03:00" level=info msg=ConnectionClosed connectionID=14
+time="2026-03-13T12:07:26-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=16
+time="2026-03-13T12:07:26-03:00" level=info msg=ConnectionClosed connectionID=15
+time="2026-03-13T12:07:26-03:00" level=info msg=ConnectionClosed connectionID=16
+time="2026-03-13T12:07:35-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=17
+time="2026-03-13T12:07:35-03:00" level=info msg=ConnectionClosed connectionID=17
+time="2026-03-13T12:07:35-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=18
+time="2026-03-13T12:07:35-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=19
+time="2026-03-13T12:07:35-03:00" level=info msg=ConnectionClosed connectionID=18
+time="2026-03-13T12:07:35-03:00" level=info msg=ConnectionClosed connectionID=19
+time="2026-03-13T12:18:19-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=20
+time="2026-03-13T12:18:19-03:00" level=info msg=ConnectionClosed connectionID=20
+time="2026-03-13T12:18:19-03:00" level=info msg="Server closing listener. No longer accepting connections."
+time="2026-03-13T12:18:19-03:00" level=info msg="stats stopped: context canceled"
+Starting server with Config HP="127.0.0.1:13490"|T="28800000"|R="false"|L="info"
+time="2026-03-13T12:31:00-03:00" level=info msg="Server ready. Accepting connections."
+time="2026-03-13T12:31:00-03:00" level=warning msg="secure_file_priv is set to \"\", which is insecure."
+time="2026-03-13T12:31:00-03:00" level=warning msg="Any user with GRANT FILE privileges will be able to read any file which the sql-server process can read."
+time="2026-03-13T12:31:00-03:00" level=warning msg="Please consider restarting the server with secure_file_priv set to a safe (or non-existent) directory."
+time="2026-03-13T12:31:01-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=1
+time="2026-03-13T12:31:01-03:00" level=info msg=ConnectionClosed connectionID=1
+time="2026-03-13T12:31:01-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=2
+time="2026-03-13T12:31:01-03:00" level=info msg=ConnectionClosed connectionID=2
+time="2026-03-13T12:31:01-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=3
+time="2026-03-13T12:31:01-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=4
+time="2026-03-13T12:31:01-03:00" level=info msg=ConnectionClosed connectionID=3
+time="2026-03-13T12:31:01-03:00" level=info msg=ConnectionClosed connectionID=4
+time="2026-03-13T12:31:07-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=5
+time="2026-03-13T12:31:07-03:00" level=info msg=ConnectionClosed connectionID=5
+time="2026-03-13T12:31:07-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=6
+time="2026-03-13T12:31:07-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=7
+time="2026-03-13T12:31:07-03:00" level=info msg=ConnectionClosed connectionID=6
+time="2026-03-13T12:31:07-03:00" level=info msg=ConnectionClosed connectionID=7
+time="2026-03-13T12:42:22-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=9
+time="2026-03-13T12:42:22-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=8
+time="2026-03-13T12:42:22-03:00" level=info msg=ConnectionClosed connectionID=8
+time="2026-03-13T12:42:22-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=10
+time="2026-03-13T12:42:22-03:00" level=info msg=ConnectionClosed connectionID=9
+time="2026-03-13T12:42:22-03:00" level=info msg=ConnectionClosed connectionID=10
+time="2026-03-13T12:42:33-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=11
+time="2026-03-13T12:42:33-03:00" level=info msg=ConnectionClosed connectionID=11
+time="2026-03-13T12:42:33-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=12
+time="2026-03-13T12:42:33-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=13
+time="2026-03-13T12:42:33-03:00" level=info msg=ConnectionClosed connectionID=12
+time="2026-03-13T12:42:33-03:00" level=info msg=ConnectionClosed connectionID=13
+time="2026-03-13T12:43:19-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=14
+time="2026-03-13T12:43:19-03:00" level=info msg=ConnectionClosed connectionID=14
+time="2026-03-13T12:43:19-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=15
+time="2026-03-13T12:43:19-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=16
+time="2026-03-13T12:43:19-03:00" level=info msg=ConnectionClosed connectionID=15
+time="2026-03-13T12:43:19-03:00" level=info msg=ConnectionClosed connectionID=16
+time="2026-03-13T12:43:21-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=17
+time="2026-03-13T12:43:21-03:00" level=info msg=ConnectionClosed connectionID=17
+time="2026-03-13T12:43:21-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=18
+time="2026-03-13T12:43:21-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=19
+time="2026-03-13T12:43:21-03:00" level=info msg=ConnectionClosed connectionID=18
+time="2026-03-13T12:43:21-03:00" level=info msg=ConnectionClosed connectionID=19
+time="2026-03-13T12:44:33-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=20
+time="2026-03-13T12:44:33-03:00" level=info msg=ConnectionClosed connectionID=20
+time="2026-03-13T12:44:33-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=21
+time="2026-03-13T12:44:33-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=22
+time="2026-03-13T12:44:33-03:00" level=info msg=ConnectionClosed connectionID=21
+time="2026-03-13T12:44:33-03:00" level=info msg=ConnectionClosed connectionID=22
+time="2026-03-13T12:44:35-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=23
+time="2026-03-13T12:44:35-03:00" level=info msg=ConnectionClosed connectionID=23
+time="2026-03-13T12:44:35-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=24
+time="2026-03-13T12:44:35-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=25
+time="2026-03-13T12:44:35-03:00" level=info msg=ConnectionClosed connectionID=24
+time="2026-03-13T12:44:35-03:00" level=info msg=ConnectionClosed connectionID=25
+time="2026-03-13T13:01:04-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=26
+time="2026-03-13T13:01:04-03:00" level=info msg=ConnectionClosed connectionID=26
+time="2026-03-13T13:01:04-03:00" level=info msg="Server closing listener. No longer accepting connections."
+time="2026-03-13T13:01:04-03:00" level=info msg="stats stopped: context canceled"
+Starting server with Config HP="127.0.0.1:13490"|T="28800000"|R="false"|L="info"
+time="2026-03-13T13:07:59-03:00" level=info msg="Server ready. Accepting connections."
+time="2026-03-13T13:07:59-03:00" level=warning msg="secure_file_priv is set to \"\", which is insecure."
+time="2026-03-13T13:07:59-03:00" level=warning msg="Any user with GRANT FILE privileges will be able to read any file which the sql-server process can read."
+time="2026-03-13T13:07:59-03:00" level=warning msg="Please consider restarting the server with secure_file_priv set to a safe (or non-existent) directory."
+time="2026-03-13T13:08:00-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=1
+time="2026-03-13T13:08:00-03:00" level=info msg=ConnectionClosed connectionID=1
+time="2026-03-13T13:08:00-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=2
+time="2026-03-13T13:08:00-03:00" level=info msg=ConnectionClosed connectionID=2
+time="2026-03-13T13:08:00-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=3
+time="2026-03-13T13:08:00-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=4
+time="2026-03-13T13:08:00-03:00" level=info msg=ConnectionClosed connectionID=3
+time="2026-03-13T13:08:00-03:00" level=info msg=ConnectionClosed connectionID=4
+time="2026-03-13T13:08:17-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=5
+time="2026-03-13T13:08:17-03:00" level=info msg=ConnectionClosed connectionID=5
+time="2026-03-13T13:08:17-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=6
+time="2026-03-13T13:08:17-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=7
+time="2026-03-13T13:08:17-03:00" level=info msg=ConnectionClosed connectionID=6
+time="2026-03-13T13:08:17-03:00" level=info msg=ConnectionClosed connectionID=7
+time="2026-03-13T13:38:02-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=8
+time="2026-03-13T13:38:02-03:00" level=info msg=ConnectionClosed connectionID=8
+time="2026-03-13T13:38:02-03:00" level=info msg="Server closing listener. No longer accepting connections."
+time="2026-03-13T13:38:02-03:00" level=info msg="stats stopped: context canceled"
+Starting server with Config HP="127.0.0.1:13490"|T="28800000"|R="false"|L="info"
+time="2026-03-13T14:45:04-03:00" level=info msg="Server ready. Accepting connections."
+time="2026-03-13T14:45:04-03:00" level=warning msg="secure_file_priv is set to \"\", which is insecure."
+time="2026-03-13T14:45:04-03:00" level=warning msg="Any user with GRANT FILE privileges will be able to read any file which the sql-server process can read."
+time="2026-03-13T14:45:04-03:00" level=warning msg="Please consider restarting the server with secure_file_priv set to a safe (or non-existent) directory."
+time="2026-03-13T14:45:05-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=1
+time="2026-03-13T14:45:05-03:00" level=info msg=ConnectionClosed connectionID=1
+time="2026-03-13T14:45:05-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=2
+time="2026-03-13T14:45:05-03:00" level=info msg=ConnectionClosed connectionID=2
+time="2026-03-13T14:45:05-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=3
+time="2026-03-13T14:45:05-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=4
+time="2026-03-13T14:45:05-03:00" level=info msg=ConnectionClosed connectionID=3
+time="2026-03-13T14:45:05-03:00" level=info msg=ConnectionClosed connectionID=4
+time="2026-03-13T14:45:28-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=5
+time="2026-03-13T14:45:28-03:00" level=info msg=ConnectionClosed connectionID=5
+time="2026-03-13T14:45:28-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=6
+time="2026-03-13T14:45:28-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=7
+time="2026-03-13T14:45:28-03:00" level=info msg=ConnectionClosed connectionID=6
+time="2026-03-13T14:45:28-03:00" level=info msg=ConnectionClosed connectionID=7
+time="2026-03-13T15:15:08-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=8
+time="2026-03-13T15:15:08-03:00" level=info msg=ConnectionClosed connectionID=8
+time="2026-03-13T15:15:08-03:00" level=info msg="Server closing listener. No longer accepting connections."
+time="2026-03-13T15:15:08-03:00" level=info msg="stats stopped: context canceled"
+Starting server with Config HP="127.0.0.1:13490"|T="28800000"|R="false"|L="info"
+time="2026-03-13T23:09:37-03:00" level=info msg="Server ready. Accepting connections."
+time="2026-03-13T23:09:37-03:00" level=warning msg="secure_file_priv is set to \"\", which is insecure."
+time="2026-03-13T23:09:37-03:00" level=warning msg="Any user with GRANT FILE privileges will be able to read any file which the sql-server process can read."
+time="2026-03-13T23:09:37-03:00" level=warning msg="Please consider restarting the server with secure_file_priv set to a safe (or non-existent) directory."
+time="2026-03-13T23:09:37-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=1
+time="2026-03-13T23:09:37-03:00" level=info msg=ConnectionClosed connectionID=1
+time="2026-03-13T23:09:37-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=2
+time="2026-03-13T23:09:37-03:00" level=info msg=ConnectionClosed connectionID=2
+time="2026-03-13T23:09:37-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=3
+time="2026-03-13T23:09:37-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=4
+time="2026-03-13T23:09:37-03:00" level=info msg=ConnectionClosed connectionID=3
+time="2026-03-13T23:09:37-03:00" level=info msg=ConnectionClosed connectionID=4
+time="2026-03-13T23:09:38-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=5
+time="2026-03-13T23:09:38-03:00" level=info msg=ConnectionClosed connectionID=5
+time="2026-03-13T23:09:38-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=6
+time="2026-03-13T23:09:38-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=7
+time="2026-03-13T23:09:38-03:00" level=info msg=ConnectionClosed connectionID=6
+time="2026-03-13T23:09:38-03:00" level=info msg=ConnectionClosed connectionID=7
+time="2026-03-13T23:11:15-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=8
+time="2026-03-13T23:11:15-03:00" level=info msg=ConnectionClosed connectionID=8
+time="2026-03-13T23:11:15-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=9
+time="2026-03-13T23:11:15-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=10
+time="2026-03-13T23:11:15-03:00" level=info msg=ConnectionClosed connectionID=9
+time="2026-03-13T23:11:15-03:00" level=info msg=ConnectionClosed connectionID=10
+time="2026-03-13T23:39:48-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=11
+time="2026-03-13T23:39:48-03:00" level=info msg=ConnectionClosed connectionID=11
+time="2026-03-13T23:39:48-03:00" level=info msg="Server closing listener. No longer accepting connections."
+time="2026-03-13T23:39:48-03:00" level=info msg="stats stopped: context canceled"
+Starting server with Config HP="127.0.0.1:13490"|T="28800000"|R="false"|L="info"
+time="2026-03-14T13:56:20-03:00" level=info msg="Server ready. Accepting connections."
+time="2026-03-14T13:56:20-03:00" level=warning msg="secure_file_priv is set to \"\", which is insecure."
+time="2026-03-14T13:56:20-03:00" level=warning msg="Any user with GRANT FILE privileges will be able to read any file which the sql-server process can read."
+time="2026-03-14T13:56:20-03:00" level=warning msg="Please consider restarting the server with secure_file_priv set to a safe (or non-existent) directory."
+time="2026-03-14T13:56:20-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=1
+time="2026-03-14T13:56:20-03:00" level=info msg=ConnectionClosed connectionID=1
+time="2026-03-14T13:56:20-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=2
+time="2026-03-14T13:56:20-03:00" level=info msg=ConnectionClosed connectionID=2
+time="2026-03-14T13:56:20-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=3
+time="2026-03-14T13:56:20-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=4
+time="2026-03-14T13:56:20-03:00" level=info msg=ConnectionClosed connectionID=3
+time="2026-03-14T13:56:20-03:00" level=info msg=ConnectionClosed connectionID=4
+time="2026-03-14T13:56:21-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=5
+time="2026-03-14T13:56:21-03:00" level=info msg=ConnectionClosed connectionID=5
+time="2026-03-14T13:56:21-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=6
+time="2026-03-14T13:56:21-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=7
+time="2026-03-14T13:56:21-03:00" level=info msg=ConnectionClosed connectionID=6
+time="2026-03-14T13:56:21-03:00" level=info msg=ConnectionClosed connectionID=7
+time="2026-03-14T13:57:02-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=8
+time="2026-03-14T13:57:02-03:00" level=info msg=ConnectionClosed connectionID=8
+time="2026-03-14T13:57:02-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=9
+time="2026-03-14T13:57:02-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=10
+time="2026-03-14T13:57:02-03:00" level=info msg=ConnectionClosed connectionID=9
+time="2026-03-14T13:57:02-03:00" level=info msg=ConnectionClosed connectionID=10
+time="2026-03-14T14:14:24-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=11
+time="2026-03-14T14:14:24-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=12
+time="2026-03-14T14:14:24-03:00" level=info msg=ConnectionClosed connectionID=11
+time="2026-03-14T14:14:25-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=13
+time="2026-03-14T14:14:25-03:00" level=info msg=ConnectionClosed connectionID=12
+time="2026-03-14T14:14:28-03:00" level=info msg=ConnectionClosed connectionID=13
+time="2026-03-14T14:14:48-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=14
+time="2026-03-14T14:14:48-03:00" level=info msg=ConnectionClosed connectionID=14
+time="2026-03-14T14:14:48-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=15
+time="2026-03-14T14:14:48-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=16
+time="2026-03-14T14:14:48-03:00" level=info msg=ConnectionClosed connectionID=15
+time="2026-03-14T14:14:48-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=17
+time="2026-03-14T14:14:48-03:00" level=info msg=ConnectionClosed connectionID=17
+time="2026-03-14T14:14:48-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=18
+time="2026-03-14T14:14:48-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=19
+time="2026-03-14T14:14:48-03:00" level=info msg=ConnectionClosed connectionID=18
+time="2026-03-14T14:14:49-03:00" level=info msg=ConnectionClosed connectionID=16
+time="2026-03-14T14:14:49-03:00" level=info msg=ConnectionClosed connectionID=19
+time="2026-03-14T14:15:38-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=20
+time="2026-03-14T14:15:38-03:00" level=info msg=ConnectionClosed connectionID=20
+time="2026-03-14T14:15:38-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=21
+time="2026-03-14T14:15:38-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=22
+time="2026-03-14T14:15:38-03:00" level=info msg=ConnectionClosed connectionID=21
+time="2026-03-14T14:15:39-03:00" level=info msg=ConnectionClosed connectionID=22
+time="2026-03-14T14:16:01-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=23
+time="2026-03-14T14:16:01-03:00" level=info msg=ConnectionClosed connectionID=23
+time="2026-03-14T14:16:01-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=24
+time="2026-03-14T14:16:01-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=25
+time="2026-03-14T14:16:01-03:00" level=info msg=ConnectionClosed connectionID=24
+time="2026-03-14T14:16:01-03:00" level=info msg=ConnectionClosed connectionID=25
+time="2026-03-14T14:26:40-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=26
+time="2026-03-14T14:26:40-03:00" level=info msg=ConnectionClosed connectionID=26
+time="2026-03-14T14:26:40-03:00" level=info msg="Server closing listener. No longer accepting connections."
+time="2026-03-14T14:26:40-03:00" level=info msg="stats stopped: context canceled"
+Starting server with Config HP="127.0.0.1:13490"|T="28800000"|R="false"|L="info"
+time="2026-03-14T14:58:09-03:00" level=info msg="Server ready. Accepting connections."
+time="2026-03-14T14:58:09-03:00" level=warning msg="secure_file_priv is set to \"\", which is insecure."
+time="2026-03-14T14:58:09-03:00" level=warning msg="Any user with GRANT FILE privileges will be able to read any file which the sql-server process can read."
+time="2026-03-14T14:58:09-03:00" level=warning msg="Please consider restarting the server with secure_file_priv set to a safe (or non-existent) directory."
+time="2026-03-14T14:58:09-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=1
+time="2026-03-14T14:58:09-03:00" level=info msg=ConnectionClosed connectionID=1
+time="2026-03-14T14:58:09-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=2
+time="2026-03-14T14:58:09-03:00" level=info msg=ConnectionClosed connectionID=2
+time="2026-03-14T14:58:09-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=3
+time="2026-03-14T14:58:10-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=4
+time="2026-03-14T14:58:10-03:00" level=info msg=ConnectionClosed connectionID=3
+time="2026-03-14T14:58:16-03:00" level=info msg=ConnectionClosed connectionID=4
+time="2026-03-14T14:58:17-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=5
+time="2026-03-14T14:58:17-03:00" level=info msg=ConnectionClosed connectionID=5
+time="2026-03-14T14:58:17-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=6
+time="2026-03-14T14:58:17-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=7
+time="2026-03-14T14:58:17-03:00" level=info msg=ConnectionClosed connectionID=6
+time="2026-03-14T14:58:18-03:00" level=info msg=ConnectionClosed connectionID=7
+time="2026-03-14T14:58:34-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=8
+time="2026-03-14T14:58:34-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=9
+time="2026-03-14T14:58:34-03:00" level=info msg=ConnectionClosed connectionID=8
+time="2026-03-14T14:58:34-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=10
+time="2026-03-14T14:58:34-03:00" level=info msg=ConnectionClosed connectionID=9
+time="2026-03-14T14:58:34-03:00" level=info msg=ConnectionClosed connectionID=10
+time="2026-03-14T14:58:36-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=11
+time="2026-03-14T14:58:36-03:00" level=info msg=ConnectionClosed connectionID=11
+time="2026-03-14T14:58:36-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=12
+time="2026-03-14T14:58:36-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=13
+time="2026-03-14T14:58:36-03:00" level=info msg=ConnectionClosed connectionID=12
+time="2026-03-14T14:58:36-03:00" level=info msg=ConnectionClosed connectionID=13
+time="2026-03-14T14:58:54-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=14
+time="2026-03-14T14:58:54-03:00" level=info msg=ConnectionClosed connectionID=14
+time="2026-03-14T14:58:54-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=15
+time="2026-03-14T14:58:54-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=16
+time="2026-03-14T14:58:54-03:00" level=info msg=ConnectionClosed connectionID=15
+time="2026-03-14T14:58:55-03:00" level=info msg=ConnectionClosed connectionID=16
+time="2026-03-14T14:58:56-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=17
+time="2026-03-14T14:58:56-03:00" level=info msg=ConnectionClosed connectionID=17
+time="2026-03-14T14:58:56-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=18
+time="2026-03-14T14:58:56-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=19
+time="2026-03-14T14:58:56-03:00" level=info msg=ConnectionClosed connectionID=18
+time="2026-03-14T14:58:57-03:00" level=info msg=ConnectionClosed connectionID=19
+time="2026-03-14T15:00:31-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=20
+time="2026-03-14T15:00:31-03:00" level=info msg=ConnectionClosed connectionID=20
+time="2026-03-14T15:00:31-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=21
+time="2026-03-14T15:00:31-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=22
+time="2026-03-14T15:00:31-03:00" level=info msg=ConnectionClosed connectionID=21
+time="2026-03-14T15:00:31-03:00" level=info msg=ConnectionClosed connectionID=22
+time="2026-03-14T15:01:29-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=23
+time="2026-03-14T15:01:29-03:00" level=info msg=ConnectionClosed connectionID=23
+time="2026-03-14T15:01:29-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=24
+time="2026-03-14T15:01:29-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=25
+time="2026-03-14T15:01:29-03:00" level=info msg=ConnectionClosed connectionID=24
+time="2026-03-14T15:01:30-03:00" level=info msg=ConnectionClosed connectionID=25
+time="2026-03-14T15:02:13-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=26
+time="2026-03-14T15:02:13-03:00" level=info msg=ConnectionClosed connectionID=26
+time="2026-03-14T15:02:13-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=27
+time="2026-03-14T15:02:13-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=28
+time="2026-03-14T15:02:13-03:00" level=info msg=ConnectionClosed connectionID=27
+time="2026-03-14T15:02:14-03:00" level=info msg=ConnectionClosed connectionID=28
+time="2026-03-14T15:15:40-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=29
+time="2026-03-14T15:15:40-03:00" level=info msg=ConnectionClosed connectionID=29
+time="2026-03-14T15:15:40-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=30
+time="2026-03-14T15:15:40-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=31
+time="2026-03-14T15:15:40-03:00" level=info msg=ConnectionClosed connectionID=30
+time="2026-03-14T15:15:40-03:00" level=info msg=ConnectionClosed connectionID=31
+time="2026-03-14T15:16:08-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=32
+time="2026-03-14T15:16:08-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=33
+time="2026-03-14T15:16:08-03:00" level=info msg=ConnectionClosed connectionID=32
+time="2026-03-14T15:16:08-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=34
+time="2026-03-14T15:16:08-03:00" level=info msg=ConnectionClosed connectionID=33
+time="2026-03-14T15:16:08-03:00" level=info msg=ConnectionClosed connectionID=34
+time="2026-03-14T15:28:42-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=35
+time="2026-03-14T15:28:42-03:00" level=info msg=ConnectionClosed connectionID=35
+time="2026-03-14T15:28:42-03:00" level=info msg="Server closing listener. No longer accepting connections."
+time="2026-03-14T15:28:42-03:00" level=info msg="stats stopped: context canceled"
+Starting server with Config HP="127.0.0.1:13490"|T="28800000"|R="false"|L="info"
+time="2026-03-14T16:18:20-03:00" level=info msg="Server ready. Accepting connections."
+time="2026-03-14T16:18:20-03:00" level=warning msg="secure_file_priv is set to \"\", which is insecure."
+time="2026-03-14T16:18:20-03:00" level=warning msg="Any user with GRANT FILE privileges will be able to read any file which the sql-server process can read."
+time="2026-03-14T16:18:20-03:00" level=warning msg="Please consider restarting the server with secure_file_priv set to a safe (or non-existent) directory."
+time="2026-03-14T16:18:20-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=1
+time="2026-03-14T16:18:20-03:00" level=info msg=ConnectionClosed connectionID=1
+time="2026-03-14T16:18:20-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=2
+time="2026-03-14T16:18:20-03:00" level=info msg=ConnectionClosed connectionID=2
+time="2026-03-14T16:18:20-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=3
+time="2026-03-14T16:18:20-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=4
+time="2026-03-14T16:18:20-03:00" level=info msg=ConnectionClosed connectionID=3
+time="2026-03-14T16:18:20-03:00" level=info msg=ConnectionClosed connectionID=4
+time="2026-03-14T16:19:28-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=5
+time="2026-03-14T16:19:28-03:00" level=info msg=ConnectionClosed connectionID=5
+time="2026-03-14T16:19:28-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=6
+time="2026-03-14T16:19:28-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=7
+time="2026-03-14T16:19:28-03:00" level=info msg=ConnectionClosed connectionID=6
+time="2026-03-14T16:19:29-03:00" level=info msg=ConnectionClosed connectionID=7
+time="2026-03-14T16:48:37-03:00" level=info msg=NewConnection DisableClientMultiStatements=false connectionID=8
+time="2026-03-14T16:48:37-03:00" level=info msg=ConnectionClosed connectionID=8
+time="2026-03-14T16:48:37-03:00" level=info msg="Server closing listener. No longer accepting connections."
+time="2026-03-14T16:48:37-03:00" level=info msg="stats stopped: context canceled"

@@ -1,0 +1,173 @@
+{
+  "total": {
+    "covered": 1735,
+    "total": 1735,
+    "pct": 100.0
+  },
+  "packages": [
+    {
+      "package": "github.com/misaelzapata/fastfn/cli/cmd",
+      "covered": 837,
+      "total": 837,
+      "pct": 100.0
+    },
+    {
+      "package": "github.com/misaelzapata/fastfn/cli/embed/runtime",
+      "covered": 20,
+      "total": 20,
+      "pct": 100.0
+    },
+    {
+      "package": "github.com/misaelzapata/fastfn/cli/embed/templates",
+      "covered": 16,
+      "total": 16,
+      "pct": 100.0
+    },
+    {
+      "package": "github.com/misaelzapata/fastfn/cli/internal/discovery",
+      "covered": 296,
+      "total": 296,
+      "pct": 100.0
+    },
+    {
+      "package": "github.com/misaelzapata/fastfn/cli/internal/process",
+      "covered": 547,
+      "total": 547,
+      "pct": 100.0
+    },
+    {
+      "package": "github.com/misaelzapata/fastfn/cli/internal/runtime",
+      "covered": 19,
+      "total": 19,
+      "pct": 100.0
+    }
+  ],
+  "files": [
+    {
+      "file": "github.com/misaelzapata/fastfn/cli/cmd/dev.go",
+      "covered": 198,
+      "total": 198,
+      "pct": 100.0
+    },
+    {
+      "file": "github.com/misaelzapata/fastfn/cli/cmd/dev_native.go",
+      "covered": 1,
+      "total": 1,
+      "pct": 100.0
+    },
+    {
+      "file": "github.com/misaelzapata/fastfn/cli/cmd/docs.go",
+      "covered": 11,
+      "total": 11,
+      "pct": 100.0
+    },
+    {
+      "file": "github.com/misaelzapata/fastfn/cli/cmd/doctor.go",
+      "covered": 377,
+      "total": 377,
+      "pct": 100.0
+    },
+    {
+      "file": "github.com/misaelzapata/fastfn/cli/cmd/init.go",
+      "covered": 48,
+      "total": 48,
+      "pct": 100.0
+    },
+    {
+      "file": "github.com/misaelzapata/fastfn/cli/cmd/log_alias.go",
+      "covered": 50,
+      "total": 50,
+      "pct": 100.0
+    },
+    {
+      "file": "github.com/misaelzapata/fastfn/cli/cmd/logs.go",
+      "covered": 74,
+      "total": 74,
+      "pct": 100.0
+    },
+    {
+      "file": "github.com/misaelzapata/fastfn/cli/cmd/root.go",
+      "covered": 44,
+      "total": 44,
+      "pct": 100.0
+    },
+    {
+      "file": "github.com/misaelzapata/fastfn/cli/cmd/run.go",
+      "covered": 32,
+      "total": 32,
+      "pct": 100.0
+    },
+    {
+      "file": "github.com/misaelzapata/fastfn/cli/cmd/version.go",
+      "covered": 2,
+      "total": 2,
+      "pct": 100.0
+    },
+    {
+      "file": "github.com/misaelzapata/fastfn/cli/embed/runtime/embed.go",
+      "covered": 20,
+      "total": 20,
+      "pct": 100.0
+    },
+    {
+      "file": "github.com/misaelzapata/fastfn/cli/embed/templates/embed.go",
+      "covered": 16,
+      "total": 16,
+      "pct": 100.0
+    },
+    {
+      "file": "github.com/misaelzapata/fastfn/cli/internal/discovery/scan.go",
+      "covered": 296,
+      "total": 296,
+      "pct": 100.0
+    },
+    {
+      "file": "github.com/misaelzapata/fastfn/cli/internal/process/check.go",
+      "covered": 27,
+      "total": 27,
+      "pct": 100.0
+    },
+    {
+      "file": "github.com/misaelzapata/fastfn/cli/internal/process/config.go",
+      "covered": 22,
+      "total": 22,
+      "pct": 100.0
+    },
+    {
+      "file": "github.com/misaelzapata/fastfn/cli/internal/process/hot_reload.go",
+      "covered": 71,
+      "total": 71,
+      "pct": 100.0
+    },
+    {
+      "file": "github.com/misaelzapata/fastfn/cli/internal/process/manager.go",
+      "covered": 135,
+      "total": 135,
+      "pct": 100.0
+    },
+    {
+      "file": "github.com/misaelzapata/fastfn/cli/internal/process/runner.go",
+      "covered": 175,
+      "total": 175,
+      "pct": 100.0
+    },
+    {
+      "file": "github.com/misaelzapata/fastfn/cli/internal/process/session.go",
+      "covered": 67,
+      "total": 67,
+      "pct": 100.0
+    },
+    {
+      "file": "github.com/misaelzapata/fastfn/cli/internal/process/watcher.go",
+      "covered": 50,
+      "total": 50,
+      "pct": 100.0
+    },
+    {
+      "file": "github.com/misaelzapata/fastfn/cli/internal/runtime/manager.go",
+      "covered": 19,
+      "total": 19,
+      "pct": 100.0
+    }
+  ]
+}

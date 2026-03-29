@@ -1,0 +1,38 @@
+{
+  "A": {
+    "pairs": 3,
+    "pages": 6,
+    "avg_links_en": 24.0,
+    "avg_links_es": 24.0
+  },
+  "B": {
+    "pairs": 8,
+    "pages": 16,
+    "avg_links_en": 10.88,
+    "avg_links_es": 10.88
+  },
+  "C": {
+    "pairs": 2,
+    "pages": 4,
+    "avg_links_en": 11.5,
+    "avg_links_es": 11.5
+  },
+  "D": {
+    "pairs": 4,
+    "pages": 8,
+    "avg_links_en": 10.5,
+    "avg_links_es": 10.5
+  },
+  "E": {
+    "pairs": 6,
+    "pages": 12,
+    "avg_links_en": 12.5,
+    "avg_links_es": 13.17
+  },
+  "F": {
+    "pairs": 9,
+    "pages": 18,
+    "avg_links_en": 9.44,
+    "avg_links_es": 9.44
+  }
+}

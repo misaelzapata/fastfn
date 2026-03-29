@@ -1,0 +1,105 @@
+{
+  "total": {
+    "hits": 7390,
+    "missed": 0,
+    "pct": 100.0
+  },
+  "files": [
+    {
+      "file": "/app/openresty/lua/fastfn/console/data.lua",
+      "hits": 1601,
+      "missed": 0,
+      "pct": 100.0
+    },
+    {
+      "file": "/app/openresty/lua/fastfn/console/guard.lua",
+      "hits": 152,
+      "missed": 0,
+      "pct": 100.0
+    },
+    {
+      "file": "/app/openresty/lua/fastfn/console/ui_state_endpoint.lua",
+      "hits": 30,
+      "missed": 0,
+      "pct": 100.0
+    },
+    {
+      "file": "/app/openresty/lua/fastfn/core/assistant.lua",
+      "hits": 291,
+      "missed": 0,
+      "pct": 100.0
+    },
+    {
+      "file": "/app/openresty/lua/fastfn/core/client.lua",
+      "hits": 67,
+      "missed": 0,
+      "pct": 100.0
+    },
+    {
+      "file": "/app/openresty/lua/fastfn/core/gateway_utils.lua",
+      "hits": 28,
+      "missed": 0,
+      "pct": 100.0
+    },
+    {
+      "file": "/app/openresty/lua/fastfn/core/home.lua",
+      "hits": 136,
+      "missed": 0,
+      "pct": 100.0
+    },
+    {
+      "file": "/app/openresty/lua/fastfn/core/http_client.lua",
+      "hits": 216,
+      "missed": 0,
+      "pct": 100.0
+    },
+    {
+      "file": "/app/openresty/lua/fastfn/core/invoke_rules.lua",
+      "hits": 90,
+      "missed": 0,
+      "pct": 100.0
+    },
+    {
+      "file": "/app/openresty/lua/fastfn/core/jobs.lua",
+      "hits": 577,
+      "missed": 0,
+      "pct": 100.0
+    },
+    {
+      "file": "/app/openresty/lua/fastfn/core/limits.lua",
+      "hits": 76,
+      "missed": 0,
+      "pct": 100.0
+    },
+    {
+      "file": "/app/openresty/lua/fastfn/core/lua_runtime.lua",
+      "hits": 192,
+      "missed": 0,
+      "pct": 100.0
+    },
+    {
+      "file": "/app/openresty/lua/fastfn/core/openapi.lua",
+      "hits": 1051,
+      "missed": 0,
+      "pct": 100.0
+    },
+    {
+      "file": "/app/openresty/lua/fastfn/core/routes.lua",
+      "hits": 1624,
+      "missed": 0,
+      "pct": 100.0
+    },
+    {
+      "file": "/app/openresty/lua/fastfn/core/scheduler.lua",
+      "hits": 1064,
+      "missed": 0,
+      "pct": 100.0
+    },
+    {
+      "file": "/app/openresty/lua/fastfn/core/watchdog.lua",
+      "hits": 195,
+      "missed": 0,
+      "pct": 100.0
+    }
+  ]
+}

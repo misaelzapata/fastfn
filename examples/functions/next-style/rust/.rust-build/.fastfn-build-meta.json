@@ -1,0 +1,1 @@
+{"binary":"/app/srv/fn/functions/next-style/rust/.rust-build/target/release/fn_handler","signature":{"cargo_toml_hash":"005bf79d0f0143106b2622a0dee1a839eb500335a40b1034b3976ba0eadc3ffc","main_rs_hash":"ee2578e8a2f6bbe879adf01208f916b2161133db7b57f52f1dfcdf3c34c78a69","runtime_machine":"aarch64","runtime_platform":"linux","source_mtime_ns":1771015261462630763}}

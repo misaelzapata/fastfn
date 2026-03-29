@@ -1,0 +1,17 @@
+{
+  "format": "coveragepy",
+  "input": "/Users/misaelzapata/Downloads/simpleroute/coverage/rust-runtime-coverage.json",
+  "total": {
+    "covered": 417,
+    "total": 417,
+    "pct": 100.0
+  },
+  "files": [
+    {
+      "file": "/Users/misaelzapata/Downloads/simpleroute/srv/fn/runtimes/rust-daemon.py",
+      "covered": 417,
+      "total": 417,
+      "pct": 100.0
+    }
+  ]
+}

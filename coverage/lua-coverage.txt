@@ -1,0 +1,25 @@
+[lua] compose project: fastfn_lua_test_28178_99727
+[lua] building openresty image...
+[lua] build complete
+[lua] running lua suite with coverage...
+ Network fastfn_lua_test_28178_99727_default  Creating
+ Network fastfn_lua_test_28178_99727_default  Created
+2026/03/13 17:28:48 [warn] 14#14: *2 [lua] _G write guard:12: __newindex(): writing a global Lua variable ('jit') which may lead to race conditions between concurrent requests, so prefer the use of 'local' variables
+stack traceback:
+	/app/tests/unit/lua-runner.lua:5817: in function </app/tests/unit/lua-runner.lua:5802>
+	[C]: in function 'pcall'
+	/app/tests/unit/lua-runner.lua:239: in function 'with_module_stubs'
+	/app/tests/unit/lua-runner.lua:5796: in function </app/tests/unit/lua-runner.lua:5795>
+	[C]: in function 'pcall'
+	/app/tests/unit/lua-runner.lua:5795: in function </app/tests/unit/lua-runner.lua:5709>
+	[C]: in function 'pcall'
+	/app/tests/unit/lua-runner.lua:207: in function 'with_fake_ngx'
+	/app/tests/unit/lua-runner.lua:5709: in function 'fn'
+	/app/tests/unit/lua-runner.lua:10903: in function 'run_test'
+	/app/tests/unit/lua-runner.lua:10958: in function 'main'
+	/app/tests/unit/lua-runner.lua:10971: in function 'file_gen'
+	init_worker_by_lua(nginx.conf:166):45: in function <init_worker_by_lua(nginx.conf:166):43>
+	[C]: in function 'xpcall'
+	init_worker_by_lua(nginx.conf:166):52: in function <init_worker_by_lua(nginx.conf:166):50>, context: ngx.timer
+console security unit tests passed
+lua unit tests passed

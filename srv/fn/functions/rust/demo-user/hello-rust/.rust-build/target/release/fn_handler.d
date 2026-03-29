@@ -1,0 +1,1 @@
+/app/srv/fn/functions/rust/demo-user/hello-rust/.rust-build/target/release/fn_handler: /app/srv/fn/functions/rust/demo-user/hello-rust/.rust-build/src/main.rs /app/srv/fn/functions/rust/demo-user/hello-rust/.rust-build/src/user_handler.rs

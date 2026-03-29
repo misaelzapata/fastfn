@@ -1,0 +1,1 @@
+{"is_base64":false,"headers":{"Content-Type":"application\/json"},"body":"{\"route\":\"\/users\/:id\",\"params\":{\"id\":\"123\"},\"runtime\":\"node\"}","id":"job-1771178672395-1-842083","status":200,"latency_ms":58}

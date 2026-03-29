@@ -1,0 +1,13 @@
+{
+  "runtime": "node",
+  "mode": "manifest",
+  "manifest_path": "/app/srv/fn/functions/.fastfn/packs/node/qrcode_pack/package.json",
+  "manifest_generated": false,
+  "inferred_imports": [],
+  "resolved_packages": [],
+  "unresolved_imports": [],
+  "last_install_status": "ok",
+  "last_error": null,
+  "lockfile_path": "/app/srv/fn/functions/.fastfn/packs/node/qrcode_pack/package-lock.json",
+  "updated_at": "2026-03-16T17:59:57.751Z"
+}

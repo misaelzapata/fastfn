@@ -1,0 +1,1 @@
+/app/srv/fn/functions/next-style/rust/.rust-build/target/release/fn_handler: /app/srv/fn/functions/next-style/rust/.rust-build/src/main.rs /app/srv/fn/functions/next-style/rust/.rust-build/src/user_handler.rs
