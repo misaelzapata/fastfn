@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fastfn-runtime"
+version = "0.1.0"
+description = "Python type definitions for FastFN serverless runtime"
+authors = [
+  { name="FastFN Team", email="team@fastfn.dev" },
+]
+readme = "README.md"
+requires-python = ">=3.7"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/misaelzapata/fastfn"

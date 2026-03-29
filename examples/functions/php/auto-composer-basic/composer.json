@@ -1,0 +1,7 @@
+{
+  "name": "fastfn/auto-composer-basic",
+  "type": "project",
+  "require": {
+    "ramsey/uuid": "^4.7"
+  }
+}

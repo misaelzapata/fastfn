@@ -1,0 +1,674 @@
+[
+  {
+    "endpoint":"/qr",
+    "domain": "https://github.com/misaelzapata/fastfn",
+    "total": 240,
+    "concurrency": 1,
+    "elapsed_sec": 3.105,
+    "rps": 77.3,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr",
+    "domain": "https://github.com/misaelzapata/fastfn",
+    "total": 240,
+    "concurrency": 2,
+    "elapsed_sec": 2.536,
+    "rps": 94.62,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr",
+    "domain": "https://github.com/misaelzapata/fastfn",
+    "total": 240,
+    "concurrency": 4,
+    "elapsed_sec": 2.492,
+    "rps": 96.32,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr",
+    "domain": "https://github.com/misaelzapata/fastfn",
+    "total": 240,
+    "concurrency": 8,
+    "elapsed_sec": 2.523,
+    "rps": 95.14,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr",
+    "domain": "https://github.com/misaelzapata/fastfn",
+    "total": 240,
+    "concurrency": 16,
+    "elapsed_sec": 2.574,
+    "rps": 93.24,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr",
+    "domain": "https://github.com/misaelzapata/fastfn",
+    "total": 240,
+    "concurrency": 24,
+    "elapsed_sec": 2.527,
+    "rps": 94.98,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr",
+    "domain": "https://github.com/misaelzapata/fastfn",
+    "total": 240,
+    "concurrency": 32,
+    "elapsed_sec": 2.49,
+    "rps": 96.39,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr",
+    "domain": "https://openai.com",
+    "total": 240,
+    "concurrency": 1,
+    "elapsed_sec": 2.018,
+    "rps": 118.9,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr",
+    "domain": "https://openai.com",
+    "total": 240,
+    "concurrency": 2,
+    "elapsed_sec": 1.602,
+    "rps": 149.84,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr",
+    "domain": "https://openai.com",
+    "total": 240,
+    "concurrency": 4,
+    "elapsed_sec": 1.634,
+    "rps": 146.92,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr",
+    "domain": "https://openai.com",
+    "total": 240,
+    "concurrency": 8,
+    "elapsed_sec": 1.612,
+    "rps": 148.87,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr",
+    "domain": "https://openai.com",
+    "total": 240,
+    "concurrency": 16,
+    "elapsed_sec": 1.62,
+    "rps": 148.11,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr",
+    "domain": "https://openai.com",
+    "total": 240,
+    "concurrency": 24,
+    "elapsed_sec": 1.933,
+    "rps": 124.15,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr",
+    "domain": "https://openai.com",
+    "total": 240,
+    "concurrency": 32,
+    "elapsed_sec": 1.703,
+    "rps": 140.89,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr",
+    "domain": "https://example.org/path?x=1&y=2",
+    "total": 240,
+    "concurrency": 1,
+    "elapsed_sec": 2.421,
+    "rps": 99.15,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr",
+    "domain": "https://example.org/path?x=1&y=2",
+    "total": 240,
+    "concurrency": 2,
+    "elapsed_sec": 2.027,
+    "rps": 118.43,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr",
+    "domain": "https://example.org/path?x=1&y=2",
+    "total": 240,
+    "concurrency": 4,
+    "elapsed_sec": 1.999,
+    "rps": 120.07,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr",
+    "domain": "https://example.org/path?x=1&y=2",
+    "total": 240,
+    "concurrency": 8,
+    "elapsed_sec": 2.063,
+    "rps": 116.33,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr",
+    "domain": "https://example.org/path?x=1&y=2",
+    "total": 240,
+    "concurrency": 16,
+    "elapsed_sec": 2.004,
+    "rps": 119.74,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr",
+    "domain": "https://example.org/path?x=1&y=2",
+    "total": 240,
+    "concurrency": 24,
+    "elapsed_sec": 1.976,
+    "rps": 121.44,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr",
+    "domain": "https://example.org/path?x=1&y=2",
+    "total": 240,
+    "concurrency": 32,
+    "elapsed_sec": 1.973,
+    "rps": 121.62,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr",
+    "domain": "https://n8n.io/workflows",
+    "total": 240,
+    "concurrency": 1,
+    "elapsed_sec": 2.042,
+    "rps": 117.54,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr",
+    "domain": "https://n8n.io/workflows",
+    "total": 240,
+    "concurrency": 2,
+    "elapsed_sec": 2.211,
+    "rps": 108.57,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr",
+    "domain": "https://n8n.io/workflows",
+    "total": 240,
+    "concurrency": 4,
+    "elapsed_sec": 1.428,
+    "rps": 168.11,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr",
+    "domain": "https://n8n.io/workflows",
+    "total": 240,
+    "concurrency": 8,
+    "elapsed_sec": 1.396,
+    "rps": 171.89,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr",
+    "domain": "https://n8n.io/workflows",
+    "total": 240,
+    "concurrency": 16,
+    "elapsed_sec": 1.511,
+    "rps": 158.87,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr",
+    "domain": "https://n8n.io/workflows",
+    "total": 240,
+    "concurrency": 24,
+    "elapsed_sec": 1.407,
+    "rps": 170.57,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr",
+    "domain": "https://n8n.io/workflows",
+    "total": 240,
+    "concurrency": 32,
+    "elapsed_sec": 1.403,
+    "rps": 171.01,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr@v2",
+    "domain": "https://github.com/misaelzapata/fastfn",
+    "total": 240,
+    "concurrency": 1,
+    "elapsed_sec": 2.348,
+    "rps": 102.22,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr@v2",
+    "domain": "https://github.com/misaelzapata/fastfn",
+    "total": 240,
+    "concurrency": 2,
+    "elapsed_sec": 1.803,
+    "rps": 133.15,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr@v2",
+    "domain": "https://github.com/misaelzapata/fastfn",
+    "total": 240,
+    "concurrency": 4,
+    "elapsed_sec": 1.609,
+    "rps": 149.17,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr@v2",
+    "domain": "https://github.com/misaelzapata/fastfn",
+    "total": 240,
+    "concurrency": 8,
+    "elapsed_sec": 1.988,
+    "rps": 120.72,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr@v2",
+    "domain": "https://github.com/misaelzapata/fastfn",
+    "total": 240,
+    "concurrency": 16,
+    "elapsed_sec": 1.665,
+    "rps": 144.17,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr@v2",
+    "domain": "https://github.com/misaelzapata/fastfn",
+    "total": 240,
+    "concurrency": 24,
+    "elapsed_sec": 1.605,
+    "rps": 149.58,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr@v2",
+    "domain": "https://github.com/misaelzapata/fastfn",
+    "total": 240,
+    "concurrency": 32,
+    "elapsed_sec": 1.834,
+    "rps": 130.88,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr@v2",
+    "domain": "https://openai.com",
+    "total": 240,
+    "concurrency": 1,
+    "elapsed_sec": 2.473,
+    "rps": 97.03,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr@v2",
+    "domain": "https://openai.com",
+    "total": 240,
+    "concurrency": 2,
+    "elapsed_sec": 2.43,
+    "rps": 98.78,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr@v2",
+    "domain": "https://openai.com",
+    "total": 240,
+    "concurrency": 4,
+    "elapsed_sec": 1.717,
+    "rps": 139.82,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr@v2",
+    "domain": "https://openai.com",
+    "total": 240,
+    "concurrency": 8,
+    "elapsed_sec": 1.683,
+    "rps": 142.64,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr@v2",
+    "domain": "https://openai.com",
+    "total": 240,
+    "concurrency": 16,
+    "elapsed_sec": 1.776,
+    "rps": 135.17,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr@v2",
+    "domain": "https://openai.com",
+    "total": 240,
+    "concurrency": 24,
+    "elapsed_sec": 1.717,
+    "rps": 139.79,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr@v2",
+    "domain": "https://openai.com",
+    "total": 240,
+    "concurrency": 32,
+    "elapsed_sec": 2.084,
+    "rps": 115.17,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr@v2",
+    "domain": "https://example.org/path?x=1&y=2",
+    "total": 240,
+    "concurrency": 1,
+    "elapsed_sec": 2.386,
+    "rps": 100.57,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr@v2",
+    "domain": "https://example.org/path?x=1&y=2",
+    "total": 240,
+    "concurrency": 2,
+    "elapsed_sec": 1.97,
+    "rps": 121.85,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr@v2",
+    "domain": "https://example.org/path?x=1&y=2",
+    "total": 240,
+    "concurrency": 4,
+    "elapsed_sec": 1.756,
+    "rps": 136.69,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr@v2",
+    "domain": "https://example.org/path?x=1&y=2",
+    "total": 240,
+    "concurrency": 8,
+    "elapsed_sec": 1.801,
+    "rps": 133.23,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr@v2",
+    "domain": "https://example.org/path?x=1&y=2",
+    "total": 240,
+    "concurrency": 16,
+    "elapsed_sec": 1.897,
+    "rps": 126.51,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr@v2",
+    "domain": "https://example.org/path?x=1&y=2",
+    "total": 240,
+    "concurrency": 24,
+    "elapsed_sec": 1.715,
+    "rps": 139.98,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr@v2",
+    "domain": "https://example.org/path?x=1&y=2",
+    "total": 240,
+    "concurrency": 32,
+    "elapsed_sec": 1.72,
+    "rps": 139.52,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr@v2",
+    "domain": "https://n8n.io/workflows",
+    "total": 240,
+    "concurrency": 1,
+    "elapsed_sec": 2.34,
+    "rps": 102.56,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr@v2",
+    "domain": "https://n8n.io/workflows",
+    "total": 240,
+    "concurrency": 2,
+    "elapsed_sec": 1.923,
+    "rps": 124.78,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr@v2",
+    "domain": "https://n8n.io/workflows",
+    "total": 240,
+    "concurrency": 4,
+    "elapsed_sec": 2.553,
+    "rps": 94.02,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr@v2",
+    "domain": "https://n8n.io/workflows",
+    "total": 240,
+    "concurrency": 8,
+    "elapsed_sec": 2.05,
+    "rps": 117.1,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr@v2",
+    "domain": "https://n8n.io/workflows",
+    "total": 240,
+    "concurrency": 16,
+    "elapsed_sec": 2.216,
+    "rps": 108.28,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr@v2",
+    "domain": "https://n8n.io/workflows",
+    "total": 240,
+    "concurrency": 24,
+    "elapsed_sec": 3.285,
+    "rps": 73.06,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  },
+  {
+    "endpoint":"/qr@v2",
+    "domain": "https://n8n.io/workflows",
+    "total": 240,
+    "concurrency": 32,
+    "elapsed_sec": 2.181,
+    "rps": 110.02,
+    "status": {
+      "200": 240
+    },
+    "samples": {}
+  }
+]

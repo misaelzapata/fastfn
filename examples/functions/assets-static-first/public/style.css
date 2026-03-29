@@ -1,0 +1,135 @@
+:root {
+  --bg: #f5efe4;
+  --card: rgba(255, 252, 245, 0.9);
+  --ink: #16213c;
+  --muted: #5d6a7d;
+  --line: rgba(22, 33, 60, 0.12);
+  --accent: #d45113;
+  --accent-soft: #ffd8bf;
+  --shadow: 0 20px 50px rgba(22, 33, 60, 0.12);
+  font-family: "Georgia", "Times New Roman", serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at top left, rgba(212, 81, 19, 0.16), transparent 32%),
+    linear-gradient(135deg, #faf6ef 0%, #efe3d3 55%, #f7f0e7 100%);
+}
+
+code {
+  font-family: "Courier New", monospace;
+}
+
+.shell {
+  width: min(960px, calc(100vw - 2rem));
+  margin: 0 auto;
+  padding: 2rem 0 4rem;
+}
+
+.hero,
+.panel {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  box-shadow: var(--shadow);
+}
+
+.hero {
+  padding: 2rem;
+}
+
+.eyebrow {
+  margin: 0 0 0.5rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-size: 0.78rem;
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: clamp(2.4rem, 5vw, 4rem);
+}
+
+.lede {
+  max-width: 58ch;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  margin-top: 1.5rem;
+}
+
+.tabs a {
+  text-decoration: none;
+  color: var(--ink);
+  background: white;
+  border: 1px solid var(--line);
+  padding: 0.75rem 1rem;
+  border-radius: 999px;
+}
+
+.panel {
+  margin-top: 1.25rem;
+  padding: 1.5rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.pill {
+  display: inline-block;
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.mono {
+  font-family: "Courier New", monospace;
+  font-size: 0.92rem;
+}
+
+ul {
+  padding-left: 1.15rem;
+}
+
+@media (max-width: 640px) {
+  .shell {
+    width: min(960px, calc(100vw - 1rem));
+    padding-top: 1rem;
+  }
+
+  .hero,
+  .panel {
+    border-radius: 22px;
+  }
+}

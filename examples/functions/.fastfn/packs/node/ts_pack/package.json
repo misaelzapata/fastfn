@@ -1,0 +1,9 @@
+{
+  "name": "fastfn-pack-ts",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "esbuild": "^0.25.0"
+  }
+}
+

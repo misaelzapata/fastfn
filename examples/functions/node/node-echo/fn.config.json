@@ -1,0 +1,1 @@
+{"max_concurrency":10,"timeout_ms":1800,"invoke":{"query":{"name":"Node"},"body":"","methods":["GET","POST"],"summary":"Node echo endpoint"}}

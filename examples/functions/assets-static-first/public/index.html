@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>FastFN Static-First Demo</title>
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <p class="eyebrow">FastFN Public Assets</p>
+        <h1>Static-First Demo</h1>
+        <p class="lede">
+          This demo mounts <code>public/</code> at <code>/</code>. Static files win first, then FastFN falls back to runtime handlers for API paths.
+        </p>
+        <nav class="tabs">
+          <a href="#/">Overview</a>
+          <a href="#/runtimes">Runtime APIs</a>
+          <a href="#/notes">Notes</a>
+        </nav>
+      </header>
+
+      <section id="view" class="panel" aria-live="polite"></section>
+    </main>
+
+    <script src="/app.js" defer></script>
+  </body>
+</html>

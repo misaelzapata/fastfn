@@ -1,0 +1,13 @@
+{
+  "invoke": {
+    "summary": "Edge auth gateway — validate a Bearer token, then proxy upstream",
+    "methods": ["GET", "POST"],
+    "query": { "target": "openapi" },
+    "body": "hello"
+  },
+  "edge": {
+    "base_url": "http://127.0.0.1:8080",
+    "allow_hosts": ["127.0.0.1:8080"],
+    "allow_private": true
+  }
+}

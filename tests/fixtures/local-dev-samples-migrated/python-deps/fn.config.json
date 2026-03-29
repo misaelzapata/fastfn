@@ -1,0 +1,6 @@
+{
+  "runtime": "python",
+  "name": "python-deps",
+  "version": "1.0.0",
+  "entrypoint": "handler.py"
+}

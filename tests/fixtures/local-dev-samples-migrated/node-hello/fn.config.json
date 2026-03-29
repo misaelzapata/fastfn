@@ -1,0 +1,6 @@
+{
+  "runtime": "node",
+  "name": "node-hello",
+  "version": "1.0.0",
+  "entrypoint": "handler.js"
+}

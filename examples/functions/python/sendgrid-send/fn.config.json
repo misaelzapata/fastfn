@@ -1,0 +1,10 @@
+{
+  "invoke": {
+    "methods": ["GET", "POST"],
+    "summary": "Send an email via SendGrid (dry_run=true by default)"
+  },
+  "timeout_ms": 2500,
+  "max_concurrency": 10,
+  "max_body_bytes": 262144
+}
+

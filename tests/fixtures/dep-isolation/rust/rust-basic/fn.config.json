@@ -1,0 +1,7 @@
+{
+  "timeout_ms": 120000,
+  "invoke": {
+    "methods": ["GET"],
+    "summary": "Rust function with serde_json only"
+  }
+}

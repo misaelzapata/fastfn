@@ -1,0 +1,21 @@
+{
+  "group": "tests",
+  "schedule": {
+    "enabled": true,
+    "every_seconds": 1,
+    "method": "GET"
+  },
+  "worker_pool": {
+    "enabled": true,
+    "max_workers": 3,
+    "max_queue": 2,
+    "queue_timeout_ms": 1500,
+    "queue_poll_ms": 15,
+    "overflow_status": 503
+  },
+  "invoke": {
+    "methods": ["GET"],
+    "routes": ["/slow-task"]
+  }
+}
+

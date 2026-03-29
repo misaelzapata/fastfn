@@ -1,0 +1,10 @@
+{
+  "invoke": {
+    "summary": "Echo query/context for testing",
+    "methods": ["GET"],
+    "query": {
+      "key": "test"
+    },
+    "body": ""
+  }
+}

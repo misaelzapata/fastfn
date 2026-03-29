@@ -1,0 +1,44 @@
+services:
+  openresty:
+    build:
+      context: .
+      dockerfile: docker/openresty/Dockerfile
+    # Integration tests `exec` into the container and call 127.0.0.1:8080 internally,
+    # so we intentionally do NOT publish a host port here (avoids clashing with dev stacks).
+    volumes:
+      # The test runner is expected to provide a throwaway functions root via FN_FUNCTIONS_ROOT
+      # (usually a temp copy of examples/fixtures). This avoids mutating tracked files.
+      - ${FN_FUNCTIONS_ROOT:-./srv/fn/functions}:/app/srv/fn/functions
+    environment:
+      FN_RUNTIMES: ${FN_RUNTIMES:-python,node,php,lua,rust}
+      FN_UI_ENABLED: ${FN_UI_ENABLED:-0}
+      FN_CONSOLE_API_ENABLED: ${FN_CONSOLE_API_ENABLED:-1}
+      FN_CONSOLE_WRITE_ENABLED: ${FN_CONSOLE_WRITE_ENABLED:-1}
+      FN_CONSOLE_LOCAL_ONLY: ${FN_CONSOLE_LOCAL_ONLY:-1}
+      FN_ADMIN_TOKEN: ${FN_ADMIN_TOKEN:-}
+      FN_STRICT_FS: ${FN_STRICT_FS:-1}
+      FN_STRICT_FS_ALLOW: ${FN_STRICT_FS_ALLOW:-}
+      # Docker integration runs exercise cold-start paths; keep the default timeout
+      # high enough to avoid false failures while runtimes spin up workers.
+      FN_DEFAULT_TIMEOUT_MS: ${FN_DEFAULT_TIMEOUT_MS:-8000}
+      FN_PREINSTALL_PY_DEPS_ON_START: ${FN_PREINSTALL_PY_DEPS_ON_START:-0}
+      # Keep integration startup deterministic and avoid background npm installs
+      # interfering with early runtime calls.
+      FN_PREINSTALL_NODE_DEPS_ON_START: ${FN_PREINSTALL_NODE_DEPS_ON_START:-0}
+      FN_AUTO_REQUIREMENTS: ${FN_AUTO_REQUIREMENTS:-1}
+      FN_AUTO_NODE_DEPS: ${FN_AUTO_NODE_DEPS:-1}
+      FN_AUTO_PHP_DEPS: ${FN_AUTO_PHP_DEPS:-1}
+      FN_AUTO_INFER_PY_DEPS: ${FN_AUTO_INFER_PY_DEPS:-1}
+      FN_AUTO_INFER_NODE_DEPS: ${FN_AUTO_INFER_NODE_DEPS:-1}
+      FN_AUTO_INFER_WRITE_MANIFEST: ${FN_AUTO_INFER_WRITE_MANIFEST:-1}
+      FN_AUTO_INFER_STRICT: ${FN_AUTO_INFER_STRICT:-1}
+      FN_ZERO_CONFIG_IGNORE_DIRS: ${FN_ZERO_CONFIG_IGNORE_DIRS:-}
+      FN_HTTP_VERIFY_TLS: ${FN_HTTP_VERIFY_TLS:-1}
+      FN_OPENAPI_INCLUDE_INTERNAL: ${FN_OPENAPI_INCLUDE_INTERNAL:-0}
+      FN_HOME_FUNCTION: ${FN_HOME_FUNCTION:-}
+      FN_HOME_REDIRECT: ${FN_HOME_REDIRECT:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_API_BASE: ${TELEGRAM_API_BASE:-}

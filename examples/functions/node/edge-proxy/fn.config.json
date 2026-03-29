@@ -1,0 +1,15 @@
+{
+  "invoke": {
+    "summary": "Edge passthrough (proxy)",
+    "methods": ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    "query": { "key": "demo" },
+    "body": "hello",
+    "content_type": "application/json"
+  },
+  "edge": {
+    "base_url": "http://127.0.0.1:8080",
+    "allow_private": true,
+    "max_response_bytes": 1048576
+  }
+}
+

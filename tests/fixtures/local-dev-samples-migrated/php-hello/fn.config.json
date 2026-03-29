@@ -1,0 +1,6 @@
+{
+  "runtime": "php",
+  "name": "php-hello",
+  "version": "1.0.0",
+  "entrypoint": "handler.php"
+}

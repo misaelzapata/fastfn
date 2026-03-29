@@ -1,0 +1,13 @@
+{
+  "timeout_ms": 30000,
+  "invoke": {
+    "summary": "Telegram AI digest: fetches group messages, summarizes with OpenAI, sends digest",
+    "methods": ["GET"],
+    "content_type": "application/json"
+  },
+  "schedule": {
+    "enabled": true,
+    "every_seconds": 3600,
+    "method": "GET"
+  }
+}

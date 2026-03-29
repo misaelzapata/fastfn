@@ -1,0 +1,9 @@
+{
+  "invoke": {
+    "summary": "Simple echo value",
+    "methods": ["GET"],
+    "query": {
+      "v": "demo"
+    }
+  }
+}

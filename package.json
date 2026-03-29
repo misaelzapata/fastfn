@@ -1,0 +1,19 @@
+{
+  "name": "fastfn",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Playwright E2E suite for fastfn console/gateway UI",
+  "engines": {
+    "node": "20.x"
+  },
+  "scripts": {
+    "test:node": "jest --verbose tests/unit/node/",
+    "test:e2e:ui": "playwright test -c tests/e2e/playwright.config.cjs",
+    "test:e2e:ui:headed": "playwright test -c tests/e2e/playwright.config.cjs --headed",
+    "test:e2e:ui:debug": "PWDEBUG=1 playwright test -c tests/e2e/playwright.config.cjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0",
+    "jest": "^29.7.0"
+  }
+}

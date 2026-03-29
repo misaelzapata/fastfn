@@ -1,0 +1,16 @@
+{
+  "runtime": "node",
+  "name": "cloudflare-v1-router",
+  "entrypoint": "handler.js",
+  "invoke": {
+    "adapter": "cloudflare-worker",
+    "methods": [
+      "GET",
+      "POST"
+    ],
+    "routes": [
+      "/api",
+      "/api/*"
+    ]
+  }
+}

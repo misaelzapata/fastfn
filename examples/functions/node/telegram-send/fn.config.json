@@ -1,0 +1,18 @@
+{
+  "timeout_ms": 3500,
+  "max_concurrency": 8,
+  "max_body_bytes": 262144,
+  "invoke": {
+    "summary": "Send message with Telegram Bot API (dry_run by default)",
+    "methods": [
+      "GET",
+      "POST"
+    ],
+    "query": {
+      "chat_id": "123456789",
+      "text": "Hello from fastfn",
+      "dry_run": "true"
+    },
+    "body": "{\"chat_id\":\"123456789\",\"text\":\"Hello from fastfn\",\"dry_run\":true}"
+  }
+}

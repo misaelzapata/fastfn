@@ -1,0 +1,19 @@
+{
+  "timeout_ms": 4000,
+  "max_concurrency": 5,
+  "max_body_bytes": 262144,
+  "invoke": {
+    "summary": "Send email via Gmail SMTP (dry_run by default)",
+    "methods": [
+      "GET",
+      "POST"
+    ],
+    "query": {
+      "to": "demo@example.com",
+      "subject": "Hello",
+      "text": "Hello from fastfn",
+      "dry_run": "true"
+    },
+    "body": "{\"to\":\"demo@example.com\",\"subject\":\"Hello\",\"text\":\"Hello from fastfn\",\"dry_run\":true}"
+  }
+}

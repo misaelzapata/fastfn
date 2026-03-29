@@ -1,0 +1,1 @@
+{"max_body_bytes":262144,"include_debug_headers":false,"response":{"include_debug_headers":true},"invoke":{"body":"","methods":["GET"],"query":{"name":"World"},"summary":"Simple greeting function"},"timeout_ms":1300,"max_concurrency":11}

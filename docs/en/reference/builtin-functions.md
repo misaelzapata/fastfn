@@ -1,0 +1,1289 @@
+# Example Function Catalog
+
+
+> Verified status as of **March 10, 2026**.
+> Runtime note: FastFN resolves dependencies and build steps per function: Python uses `requirements.txt`, Node uses `package.json`, PHP installs from `composer.json` when present, and Rust handlers are built with `cargo`. Host runtimes/tools are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
+This page is a guided tour of the **example functions** shipped with this repository.
+
+Important distinction:
+
+- Public example routes live at normal paths like `/hello` and `/telegram-ai-reply`.
+- Platform control-plane endpoints live under `/_fn/*` (health, OpenAPI, config, logs).
+
+## Run the examples
+
+Recommended (Next.js-style routes + showcase):
+
+```bash
+bin/fastfn dev examples/functions/next-style
+```
+
+Then try:
+
+- `GET /showcase`
+- `GET /openapi.json`
+- `GET /docs`
+
+Full catalog (everything under `examples/functions/`):
+
+```bash
+bin/fastfn dev examples/functions
+```
+
+Note about paths:
+
+- When you run a **subfolder** (like `examples/functions/next-style`), its routes live at the root (for example `/users`, `/showcase`).
+- When you run the **full catalog** (`examples/functions`), each app folder becomes a namespace:
+  - `next-style/*` is served under `/next-style/*`
+  - `polyglot-tutorial/*` is served under `/polyglot-tutorial/*`
+  - `polyglot-db-demo/*` is served under `/polyglot-db-demo/*`
+
+Repository source layout:
+
+- Python: `examples/functions/python/<name>/`
+- Node: `examples/functions/node/<name>/`
+- PHP: `examples/functions/php/<name>/`
+- Rust: `examples/functions/rust/<name>/`
+- Next.js-style app: `examples/functions/next-style/` (file routes)
+
+Those paths describe where this repository stores its examples. They are not the only supported layout for user projects.
+
+## Beginner tour (10 minutes)
+
+If you're new to FastFN, start here. You only need one terminal.
+
+1. Start the demo app:
+
+```bash
+bin/fastfn dev examples/functions/next-style
+```
+
+2. Open the UI and docs:
+
+- `GET /showcase` (browser)
+- `GET /docs` (Swagger UI for public functions)
+- `GET /openapi.json` (raw OpenAPI JSON)
+
+3. Call a JSON endpoint:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/hello?name=World'
+```
+
+Example response:
+
+```json
+{"hello":"saludos World"}
+```
+
+4. Inspect what the gateway sends to handlers:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/request-inspector?key=test' \
+  -X POST \
+  -H 'x-demo: 1' \
+  --data 'hello'
+```
+
+You should see JSON including `method`, `path`, `query`, `headers` (only a safe subset), and `body`.
+
+5. Try non-JSON responses:
+
+- HTML:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/html-demo?name=Web'
+```
+
+- CSV:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/csv-demo?name=Alice'
+```
+
+- Binary (PNG):
+
+```bash
+curl -sS 'http://127.0.0.1:8080/png-demo' --output out.png
+```
+
+## How these examples work
+
+Every example function is “just code” plus optional local config:
+
+- `handler.py` / `handler.js` / `handler.ts` etc: the handler file
+- optional private helper modules such as `core.js`, `_shared.py`, `lib.php`
+- `fn.config.json` (optional): methods/routes/handler name/timeouts/etc
+- `fn.env.json` (optional): per-function env vars (secrets supported)
+
+Handlers receive a single `event` object (method/query/headers/body/context/env/client).
+Handlers return:
+
+- JSON helpers: `{ status, headers, body }`
+- Binary: `{ status, headers, is_base64: true, body_base64 }`
+- Edge proxy: `{ proxy: { path, method, headers, body, timeout_ms } }` (FastFN performs the upstream fetch)
+
+### `custom-handler-demo` (custom handler name, Python + Node variants)
+
+This demo shows that you can pick a handler name other than `handler` using `fn.config.json`.
+
+Important distinction:
+
+- the runtime still resolves the file from `entrypoint`, file routes, or canonical entry files
+- `invoke.handler` only changes which exported symbol is invoked inside that resolved file
+- Python also accepts `main(req)` when `handler` is absent
+
+- Python variant:
+
+```bash
+bin/fastfn dev examples/functions/python/custom-handler-demo
+curl -sS 'http://127.0.0.1:8080/custom-handler-demo?name=World'
+```
+
+Expected response:
+
+```json
+{"runtime":"python","handler":"main","hello":"World"}
+```
+
+- Node variant:
+
+```bash
+bin/fastfn dev examples/functions/node/custom-handler-demo
+curl -sS 'http://127.0.0.1:8080/custom-handler-demo?name=World'
+```
+
+Expected response:
+
+```json
+{"runtime":"node","handler":"main","hello":"World"}
+```
+
+## Multi-route demo apps
+
+These folders contain multiple routes (an “app”), not just one endpoint.
+
+### `next-style` (recommended: Next.js-style file routing)
+
+- Run:
+
+```bash
+bin/fastfn dev examples/functions/next-style
+```
+
+- What it demonstrates:
+  - Next.js-style routing (`index.*`, `[id].*`, `[...slug].*`, method prefixes)
+  - Private helper imports that stay out of OpenAPI (`users/_shared.js`, `blog/_shared.py`, `php/_shared.php`, `rust/_shared.rs`)
+  - Polyglot handlers living side-by-side (node/python/php/rust)
+  - A small “showcase” UI to click through the demos
+
+- Try:
+  - `GET /showcase`
+  - `GET /users`
+  - `GET /users/123`
+  - `GET /blog`
+  - `GET /rust/version`
+
+### `polyglot-tutorial` (step-by-step multi-runtime pipeline)
+
+Run (namespaced under the catalog root):
+
+```bash
+bin/fastfn dev examples/functions
+```
+
+Try:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/polyglot-tutorial/step-1'
+curl -sS 'http://127.0.0.1:8080/polyglot-tutorial/step-2?name=Ada'
+curl -sS 'http://127.0.0.1:8080/polyglot-tutorial/step-3?name=Ada'
+curl -sS 'http://127.0.0.1:8080/polyglot-tutorial/step-4'
+curl -sS 'http://127.0.0.1:8080/polyglot-tutorial/step-5?name=Ada'
+```
+
+What to look for:
+
+- Each step is a different runtime (node -> python -> php -> rust -> node)
+- Step 5 performs internal HTTP calls to earlier steps and returns a combined `flow`
+
+### `polyglot-db-demo` (shared SQLite across runtimes)
+
+Run it directly (routes at the root):
+
+```bash
+bin/fastfn dev examples/functions/polyglot-db-demo
+```
+
+Try:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/items'
+curl -sS -X POST 'http://127.0.0.1:8080/items' -H 'content-type: application/json' --data '{"name":"first item"}'
+curl -sS 'http://127.0.0.1:8080/items'
+curl -sS -X PUT 'http://127.0.0.1:8080/items/1' -H 'content-type: application/json' --data '{"name":"updated item"}'
+curl -sS -X DELETE 'http://127.0.0.1:8080/items/1'
+```
+
+What to look for:
+
+- A single SQLite file is shared across node/python/php/rust handlers
+- Some internal helper routes are intentionally not public (they require an internal-call header)
+
+### `ip-intel` (file routes + optional deps + deterministic mock mode)
+
+Run (namespaced under the catalog root):
+
+```bash
+bin/fastfn dev examples/functions
+```
+
+Try without external network calls:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/ip-intel/maxmind?ip=8.8.8.8&mock=1'
+curl -sS 'http://127.0.0.1:8080/ip-intel/remote?ip=8.8.8.8&mock=1'
+```
+
+## Python runtime
+
+### `cron-tick` (scheduler demo)
+
+- Route: `/cron-tick`
+- Methods: `GET`
+- Goal: simple counter you can increment via schedule
+- Source: `examples/functions/python/cron-tick/handler.py`
+
+Read current count:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/cron-tick?action=read'
+```
+
+Example response:
+
+```json
+{"function":"cron-tick","action":"read","count":0}
+```
+
+Enable schedule (every 1s) via Console API:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/_fn/function-config?runtime=python&name=cron-tick' \
+  -X PUT -H 'Content-Type: application/json' \
+  --data '{"schedule":{"enabled":true,"every_seconds":1,"method":"GET","query":{"action":"inc"},"headers":{},"body":"","context":{}}}'
+curl -sS -X POST 'http://127.0.0.1:8080/_fn/reload'
+```
+
+Observe scheduler state:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/_fn/schedules'
+```
+
+### `utc-time` (cron + timezone demo)
+
+- Route: `/utc-time`
+- Methods: `GET`
+- Goal: show UTC/local timestamps + scheduler trigger context
+- Schedule: daily at `09:00` in `UTC` (cron)
+- Source: `examples/functions/python/utc-time/handler.py`
+
+Call it:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/utc-time'
+```
+
+What to look for:
+
+- `now_utc` vs `now_local`
+- `trigger` (when invoked by the scheduler)
+
+### `offset-time` (cron + timezone demo)
+
+- Route: `/offset-time`
+- Methods: `GET`
+- Goal: same as `utc-time`, but scheduled using a fixed offset timezone
+- Schedule: daily at `09:00` in `-05:00` (cron)
+- Source: `examples/functions/python/offset-time/handler.py`
+
+Call it:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/offset-time'
+```
+
+Tip: compare `next` values via `/_fn/schedules`, or from the browser devtools:
+
+```js
+fetch('/_fn/schedules').then((r) => r.json()).then(console.log)
+```
+
+### `tools-loop` (tools loop demo, inspired by agent loops)
+
+- Route: `/tools-loop`
+- Methods: `GET`, `POST`
+- Goal: minimal "agent loop" style planner/executor for testing tools (no API keys).
+- Default behavior: `dry_run=true`
+- Source: `examples/functions/python/tools-loop/handler.py`
+
+Dry run (plan only):
+
+```bash
+curl -sS 'http://127.0.0.1:8080/tools-loop?text=quiero%20mi%20ip%20y%20clima&dry_run=true'
+```
+
+What to look for:
+
+- `plan`: selected tools
+- `results`: in `dry_run=true` they are placeholders
+
+Execute tools:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/tools-loop?tool=ip_lookup,weather&city=Buenos%20Aires&dry_run=false'
+```
+
+Execute tools (offline mock):
+
+```bash
+curl -sS 'http://127.0.0.1:8080/tools-loop?tool=ip_lookup,weather&city=Buenos%20Aires&dry_run=false&mock=true'
+```
+
+### `telegram-ai-reply-py` (Telegram AI bot, Python)
+
+- Route: `/telegram-ai-reply-py`
+- Methods: `POST`
+- Goal: Telegram webhook -> OpenAI -> Telegram reply (Python)
+- Env (secrets): `TELEGRAM_BOT_TOKEN`, `OPENAI_API_KEY`
+- Source: `examples/functions/python/telegram-ai-reply-py/handler.py`
+
+Example (webhook POST):
+
+```bash
+curl -sS 'http://127.0.0.1:8080/telegram-ai-reply-py' \
+  -X POST \
+  -H 'Content-Type: application/json' \
+  -d '{"message":{"chat":{"id":123},"text":"Hola"}}'
+```
+
+### `hello`
+
+- Route: `/hello`
+- Methods: `GET`
+- Query: optional `name`
+- Source: `examples/functions/python/hello/handler.py`
+
+Example:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/hello?name=World'
+```
+
+Typical response:
+
+```json
+{"hello":"saludos World"}
+```
+
+### `risk-score`
+
+- Route: `/risk-score`
+- Methods: `GET`, `POST`
+- Inputs:
+  - `query.email`
+  - fallback header `x-user-email`
+- Source: `examples/functions/python/risk-score/handler.py`
+
+GET example:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/risk-score?email=user@example.com'
+```
+
+POST example:
+
+```bash
+curl -sS -X POST 'http://127.0.0.1:8080/risk-score' \
+  -H 'x-user-email: user@example.com' \
+  -H 'Content-Type: application/json' \
+  -d '{}'
+```
+
+Typical response:
+
+```json
+{"runtime":"python","function":"risk-score","score":60,"risk":"high","signals":{"email":true,"ip":"172.19.0.1"}}
+```
+
+### `slow`
+
+- Route: `/slow`
+- Methods: `GET`
+- Query: `sleep_ms`
+- Source: `examples/functions/python/slow/handler.py`
+
+Example:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/slow?sleep_ms=100'
+```
+
+Example response:
+
+```json
+{"runtime":"python","function":"slow","slept_ms":100}
+```
+
+### `html-demo`
+
+- Route: `/html-demo`
+- Methods: `GET`
+- Content-Type: `text/html; charset=utf-8`
+- Source: `examples/functions/python/html-demo/handler.py`
+
+Example:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/html-demo?name=Web'
+```
+
+Example response:
+
+```html
+<html><body><h1>Hello Web</h1><p>html-demo</p></body></html>
+```
+
+### `csv-demo`
+
+- Route: `/csv-demo`
+- Methods: `GET`
+- Content-Type: `text/csv; charset=utf-8`
+- Source: `examples/functions/python/csv-demo/handler.py`
+
+Example:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/csv-demo?name=Alice'
+```
+
+Example response:
+
+```csv
+id,name,runtime
+1,Alice,python
+```
+
+### `png-demo`
+
+- Route: `/png-demo`
+- Methods: `GET`
+- Content-Type: `image/png`
+- Source: `examples/functions/python/png-demo/handler.py`
+
+Example:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/png-demo' --output out.png
+```
+
+### `lambda-echo`
+
+- Route: `/lambda-echo`
+- Methods: `GET`
+- Source: `examples/functions/python/lambda-echo/handler.py`
+
+Example:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/lambda-echo?name=Lambda'
+```
+
+Example response:
+
+```json
+{"hello":"Lambda"}
+```
+
+### `custom-echo`
+
+- Route: `/custom-echo`
+- Methods: `GET`
+- Query: `v`
+- Source: `examples/functions/python/custom-echo/handler.py`
+
+Example:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/custom-echo?v=demo'
+```
+
+Example response:
+
+```json
+{"value":"demo"}
+```
+
+### `requirements-demo`
+
+- Route: `/requirements-demo`
+- Methods: `GET`
+- Dependency hints:
+  - `requirements.txt`
+  - inline `#@requirements` comment
+- Source: `examples/functions/python/requirements-demo/handler.py`
+
+Example:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/requirements-demo'
+```
+
+Example response:
+
+```json
+{"runtime":"python","function":"requirements-demo"}
+```
+
+### `qr`
+
+- Route: `/qr`
+- Methods: `GET`
+- Query: `text` or `url`
+- Content-Type: `image/svg+xml`
+- Source: `examples/functions/python/qr/handler.py`
+
+Example:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/qr?text=PythonQR'
+```
+
+Tip: write it to a file:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/qr?text=PythonQR' --output qr.svg
+```
+
+### `pack-qr` (Python QR, minimal packaging demo)
+
+- Route: `/pack-qr`
+- Methods: `GET`
+- Query: `text`
+- Content-Type: `image/svg+xml`
+- Source: `examples/functions/python/pack-qr/handler.py`
+
+```bash
+curl -sS 'http://127.0.0.1:8080/pack-qr?text=Hello' --output pack-qr.svg
+```
+
+### `gmail-send`
+
+- Route: `/gmail-send`
+- Methods: `GET`, `POST`
+- Goal: Gmail SMTP helper for demos/integrations
+- Default behavior: `dry_run=true` (safe local testing without real credentials)
+- Source: `examples/functions/python/gmail-send/handler.py`
+
+GET example:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/gmail-send?to=demo@example.com&subject=Hi&text=Hello&dry_run=true'
+```
+
+Example response:
+
+```json
+{"channel":"gmail","to":"demo@example.com","subject":"Hi","dry_run":true}
+```
+
+POST example:
+
+```bash
+curl -sS -X POST 'http://127.0.0.1:8080/gmail-send' \
+  -H 'Content-Type: application/json' \
+  -d '{"to":"demo@example.com","subject":"Hi","text":"Hello","dry_run":true}'
+```
+
+### `sendgrid-send`
+
+- Route: `/sendgrid-send`
+- Methods: `GET`, `POST`
+- Goal: SendGrid email helper (safe by default)
+- Default behavior: `dry_run=true`
+- Env: `SENDGRID_API_KEY` (secret), `SENDGRID_FROM`
+- Source: `examples/functions/python/sendgrid-send/handler.py`
+
+GET (dry run):
+
+```bash
+curl -sS 'http://127.0.0.1:8080/sendgrid-send?to=demo@example.com&subject=Hi&text=Hello&dry_run=true'
+```
+
+Example response (dry run):
+
+```json
+{"function":"sendgrid-send","dry_run":true,"ok":true}
+```
+
+### `sheets-webapp-append`
+
+- Route: `/sheets-webapp-append`
+- Methods: `GET`
+- Goal: append a row via a Google Apps Script Web App (safe by default)
+- Default behavior: `dry_run=true`
+- Env: `SHEETS_WEBAPP_URL` (secret)
+- Source: `examples/functions/python/sheets-webapp-append/handler.py`
+
+Example (dry run):
+
+```bash
+curl -sS 'http://127.0.0.1:8080/sheets-webapp-append?sheet=Sheet1&values=a,b,c&dry_run=true'
+```
+
+### `nombre`
+
+- Route: `/nombre`
+- Methods: `GET` (default policy)
+- Source: `examples/functions/python/nombre/handler.py`
+
+Example:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/nombre?name=Ana'
+```
+
+Example response:
+
+```json
+{"runtime":"python","function":"hello","hello":"Ana","request_id":"<request_id>"}
+```
+
+### `stripe-webhook-verify`
+
+- Route: `/stripe-webhook-verify`
+- Methods: `POST`
+- Goal: verify Stripe webhook signature (safe by default)
+- Default behavior: `dry_run=true`
+- Env: `STRIPE_WEBHOOK_SECRET` (secret)
+- Source: `examples/functions/python/stripe-webhook-verify/handler.py`
+
+Dry run:
+
+```bash
+curl -sS -X POST 'http://127.0.0.1:8080/stripe-webhook-verify' \
+  -H 'Content-Type: application/json' \
+  -d '{"id":"evt_test"}'
+```
+
+Enforce verification:
+
+- set `dry_run=false`
+- include `Stripe-Signature` header
+- set `STRIPE_WEBHOOK_SECRET` in `fn.env.json`
+
+### `github-webhook-verify`
+
+- Route: `/github-webhook-verify`
+- Methods: `POST`
+- Goal: verify GitHub webhook signature (safe by default)
+- Default behavior: `dry_run=true`
+- Env: `GITHUB_WEBHOOK_SECRET` (secret)
+- Source: `examples/functions/python/github-webhook-verify/handler.py`
+
+## Node runtime
+
+### `hello@v2`
+
+- Route: `/hello@v2`
+- Methods: `GET`
+- Query: `name`
+- Source: `examples/functions/node/hello/v2/handler.js`
+- What it demonstrates: versioned endpoint (`@v2`) living in a version folder
+
+Example:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/hello@v2?name=NodeWay'
+```
+
+Typical response:
+
+```json
+{"hello":"v2-NodeWay"}
+```
+
+### `node-echo`
+
+- Route: `/node-echo`
+- Methods: `GET`, `POST` (editable in `fn.config.json`)
+- Query: `name`
+- Source: `examples/functions/node/node-echo/handler.js`
+
+GET example:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/node-echo?name=Node'
+```
+
+POST example:
+
+```bash
+curl -sS -X POST 'http://127.0.0.1:8080/node-echo?name=NodePost' \
+  -H 'Content-Type: application/json' \
+  -d '{}'
+```
+
+Example response:
+
+```json
+{"runtime":"node","function":"node-echo","hello":"Node"}
+```
+
+### `echo`
+
+- Route: `/echo`
+- Methods: `GET`
+- Query: `key`
+- Source: `examples/functions/node/echo/handler.js`
+- What it demonstrates: what FastFN passes in `event.query` and `event.context.user`
+
+Example:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/echo?key=test'
+```
+
+Typical response:
+
+```json
+{"key":"test","query":{"key":"test"},"context":{"user":null}}
+```
+
+### `qr@v2`
+
+- Route: `/qr@v2`
+- Methods: `GET`
+- Query: `text` or `url`, optional `size`
+- Content-Type: `image/png`
+- Source: `examples/functions/node/qr/v2/handler.js`
+
+Example:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/qr@v2?text=NodeQR' --output qr-node.png
+```
+
+### `pack-qr-node` (Node QR, PNG output)
+
+- Route: `/pack-qr-node`
+- Methods: `GET`
+- Query: `text`
+- Content-Type: `image/png`
+- Source: `examples/functions/node/pack-qr-node/handler.js`
+
+```bash
+curl -sS 'http://127.0.0.1:8080/pack-qr-node?text=Hello' --output pack-qr-node.png
+```
+
+### `ts-hello` (TypeScript handler)
+
+- Route: `/ts-hello`
+- Methods: `GET`
+- Query: `name`
+- Source: `examples/functions/node/ts-hello/handler.ts`
+
+```bash
+curl -sS 'http://127.0.0.1:8080/ts-hello?name=TypeScript'
+```
+
+### `telegram-send`
+
+- Route: `/telegram-send`
+- Methods: `GET`, `POST`
+- Goal: Telegram Bot API helper for demos/integrations
+- Default behavior: `dry_run=true` (safe local testing without real credentials)
+- Source: `examples/functions/node/telegram-send/handler.js`
+- Layout: thin `handler.js` entrypoint delegating to a private `core.js`
+
+GET example:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/telegram-send?chat_id=123456&text=Hello&dry_run=true'
+```
+
+Example response (dry run):
+
+```json
+{"channel":"telegram","chat_id":"123456","text":"Hello","dry_run":true}
+```
+
+POST example:
+
+```bash
+curl -sS -X POST 'http://127.0.0.1:8080/telegram-send' \
+  -H 'Content-Type: application/json' \
+  -d '{"chat_id":"123456","text":"Hello","dry_run":true}'
+```
+
+### `telegram-ai-digest` (scheduled digest)
+
+- Route: `/telegram-ai-digest`
+- Methods: `GET`
+- Goal: fetch recent Telegram group messages, summarize with OpenAI, send digest back
+- Env (secrets): `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `OPENAI_API_KEY`
+- Source: `examples/functions/node/telegram-ai-digest/handler.js`
+- Layout: thin `handler.js` entrypoint delegating to a private `core.js`
+
+Example:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/telegram-ai-digest'
+```
+
+### `telegram-ai-reply`
+
+- Route: `/telegram-ai-reply`
+- Methods: `POST`
+- Goal: Telegram webhook -> OpenAI -> Telegram reply
+- Env (secrets): `TELEGRAM_BOT_TOKEN`, `OPENAI_API_KEY`
+- Source: `examples/functions/node/telegram-ai-reply/handler.js`
+- Layout: thin `handler.js` entrypoint delegating to a private `core.js`
+- Deep dive: [How `telegram-ai-reply` Works](../articles/telegram-ai-reply-how-it-works.md)
+
+Example (webhook POST):
+
+```bash
+curl -sS 'http://127.0.0.1:8080/telegram-ai-reply' \
+  -X POST \
+  -H 'Content-Type: application/json' \
+  -d '{"message":{"chat":{"id":123},"text":"Hola"}}'
+```
+
+To send for real, set `TELEGRAM_BOT_TOKEN` and `OPENAI_API_KEY` in `fn.env.json`.
+
+### `whatsapp`
+
+- Route: `/whatsapp`
+- Methods: `GET`, `POST`, `DELETE`
+- Goal: WhatsApp real session manager (QR, connect, send, inbox/outbox, AI chat)
+- Source: `examples/functions/node/whatsapp/handler.js`
+- Layout: thin `handler.js` entrypoint delegating to a private `core.js`
+- Actions:
+  - `GET /whatsapp?action=qr`
+  - `GET /whatsapp?action=status`
+  - `POST /whatsapp?action=send`
+  - `POST /whatsapp?action=chat`
+  - `GET /whatsapp?action=inbox`
+  - `DELETE /whatsapp?action=reset-session`
+
+Tip: if you call `POST /whatsapp` without an action, you may get `405` because some actions are intentionally method-specific.
+
+### `toolbox-bot` (safe tools runner)
+
+- Route: `/toolbox-bot`
+- Methods: `GET`, `POST`
+- Goal: parse tool directives (`[[http:...]]`, `[[fn:...]]`) from text and execute them with allowlists
+- Source: `examples/functions/node/toolbox-bot/handler.js`
+- Layout: thin `handler.js` entrypoint delegating to a private `core.js`
+- Docs: [Tools](../how-to/tools.md)
+
+Example:
+
+```bash
+curl -g -sS \
+"http://127.0.0.1:8080/toolbox-bot?text=Use%20[[http:https://api.ipify.org?format=json]]%20and%20[[fn:hello|GET]]"
+```
+
+### `ai-tool-agent` (OpenAI tool-calling agent)
+
+- Route: `/ai-tool-agent`
+- Methods: `GET`, `POST`
+- Goal: OpenAI chooses tools (`http_get`, `fn_get`) and the function executes them with allowlists
+- Default behavior: `dry_run=true`
+- Source: `examples/functions/node/ai-tool-agent/handler.js`
+- Layout: thin `handler.js` entrypoint delegating to a private `core.js`
+- Docs: [Tools](../how-to/tools.md#61-openai-tool-calling-model-chooses-tools)
+
+Dry run:
+
+```bash
+curl -sS "http://127.0.0.1:8080/ai-tool-agent?dry_run=true&text=what%20is%20my%20ip%20and%20weather%20in%20Buenos%20Aires%3F"
+```
+
+Real run (requires `OPENAI_API_KEY`):
+
+```bash
+curl -sS "http://127.0.0.1:8080/ai-tool-agent?dry_run=false&text=what%20is%20my%20ip%20and%20weather%20in%20Buenos%20Aires%3F"
+```
+
+The response includes a `trace.steps[]` array with tool calls, tool results, and memory info.
+
+Scheduler / cron:
+
+- `ai-tool-agent` ships with an example `schedule` block in `examples/functions/node/ai-tool-agent/fn.config.json` (disabled by default).
+- Enable schedules via the Console API, or by editing `fn.config.json` and reloading.
+- See: [Manage Functions](../how-to/manage-functions.md#4b-add-a-schedule-interval-cron)
+
+### `request-inspector`
+
+- Route: `/request-inspector`
+- Methods: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`
+- Goal: show what the gateway passed into the handler (method/query/headers/body/context)
+- Source: `examples/functions/node/request-inspector/handler.js`
+- Layout: thin `handler.js` entrypoint delegating to a private `core.js`
+
+Example:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/request-inspector?key=test' \
+  -X POST \
+  -H 'x-demo: 1' \
+  --data 'hello'
+```
+
+### Edge / gateway patterns
+
+These functions demonstrate a "Workers-like" pattern: validate the inbound request, rewrite it, then return a `proxy` directive.
+
+They also follow the single-entry layout: each public `handler.js` stays tiny while a private sibling `core.js` holds the implementation logic.
+
+#### `edge-proxy`
+
+- Route: `/edge-proxy`
+- Goal: minimal passthrough demo (proxies to `/request-inspector`)
+- Source: `examples/functions/node/edge-proxy/handler.js`
+
+```bash
+curl -sS 'http://127.0.0.1:8080/edge-proxy' | jq .
+```
+
+#### `edge-filter`
+
+- Route: `/edge-filter`
+- Goal: API key filter + rewrite + passthrough
+- Source: `examples/functions/node/edge-filter/handler.js`
+
+```bash
+curl -sS -i 'http://127.0.0.1:8080/edge-filter?user_id=123' | sed -n '1,12p'
+curl -sS 'http://127.0.0.1:8080/edge-filter?user_id=123' -H 'x-api-key: dev' | jq .
+```
+
+#### `edge-auth-gateway`
+
+- Route: `/edge-auth-gateway`
+- Goal: Bearer auth gateway + passthrough
+- Source: `examples/functions/node/edge-auth-gateway/handler.js`
+
+```bash
+curl -sS -i 'http://127.0.0.1:8080/edge-auth-gateway?target=health' | sed -n '1,12p'
+curl -sS 'http://127.0.0.1:8080/edge-auth-gateway?target=health' -H 'Authorization: Bearer dev-token' | jq .
+```
+
+#### `edge-header-inject`
+
+- Route: `/edge-header-inject`
+- Goal: inject headers and proxy to `/request-inspector` (so you can see them)
+- Source: `examples/functions/node/edge-header-inject/handler.js`
+
+```bash
+curl -sS 'http://127.0.0.1:8080/edge-header-inject?tenant=acme' -X POST --data 'hello' | jq .
+```
+
+#### `github-webhook-guard`
+
+- Route: `/github-webhook-guard`
+- Methods: `POST`
+- Goal: verify `x-hub-signature-256` (GitHub HMAC) and optionally forward
+- Env: `GITHUB_WEBHOOK_SECRET` (secret)
+- Source: `examples/functions/node/github-webhook-guard/handler.js`
+
+```bash
+curl -sS -i 'http://127.0.0.1:8080/github-webhook-guard' \
+  -X POST \
+  -H 'x-hub-signature-256: sha256=bad' \
+  --data '{"zen":"Keep it logically awesome.","hook_id":123}' | sed -n '1,12p'
+```
+
+### `slack-webhook`
+
+- Route: `/slack-webhook`
+- Methods: `GET`
+- Goal: send a Slack Incoming Webhook (safe by default)
+- Default behavior: `dry_run=true`
+- Env: `SLACK_WEBHOOK_URL` (secret)
+- Source: `examples/functions/node/slack-webhook/handler.js`
+
+Example (dry run):
+
+```bash
+curl -sS 'http://127.0.0.1:8080/slack-webhook?text=Hello&dry_run=true'
+```
+
+### `discord-webhook`
+
+- Route: `/discord-webhook`
+- Methods: `GET`
+- Goal: send a Discord webhook (safe by default)
+- Default behavior: `dry_run=true`
+- Env: `DISCORD_WEBHOOK_URL` (secret)
+- Source: `examples/functions/node/discord-webhook/handler.js`
+
+Example (dry run):
+
+```bash
+curl -sS 'http://127.0.0.1:8080/discord-webhook?content=Hello&dry_run=true'
+```
+
+### `notion-create-page`
+
+- Route: `/notion-create-page`
+- Methods: `GET`
+- Goal: create a Notion page (safe by default)
+- Default behavior: `dry_run=true`
+- Env: `NOTION_TOKEN` (secret)
+- Source: `examples/functions/node/notion-create-page/handler.js`
+
+Example (dry run):
+
+```bash
+curl -sS 'http://127.0.0.1:8080/notion-create-page?title=Hello&content=World&dry_run=true'
+```
+
+To send for real:
+
+- set `dry_run=false`
+- provide `parent_page_id`
+- set `NOTION_TOKEN` in `fn.env.json`
+
+## Autonomous Auto-install Examples
+
+### Python (inference)
+
+- `auto-infer-no-requirements`
+  Source: `examples/functions/python/auto-infer-no-requirements/handler.py`
+- `auto-infer-alias`
+  Source: `examples/functions/python/auto-infer-alias/handler.py` (`#@requirements Pillow` for `PIL`)
+- `auto-infer-python-multi-deps`
+  Source: `examples/functions/python/auto-infer-python-multi-deps/handler.py`
+
+Run:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/auto-infer-no-requirements'
+curl -sS 'http://127.0.0.1:8080/auto-infer-alias'
+curl -sS 'http://127.0.0.1:8080/auto-infer-python-multi-deps'
+```
+
+### Node (inference)
+
+- `auto-infer-create-package`
+  Source: `examples/functions/node/auto-infer-create-package/handler.js`
+- `auto-infer-update-package`
+  Source: `examples/functions/node/auto-infer-update-package/handler.js`
+- `auto-infer-node-multi-deps`
+  Source: `examples/functions/node/auto-infer-node-multi-deps/handler.js`
+
+Run:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/auto-infer-create-package'
+curl -sS 'http://127.0.0.1:8080/auto-infer-update-package'
+curl -sS 'http://127.0.0.1:8080/auto-infer-node-multi-deps'
+
+Tip:
+
+- these multi-dependency examples are useful when you want to compare `native` inference with optional backends such as `pipreqs`, `detective`, or `require-analyzer`
+- explicit manifests are still the recommended steady-state workflow
+```
+
+### PHP (composer manifest)
+
+- `auto-composer-basic`
+  Source: `examples/functions/php/auto-composer-basic/handler.php`
+- `auto-composer-existing`
+  Source: `examples/functions/php/auto-composer-existing/handler.php`
+
+Run:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/auto-composer-basic'
+curl -sS 'http://127.0.0.1:8080/auto-composer-existing'
+```
+
+Inspect resolution state:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/_fn/function?runtime=node&name=auto-infer-create-package' \
+| python3 - <<'PY'
+import json,sys
+obj=json.load(sys.stdin)
+print(json.dumps((obj.get("metadata") or {}).get("dependency_resolution"), indent=2))
+PY
+```
+
+## Platform-Equivalent Advanced Patterns
+
+Source package: `examples/functions/platform-equivalents/`
+
+These examples mirror common patterns from Cloudflare/Vercel/Netlify/AWS guides, but in FastFN file-routing format.
+
+### Auth + RBAC profile
+
+- `POST /auth/login` (Node): issues HMAC bearer token
+- `GET /auth/profile` (Python): validates signature and expiration
+
+```bash
+TOKEN="$(curl -sS -X POST 'http://127.0.0.1:8080/auth/login' \
+  -H 'content-type: application/json' \
+  --data '{"username":"demo-admin","role":"admin"}' | \
+  python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')"
+
+curl -sS 'http://127.0.0.1:8080/auth/profile' \
+  -H "authorization: Bearer ${TOKEN}"
+```
+
+### Signed webhook + idempotency
+
+- `POST /webhooks/github-signed` (Python): verifies `x-hub-signature-256`, deduplicates `x-github-delivery`
+
+```bash
+PAYLOAD='{"action":"opened","repository":"fastfn"}'
+SIG="$(python3 - <<'PY'
+import hashlib,hmac
+body=b'{"action":"opened","repository":"fastfn"}'
+print("sha256=" + hmac.new(b"fastfn-webhook-secret", body, hashlib.sha256).hexdigest())
+PY
+)"
+curl -sS -X POST 'http://127.0.0.1:8080/webhooks/github-signed' \
+  -H "x-hub-signature-256: ${SIG}" \
+  -H 'x-github-delivery: demo-1' \
+  -H 'content-type: application/json' \
+  --data "${PAYLOAD}"
+```
+
+### Versioned orders API (polyglot)
+
+- `POST /api/v1/orders` (Python)
+- `GET /api/v1/orders` (Node)
+- `GET /api/v1/orders/:id` (PHP)
+- `PUT /api/v1/orders/:id` (Node)
+
+```bash
+ORDER_ID="$(curl -sS -X POST 'http://127.0.0.1:8080/api/v1/orders' \
+  -H 'content-type: application/json' \
+  --data '{"customer":"acme","items":[{"sku":"A-1","qty":2}]}' | \
+  python3 -c 'import json,sys; print(json.load(sys.stdin)["order"]["id"])')"
+
+curl -sS "http://127.0.0.1:8080/api/v1/orders/${ORDER_ID}"
+curl -sS -X PUT "http://127.0.0.1:8080/api/v1/orders/${ORDER_ID}" \
+  -H 'content-type: application/json' \
+  --data '{"status":"shipped","tracking_number":"TRK-1001"}'
+```
+
+### Background-like async job with polling
+
+- `POST /jobs/render-report` (Node): accepts work, returns `202`
+- `GET /jobs/render-report/:id` (PHP): returns `queued/running/succeeded`
+
+```bash
+JOB_JSON="$(curl -sS -X POST 'http://127.0.0.1:8080/jobs/render-report' \
+  -H 'content-type: application/json' \
+  --data '{"report_type":"sales","items":[1,2,3,4]}')"
+POLL_URL="$(printf '%s' "${JOB_JSON}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["poll_url"])')"
+curl -sS "http://127.0.0.1:8080${POLL_URL}"
+sleep 3
+curl -sS "http://127.0.0.1:8080${POLL_URL}"
+```
+
+## PHP runtime
+
+### `php-profile`
+
+- Route: `/php-profile`
+- Methods: `GET`
+- Query: `name`
+- Source: `examples/functions/php/php-profile/handler.php`
+
+Example:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/php-profile?name=PHP'
+```
+
+Typical response:
+
+```json
+{"runtime":"php","function":"php-profile","hello":"php-PHP"}
+```
+
+## Rust runtime
+
+### `rust-profile`
+
+- Route: `/rust-profile`
+- Methods: `GET`
+- Query: `name`
+- Source: `examples/functions/rust/rust-profile/lib.rs`
+
+Example:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/rust-profile?name=Rust'
+```
+
+Typical response:
+
+```json
+{"runtime":"rust","function":"rust-profile","hello":"rust-Rust"}
+```
+
+## Control-plane endpoints (advanced)
+
+Public example routes are things like `/hello` and `/edge-filter`.
+The platform control-plane lives under `/_fn/*` (OpenAPI, config, logs, reload).
+
+In production, you normally restrict access to `/_fn/*` (or disable the console UI),
+and you should never let untrusted traffic reach it.
+
+### Reload discovery
+
+After editing function files, refresh discovery:
+
+```bash
+curl -sS -X POST 'http://127.0.0.1:8080/_fn/reload'
+```
+
+### Tail logs
+
+Tail OpenResty or runtime logs (requires console API access):
+
+```bash
+curl -sS 'http://127.0.0.1:8080/_fn/logs?file=error&lines=200'
+curl -sS 'http://127.0.0.1:8080/_fn/logs?file=access&lines=50&format=json'
+curl -sS 'http://127.0.0.1:8080/_fn/logs?file=runtime&format=json&runtime=python&fn=hello&version=default&stream=stdout&lines=50' \
+  -H 'x-fn-admin-token: my-secret-token'
+```
+
+Use `file=runtime` when you need the full handler debug stream. Response headers like `X-Fn-Stdout` are only a short preview.
+
+## Contract
+
+Defines expected request/response shape, configuration fields, and behavioral guarantees.
+
+## End-to-End Example
+
+Use the examples in this page as canonical templates for implementation and testing.
+
+## Edge Cases
+
+- Missing configuration fallbacks
+- Route conflicts and precedence
+- Runtime-specific nuances
+
+## See also
+
+- [Function Specification](function-spec.md)
+- [HTTP API Reference](http-api.md)
+- [Run and Test Checklist](../how-to/run-and-test.md)

@@ -1,1 +1,0 @@
-/app/srv/fn/functions/polyglot-tutorial/step-4/.rust-build/target/release/fn_handler: /app/srv/fn/functions/polyglot-tutorial/step-4/.rust-build/src/main.rs /app/srv/fn/functions/polyglot-tutorial/step-4/.rust-build/src/user_handler.rs

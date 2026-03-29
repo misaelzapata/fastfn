@@ -1,0 +1,10 @@
+{
+  "timeout_ms": 60000,
+  "max_concurrency": 2,
+  "invoke": {
+    "summary": "Telegram webhook -> OpenAI -> Telegram reply (Python, no deps)",
+    "methods": ["POST"],
+    "body": "{\"message\":{\"chat\":{\"id\":123456789},\"text\":\"Hello!\"}}",
+    "content_type": "application/json"
+  }
+}

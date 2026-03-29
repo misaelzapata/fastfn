@@ -1,0 +1,16 @@
+{
+  "group": "tests",
+  "max_concurrency": 4,
+  "worker_pool": {
+    "enabled": true,
+    "max_workers": 1,
+    "max_queue": 1,
+    "queue_timeout_ms": 2500,
+    "queue_poll_ms": 20,
+    "overflow_status": 429
+  },
+  "invoke": {
+    "methods": ["GET"]
+  }
+}
+

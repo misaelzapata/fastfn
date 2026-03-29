@@ -1,0 +1,7 @@
+{
+  "timeout_ms": 60000,
+  "invoke": {
+    "methods": ["GET", "POST", "DELETE"],
+    "summary": "WhatsApp session manager — QR login, send/receive, AI chat"
+  }
+}

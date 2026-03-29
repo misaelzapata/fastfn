@@ -1,0 +1,15 @@
+{
+  "timeout_ms": 12000,
+  "max_concurrency": 10,
+  "invoke": {
+    "summary": "Minimal tool planner/executor loop (Python, no API keys required)",
+    "methods": ["GET", "POST"],
+    "query": {
+      "text": "quiero mi ip y clima",
+      "city": "Buenos Aires",
+      "dry_run": "true"
+    },
+    "body": "{\"text\":\"quiero mi ip y clima\",\"city\":\"Buenos Aires\",\"dry_run\":true}",
+    "content_type": "application/json"
+  }
+}

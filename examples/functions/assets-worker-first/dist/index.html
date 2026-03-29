@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>FastFN Worker-First Demo</title>
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <p class="eyebrow">FastFN Public Assets</p>
+        <h1>Worker-First Demo</h1>
+        <p class="lede">
+          This demo mounts <code>dist/</code> instead of <code>public/</code>. It behaves like a framework build output, but runtime routes still win first.
+        </p>
+        <nav class="tabs">
+          <a href="/" data-link>Home</a>
+          <a href="/catalog" data-link>Catalog</a>
+          <a href="/status" data-link>Status</a>
+        </nav>
+      </header>
+
+      <section id="view" class="panel" aria-live="polite"></section>
+    </main>
+
+    <script src="/app.js" defer></script>
+  </body>
+</html>

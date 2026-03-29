@@ -1,0 +1,122 @@
+{
+  "generated_at": "2026-03-14T16:26:51Z",
+  "mode": "native",
+  "fixture": "tests/fixtures/worker-pool",
+  "concurrency": 6,
+  "repeats": 3,
+  "warmup_requests_per_case": 2,
+  "cases": [
+    {
+      "runtime": "node",
+      "path": "/slow-node",
+      "daemons": 1,
+      "samples_ms": [
+        259.4,
+        298.1,
+        272.6
+      ],
+      "avg_ms": 276.7,
+      "min_ms": 259.4,
+      "max_ms": 298.1
+    },
+    {
+      "runtime": "python",
+      "path": "/slow-python",
+      "daemons": 1,
+      "samples_ms": [
+        1291.5,
+        1260.3,
+        1298.0
+      ],
+      "avg_ms": 1283.3,
+      "min_ms": 1260.3,
+      "max_ms": 1298.0
+    },
+    {
+      "runtime": "php",
+      "path": "/slow-php",
+      "daemons": 1,
+      "samples_ms": [
+        976.2,
+        765.1,
+        877.5
+      ],
+      "avg_ms": 872.9,
+      "min_ms": 765.1,
+      "max_ms": 976.2
+    },
+    {
+      "runtime": "rust",
+      "path": "/slow-rust",
+      "daemons": 1,
+      "samples_ms": [
+        604.9,
+        517.5,
+        465.1
+      ],
+      "avg_ms": 529.2,
+      "min_ms": 465.1,
+      "max_ms": 604.9
+    },
+    {
+      "runtime": "node",
+      "path": "/slow-node",
+      "daemons": 3,
+      "samples_ms": [
+        267.9,
+        223.8,
+        237.7
+      ],
+      "avg_ms": 243.1,
+      "min_ms": 223.8,
+      "max_ms": 267.9,
+      "improvement_ms": 33.6,
+      "improvement_pct": 12.1
+    },
+    {
+      "runtime": "python",
+      "path": "/slow-python",
+      "daemons": 3,
+      "samples_ms": [
+        435.3,
+        468.5,
+        451.1
+      ],
+      "avg_ms": 451.6,
+      "min_ms": 435.3,
+      "max_ms": 468.5,
+      "improvement_ms": 831.7,
+      "improvement_pct": 64.8
+    },
+    {
+      "runtime": "php",
+      "path": "/slow-php",
+      "daemons": 3,
+      "samples_ms": [
+        1187.6,
+        893.2,
+        778.2
+      ],
+      "avg_ms": 953.0,
+      "min_ms": 778.2,
+      "max_ms": 1187.6,
+      "improvement_ms": -80.1,
+      "improvement_pct": -9.2
+    },
+    {
+      "runtime": "rust",
+      "path": "/slow-rust",
+      "daemons": 3,
+      "samples_ms": [
+        522.2,
+        388.5,
+        359.2
+      ],
+      "avg_ms": 423.3,
+      "min_ms": 359.2,
+      "max_ms": 522.2,
+      "improvement_ms": 105.9,
+      "improvement_pct": 20.0
+    }
+  ]
+}

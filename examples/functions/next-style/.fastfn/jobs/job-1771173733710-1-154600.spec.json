@@ -1,1 +1,0 @@
-{"runtime":"node","query":{},"headers":{},"route":"\/users\/123","method":"GET","body":"","name":"users\/[id].js","path_params":{"id":"123"},"route_template":"\/users\/:id"}

@@ -1,0 +1,431 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cli:
+    name: Go CLI (Build & Test)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.21'
+          cache: true
+          cache-dependency-path: cli/go.sum
+
+      - name: Install dependencies
+        run: cd cli && go mod download
+
+      - name: Run Go Tests (with coverage)
+        env:
+          COVERAGE_MIN_GO: "100"
+        run: ./cli/coverage-go.sh
+
+      - name: Upload Go coverage artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: go-cli-coverage
+          path: |
+            coverage/go-cli-coverage.out
+            coverage/go-cli-coverage.txt
+            coverage/go-cli-coverage.json
+
+      - name: Publish Go coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/go-cli-coverage.out
+          disable_search: true
+          flags: go-cli
+          fail_ci_if_error: false
+
+      - name: Build Binary
+        run: cd cli && go build -o ../bin/fastfn
+
+      - name: Upload CLI build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: fastfn-cli-linux
+          path: bin/fastfn
+
+  unit:
+    name: Unit + Coverage (Python + Node + PHP + Lua)
+    runs-on: ubuntu-latest
+    needs: cli
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install Node test dependencies
+        run: npm ci --no-fund --no-audit
+
+      - name: Install OpenResty for native parity tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          retry_apt_update() {
+            local attempt sleep_s
+            for attempt in 1 2 3 4 5; do
+              if sudo apt-get update -o Acquire::Retries=3; then
+                return 0
+              fi
+              if [[ "$attempt" -eq 5 ]]; then
+                return 1
+              fi
+              sleep_s=$((attempt * 15))
+              echo "apt-get update failed (attempt ${attempt}/5); clearing cached apt lists and retrying in ${sleep_s}s"
+              sudo rm -f /var/lib/apt/lists/*openresty*
+              sudo rm -rf /var/lib/apt/lists/partial/*
+              sleep "$sleep_s"
+            done
+          }
+
+          if command -v openresty >/dev/null 2>&1; then
+            openresty -V
+            exit 0
+          fi
+
+          retry_apt_update
+          if sudo apt-get install -y openresty; then
+            openresty -V
+            exit 0
+          fi
+
+          sudo apt-get install -y curl gnupg ca-certificates lsb-release
+          codename="$(. /etc/os-release && echo "${VERSION_CODENAME:-}")"
+          if [[ -z "$codename" ]]; then
+            codename="$(lsb_release -sc)"
+          fi
+          sudo install -m 0755 -d /usr/share/keyrings
+          curl -fsSL https://openresty.org/package/pubkey.gpg | sudo gpg --dearmor -o /usr/share/keyrings/openresty.gpg
+          echo "deb [signed-by=/usr/share/keyrings/openresty.gpg] http://openresty.org/package/ubuntu ${codename} main" | \
+            sudo tee /etc/apt/sources.list.d/openresty.list >/dev/null
+          retry_apt_update
+          sudo apt-get install -y openresty
+          openresty -V
+
+      - name: Ensure bash is available
+        shell: sh
+        run: |
+          if command -v bash >/dev/null 2>&1; then
+            exit 0
+          fi
+          if command -v apt-get >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y bash
+            exit 0
+          fi
+          if command -v apk >/dev/null 2>&1; then
+            if command -v sudo >/dev/null 2>&1; then
+              sudo apk add --no-cache bash
+            else
+              apk add --no-cache bash
+            fi
+            exit 0
+          fi
+          echo "bash is required for full CI coverage/integration paths" >&2
+          exit 1
+
+      - name: Detect bash availability
+        id: has_bash
+        shell: sh
+        run: |
+          if command -v bash >/dev/null 2>&1; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Require bash for full coverage gates
+        shell: sh
+        run: |
+          if [ "${{ steps.has_bash.outputs.present }}" != "true" ]; then
+            echo "bash is required for coverage gates in CI" >&2
+            exit 1
+          fi
+
+      - name: Install coverage tooling
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install coverage pytest
+          npm install -g c8
+
+      - name: Install PHP coverage extension
+        shell: bash
+        run: |
+          set -euo pipefail
+          if php -m | grep -qi '^xdebug$'; then
+            php -m | grep -i '^xdebug$'
+            exit 0
+          fi
+          sudo apt-get update -o Acquire::Retries=3
+          sudo apt-get install -y php-xdebug
+          php -m | grep -i '^xdebug$'
+
+      - name: Ensure scripts are executable
+        run: chmod +x cli/coverage.sh
+
+      - name: Run unit tests with coverage
+        env:
+          COVERAGE_MIN_PYTHON: "100"
+          COVERAGE_MIN_PYTHON_FILE: "100"
+          COVERAGE_MIN_NODE: "100"
+          COVERAGE_MIN_NODE_FILE: "100"
+          COVERAGE_MIN_COMBINED: "100"
+          COVERAGE_MIN_LUA: "100"
+          COVERAGE_MIN_LUA_FILE: "100"
+          COVERAGE_ENFORCE_LUA: "1"
+          COVERAGE_ENFORCE_LUA_PER_FILE: "1"
+          COVERAGE_MIN_PHP: "100"
+          COVERAGE_MIN_PHP_FILE: "100"
+          COVERAGE_MIN_RUST: "100"
+          COVERAGE_MIN_RUST_FILE: "100"
+        run: ./cli/coverage.sh
+
+      - name: Run SDK contract tests
+        run: bash tests/unit/test-sdks.sh
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-artifacts
+          path: |
+            coverage/python-coverage.xml
+            coverage/python-coverage.json
+            coverage/python-coverage.txt
+            coverage/python-coverage-by-file.json
+            coverage/node/coverage-summary.json
+            coverage/node/lcov.info
+            coverage/node/coverage-by-file.json
+            coverage/lua/luacov.report.out
+            coverage/lua/lcov.info
+            coverage/lua/coverage-by-file.json
+            coverage/php-runtime-coverage.xml
+            coverage/php-runtime-coverage.json
+            coverage/php-runtime-coverage.txt
+            coverage/php-runtime-coverage-by-file.json
+            coverage/rust-runtime-coverage.xml
+            coverage/rust-runtime-coverage.json
+            coverage/rust-runtime-coverage.txt
+            coverage/rust-runtime-coverage-by-file.json
+            coverage/node-coverage.txt
+            coverage/lua-coverage.txt
+            coverage/summary.md
+            coverage/summary.json
+
+      - name: Publish coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/python-coverage.xml,./coverage/node/lcov.info,./coverage/lua/lcov.info,./coverage/php-runtime-coverage.xml,./coverage/rust-runtime-coverage.xml
+          disable_search: true
+          flags: unit-runtime
+          fail_ci_if_error: false
+
+      - name: Coverage summary
+        run: cat coverage/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+  docs_quality:
+    name: Docs Quality (Strict + Visual Evidence)
+    runs-on: ubuntu-latest
+    needs: cli
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install MkDocs
+        run: python3 -m pip install --upgrade pip mkdocs-material
+
+      - name: Verify visual evidence manifest
+        run: python3 scripts/docs/visual_manifest.py verify
+
+      - name: Check docs path neutrality
+        run: python3 scripts/docs/check_path_neutrality.py
+
+      - name: Check host path leaks
+        run: python3 scripts/ci/check_host_path_leaks.py
+
+      - name: Check docs consistency
+        run: python3 scripts/docs/check_doc_consistency.py
+
+      - name: Build docs in strict mode
+        run: mkdocs build --strict
+
+      - name: Check docs internal links
+        run: python3 scripts/docs/check_doc_links.py
+
+  e2e:
+    name: E2E (OpenResty + Docker Compose)
+    runs-on: ubuntu-latest
+    needs: [unit, docs_quality]
+    timeout-minutes: 40
+    env:
+      DOCKER_BUILDKIT: "1"
+      COMPOSE_DOCKER_CLI_BUILD: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Show Docker versions
+        run: |
+          docker version
+          docker compose version
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+
+      - name: Install OpenResty for native parity tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          retry_apt_update() {
+            local attempt sleep_s
+            for attempt in 1 2 3 4 5; do
+              if sudo apt-get update -o Acquire::Retries=3; then
+                return 0
+              fi
+              if [[ "$attempt" -eq 5 ]]; then
+                return 1
+              fi
+              sleep_s=$((attempt * 15))
+              echo "apt-get update failed (attempt ${attempt}/5); clearing cached apt lists and retrying in ${sleep_s}s"
+              sudo rm -f /var/lib/apt/lists/*openresty*
+              sudo rm -rf /var/lib/apt/lists/partial/*
+              sleep "$sleep_s"
+            done
+          }
+
+          if command -v openresty >/dev/null 2>&1; then
+            command -v openresty
+            openresty -V
+            exit 0
+          fi
+
+          retry_apt_update
+          sudo apt-get install -y --no-install-recommends curl gnupg2 ca-certificates lsb-release
+
+          codename="$(. /etc/os-release && echo "${VERSION_CODENAME:-}")"
+          if [[ -z "$codename" ]]; then
+            codename="$(lsb_release -sc)"
+          fi
+
+          sudo install -m 0755 -d /usr/share/keyrings
+          curl -fsSL https://openresty.org/package/pubkey.gpg | sudo gpg --dearmor -o /usr/share/keyrings/openresty.gpg
+          echo "deb [signed-by=/usr/share/keyrings/openresty.gpg] http://openresty.org/package/ubuntu ${codename} main" | \
+            sudo tee /etc/apt/sources.list.d/openresty.list >/dev/null
+
+          retry_apt_update
+          sudo apt-get install -y --no-install-recommends openresty
+
+          if ! command -v openresty >/dev/null 2>&1 && [[ -x /usr/local/openresty/bin/openresty ]]; then
+            echo "/usr/local/openresty/bin" >> "$GITHUB_PATH"
+            sudo ln -sf /usr/local/openresty/bin/openresty /usr/local/bin/openresty
+          fi
+
+          command -v openresty
+          openresty -V
+
+      - name: Ensure bash is available
+        shell: sh
+        run: |
+          if command -v bash >/dev/null 2>&1; then
+            exit 0
+          fi
+          if command -v apt-get >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y bash
+            exit 0
+          fi
+          if command -v apk >/dev/null 2>&1; then
+            if command -v sudo >/dev/null 2>&1; then
+              sudo apk add --no-cache bash
+            else
+              apk add --no-cache bash
+            fi
+            exit 0
+          fi
+          echo "bash is required for E2E pipeline" >&2
+          exit 1
+
+      - name: Ensure test scripts are executable
+        run: |
+          chmod +x cli/test-all.sh
+          chmod +x cli/test-lua.sh
+          chmod +x cli/test-playwright.sh
+          chmod +x tests/integration/test-api.sh
+          chmod +x tests/integration/test-openapi-system.sh
+          chmod +x scripts/ci/check-repo-layout.sh
+          chmod +x scripts/ci/test-pipeline.sh
+
+      - name: Preinstall Playwright browsers
+        run: |
+          npm install --no-fund --no-audit
+          npx playwright install --with-deps chromium
+
+      - name: Run CI pipeline (bash-aware)
+        shell: sh
+        env:
+          FN_REQUIRE_NATIVE_DEPS: "1"
+          FASTFN_PLAYWRIGHT_INSTALL_BROWSERS: "0"
+        run: sh ./scripts/ci/test-pipeline.sh
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          if-no-files-found: ignore
+          path: |
+            playwright-report
+            tests/results
+
+      - name: Dump Compose logs on failure
+        if: failure()
+        run: |
+          docker compose -f docker-compose.yml ps || true
+          docker compose -f docker-compose.yml logs --no-color --timestamps || true
+          docker compose -f docker-compose.yml down --remove-orphans || true

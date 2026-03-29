@@ -1,0 +1,36 @@
+{
+  "generated_at": "2026-03-14T17:10:17Z",
+  "mode": "native",
+  "fixture": "tests/fixtures/worker-pool",
+  "concurrency": 6,
+  "repeats": 2,
+  "warmup_requests_per_case": 1,
+  "cases": [
+    {
+      "runtime": "php",
+      "path": "/slow-php",
+      "daemons": 1,
+      "samples_ms": [
+        780.6,
+        823.7
+      ],
+      "avg_ms": 802.2,
+      "min_ms": 780.6,
+      "max_ms": 823.7
+    },
+    {
+      "runtime": "php",
+      "path": "/slow-php",
+      "daemons": 3,
+      "samples_ms": [
+        662.6,
+        589.1
+      ],
+      "avg_ms": 625.9,
+      "min_ms": 589.1,
+      "max_ms": 662.6,
+      "improvement_ms": 176.3,
+      "improvement_pct": 22.0
+    }
+  ]
+}

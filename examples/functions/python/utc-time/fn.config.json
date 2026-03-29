@@ -1,0 +1,13 @@
+{
+  "invoke": {
+    "summary": "UTC time demo (cron + timezone)",
+    "methods": ["GET"]
+  },
+  "schedule": {
+    "enabled": true,
+    "cron": "0 9 * * *",
+    "timezone": "UTC",
+    "method": "GET"
+  }
+}
+

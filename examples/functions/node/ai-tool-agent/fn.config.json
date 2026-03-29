@@ -1,0 +1,27 @@
+{
+  "timeout_ms": 20000,
+  "invoke": {
+    "summary": "AI tool-calling agent (OpenAI chooses tools + full trace)",
+    "methods": ["GET", "POST"],
+    "query": {
+      "text": "what is my IP and weather in Buenos Aires?",
+      "dry_run": "true",
+      "agent_id": "demo"
+    },
+    "body": "{\"text\":\"what is my IP and weather in Buenos Aires?\",\"dry_run\":true,\"agent_id\":\"demo\"}",
+    "content_type": "application/json"
+  },
+  "schedule": {
+    "enabled": false,
+    "every_seconds": 90,
+    "method": "GET",
+    "query": {
+      "agent_id": "cron-demo",
+      "dry_run": "true",
+      "text": "what is my IP and weather in Buenos Aires?"
+    },
+    "note": "Demo: run the tool-calling agent on a schedule (set dry_run=false and configure OPENAI_API_KEY for real runs).",
+    "context": { "type": "cron" }
+  }
+}
+

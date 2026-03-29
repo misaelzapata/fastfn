@@ -1,0 +1,14 @@
+{
+  "invoke": {
+    "summary": "Hello demo with path parameter",
+    "methods": [
+      "GET"
+    ],
+    "routes": [
+      "/hello-demo/:name"
+    ],
+    "query": {
+      "lang": "en"
+    }
+  }
+}

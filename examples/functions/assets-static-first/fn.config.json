@@ -1,0 +1,7 @@
+{
+  "assets": {
+    "directory": "public",
+    "not_found_handling": "404",
+    "run_worker_first": false
+  }
+}

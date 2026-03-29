@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>FastFN SPA Fallback Demo</title>
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <p class="eyebrow">FastFN Public Assets</p>
+        <h1>SPA Fallback Demo</h1>
+        <p class="lede">
+          This app uses the browser History API. Deep links like <code>/dashboard</code> return the same shell, then client-side routing takes over.
+        </p>
+        <nav class="tabs">
+          <a href="/" data-link>Home</a>
+          <a href="/dashboard" data-link>Dashboard</a>
+          <a href="/settings" data-link>Settings</a>
+        </nav>
+      </header>
+
+      <section id="view" class="panel" aria-live="polite"></section>
+    </main>
+
+    <script src="/app.js" defer></script>
+  </body>
+</html>

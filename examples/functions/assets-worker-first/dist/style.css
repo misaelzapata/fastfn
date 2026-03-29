@@ -1,0 +1,137 @@
+:root {
+  --bg: #0f141b;
+  --card: rgba(14, 22, 31, 0.82);
+  --ink: #eff4ff;
+  --muted: #9fb1c8;
+  --line: rgba(239, 244, 255, 0.1);
+  --accent: #ffb703;
+  --accent-soft: rgba(255, 183, 3, 0.16);
+  --shadow: 0 24px 70px rgba(0, 0, 0, 0.3);
+  font-family: "Helvetica Neue", "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 15% 20%, rgba(255, 183, 3, 0.18), transparent 24%),
+    radial-gradient(circle at 80% 15%, rgba(95, 168, 211, 0.18), transparent 24%),
+    linear-gradient(145deg, #091018 0%, #111a24 55%, #0c131b 100%);
+}
+
+code {
+  font-family: "Courier New", monospace;
+}
+
+.shell {
+  width: min(980px, calc(100vw - 2rem));
+  margin: 0 auto;
+  padding: 2rem 0 4rem;
+}
+
+.hero,
+.panel {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(14px);
+}
+
+.hero {
+  padding: 2rem;
+}
+
+.eyebrow {
+  margin: 0 0 0.5rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-size: 0.78rem;
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: clamp(2.4rem, 5vw, 4rem);
+}
+
+.lede {
+  max-width: 62ch;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  margin-top: 1.5rem;
+}
+
+.tabs a {
+  text-decoration: none;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  padding: 0.75rem 1rem;
+  border-radius: 999px;
+}
+
+.panel {
+  margin-top: 1.25rem;
+  padding: 1.5rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.pill {
+  display: inline-block;
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.mono {
+  font-family: "Courier New", monospace;
+  font-size: 0.92rem;
+}
+
+ul {
+  padding-left: 1.15rem;
+}
+
+@media (max-width: 640px) {
+  .shell {
+    width: min(980px, calc(100vw - 1rem));
+    padding-top: 1rem;
+  }
+
+  .hero,
+  .panel {
+    border-radius: 22px;
+  }
+}

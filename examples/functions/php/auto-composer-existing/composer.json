@@ -1,0 +1,7 @@
+{
+  "name": "fastfn/auto-composer-existing",
+  "type": "project",
+  "require": {
+    "psr/log": "^3.0"
+  }
+}

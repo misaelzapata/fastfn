@@ -1,0 +1,9 @@
+{
+  "invoke": {
+    "summary": "Toolbox bot — parses tool directives from text and executes them",
+    "methods": ["GET", "POST"],
+    "query": {
+      "text": "Use [[http:https://api.ipify.org?format=json]] and [[fn:hello|GET]]"
+    }
+  }
+}

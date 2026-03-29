@@ -1,0 +1,6 @@
+{
+  "runtime": "node",
+  "name": "node-auto-deps",
+  "version": "1.0.0",
+  "entrypoint": "handler.js"
+}

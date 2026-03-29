@@ -1,0 +1,68 @@
+name: Publish Docs
+on:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Configure Git Credentials
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: 3.x
+
+      - name: Set cache key suffix
+        run: echo "cache_id=$(date --utc +%V)" >> "$GITHUB_ENV"
+
+      - uses: actions/cache@v5
+        with:
+          key: mkdocs-material-${{ env.cache_id }}
+          path: .cache
+          restore-keys: |
+            mkdocs-material-
+
+      - name: Install dependencies
+        run: pip install mkdocs-material
+
+      - name: Check path neutrality policy
+        run: python3 scripts/docs/check_path_neutrality.py
+
+      - name: Check host path leaks
+        run: python3 scripts/ci/check_host_path_leaks.py
+
+      - name: Check docs consistency
+        run: python3 scripts/docs/check_doc_consistency.py
+
+      - name: Verify visual evidence manifest
+        run: python3 scripts/docs/visual_manifest.py verify
+
+      - name: Build static docs site
+        run: mkdocs build --strict
+
+      - name: Check docs internal links
+        run: python3 scripts/docs/check_doc_links.py
+
+      - name: Upload docs artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: docs-site
+          path: site
+
+      - name: Deploy to GitHub Pages
+        run: mkdocs gh-deploy --force

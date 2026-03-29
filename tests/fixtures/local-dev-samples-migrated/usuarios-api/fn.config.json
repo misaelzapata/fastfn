@@ -1,0 +1,6 @@
+{
+  "runtime": "node",
+  "name": "usuarios-api",
+  "version": "1.0.0",
+  "entrypoint": "handler.js"
+}

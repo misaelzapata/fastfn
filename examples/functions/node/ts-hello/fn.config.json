@@ -1,0 +1,10 @@
+{
+  "invoke": {
+    "summary": "Hello (TypeScript)",
+    "methods": ["GET"],
+    "query": { "name": "World" },
+    "body": ""
+  },
+  "shared_deps": ["ts_pack"]
+}
+

@@ -1,0 +1,206 @@
+# Recetas operativas (copiar y pegar)
+
+
+> Estado verificado al **10 de marzo de 2026**.
+> Nota de runtime: FastFN auto-instala dependencias locales por función desde `requirements.txt` / `package.json`; en `fastfn dev --native` necesitas runtimes instalados en host, mientras que `fastfn dev` depende de Docker daemon activo.
+## Ficha rapida
+
+- Complejidad: Basica
+- Tiempo tipico: 5-15 minutos
+- Usala cuando: necesitas checks operativos de copiar y pegar
+- Resultado: diagnosticas rapido problemas comunes
+
+
+Recetas practicas con objetivo, comando, resultado esperado y diagnostico rapido.
+
+## Receta 1: salud de plataforma
+
+```bash
+curl -sS 'http://127.0.0.1:8080/_fn/health'
+```
+
+Esperado: runtimes estables `python`, `node`, `php` y `lua` con `health.up=true` (`rust`/`go` cuando estén habilitados).
+
+Si `curl` no conecta pero el stack está levantado (y/o `wget` te funciona), prueba:
+
+```bash
+# forzar IPv4
+curl -4 -sS 'http://127.0.0.1:8080/_fn/health'
+
+# ignorar proxies si tu entorno los tiene
+curl --noproxy '*' -sS 'http://127.0.0.1:8080/_fn/health'
+```
+
+En entornos "sandbox" donde el loopback del host está bloqueado, haz la petición desde dentro del contenedor:
+
+```bash
+docker compose exec -T openresty sh -lc "curl -sS 'http://127.0.0.1:8080/_fn/health'"
+```
+
+## Receta 2: catalogo de funciones descubiertas
+
+```bash
+curl -sS 'http://127.0.0.1:8080/_fn/catalog'
+```
+
+Uso: saber que funciones existen y con que politica efectiva.
+
+## Receta 3: invocacion GET con query
+
+```bash
+curl -sS 'http://127.0.0.1:8080/echo?key=test'
+```
+
+Esperado (aprox):
+
+```json
+{"key":"test","query":{"key":"test"},"context":{"user":null}}
+```
+
+## Receta 4: versionado (`@v2`)
+
+```bash
+curl -sS 'http://127.0.0.1:8080/hello@v2?name=NodeWay'
+```
+
+Uso: rollout progresivo sin romper version default.
+
+## Receta 4b: probar PHP y Rust
+
+```bash
+curl -sS 'http://127.0.0.1:8080/php-profile?name=PHP'
+curl -sS 'http://127.0.0.1:8080/rust-profile?name=Rust'
+```
+
+## Receta 4c: probar rutas (patrón Python + Node + PHP + Lua)
+
+```bash
+curl -sS 'http://127.0.0.1:8080/qr?text=PythonQR' -o qr-python.svg
+curl -sS 'http://127.0.0.1:8080/qr@v2?text=NodeQR' -o qr-node.png
+```
+
+## Receta 5: forzar 405 por metodo no permitido
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' -X POST 'http://127.0.0.1:8080/echo?key=test'
+```
+
+Esperado: `405`.
+
+## Receta 6: actualizar metodos permitidos en caliente
+
+```bash
+curl -sS 'http://127.0.0.1:8080/_fn/function-config?runtime=node&name=node-echo' \
+  -X PUT -H 'Content-Type: application/json' \
+  --data '{"invoke":{"methods":["GET","POST","PUT","DELETE"]}}'
+```
+
+Verificar:
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' -X PUT 'http://127.0.0.1:8080/node-echo?name=x'
+```
+
+## Receta 7: inyectar `context` desde `/_fn/invoke`
+
+```bash
+curl -sS 'http://127.0.0.1:8080/_fn/invoke' \
+  -X POST -H 'Content-Type: application/json' \
+  --data '{
+    "name":"echo",
+    "method":"GET",
+    "query":{"key":"ctx"},
+    "context":{"trace_id":"abc-123","tenant":"demo"}
+  }'
+```
+
+Esperado: el handler recibe `event.context.user.trace_id`.
+
+## Receta 8: crear funcion por API
+
+```bash
+curl -sS 'http://127.0.0.1:8080/_fn/function?runtime=node&name=demo-recipe' \
+  -X POST -H 'Content-Type: application/json' \
+  --data '{"methods":["GET"],"summary":"Demo recipe"}'
+```
+
+## Receta 9: editar codigo por API
+
+```bash
+curl -sS 'http://127.0.0.1:8080/_fn/function-code?runtime=node&name=demo-recipe' \
+  -X PUT -H 'Content-Type: application/json' \
+  --data '{"code":"exports.handler = async (event) => ({ status: 200, headers: { \"Content-Type\": \"application/json\" }, body: JSON.stringify({ ok: true, query: event.query || {} }) });\n"}'
+```
+
+Validar:
+
+```bash
+curl -sS 'http://127.0.0.1:8080/demo-recipe?name=RecipeOK'
+```
+
+## Receta 10: respuestas HTML/CSV/PNG
+
+```bash
+curl -i -sS 'http://127.0.0.1:8080/html-demo?name=Web' | head -n 10
+curl -i -sS 'http://127.0.0.1:8080/csv-demo?name=Alice' | head -n 12
+curl -sS 'http://127.0.0.1:8080/png-demo' --output out.png
+file out.png
+```
+
+## Receta 11: recargar discovery
+
+```bash
+curl -sS 'http://127.0.0.1:8080/_fn/reload' -X POST
+```
+
+Uso: después de crear/borrar funciones manualmente en filesystem.
+
+## Receta 12: limpieza de demos
+
+```bash
+curl -sS 'http://127.0.0.1:8080/_fn/function?runtime=node&name=demo-recipe' -X DELETE
+```
+
+## Diagnostico express
+
+Si algo falla:
+
+```bash
+docker compose logs --tail=200 openresty
+```
+
+## Diagrama de Flujo
+
+```mermaid
+flowchart LR
+  A["Request del cliente"] --> B["Discovery de rutas"]
+  B --> C["Validación de políticas y método"]
+  C --> D["Ejecución del handler runtime"]
+  D --> E["Respuesta HTTP + paridad OpenAPI"]
+```
+
+## Objetivo
+
+Alcance claro, resultado esperado y público al que aplica esta guía.
+
+## Prerrequisitos
+
+- CLI de FastFN disponible
+- Dependencias por modo verificadas (Docker para `fastfn dev`, OpenResty+runtimes para `fastfn dev --native`)
+
+## Checklist de Validación
+
+- Los comandos de ejemplo devuelven estados esperados
+- Las rutas aparecen en OpenAPI cuando aplica
+- Las referencias del final son navegables
+
+## Solución de Problemas
+
+- Si un runtime cae, valida dependencias de host y endpoint de health
+- Si faltan rutas, vuelve a ejecutar discovery y revisa layout de carpetas
+
+## Ver también
+
+- [Especificación de Funciones](../referencia/especificacion-funciones.md)
+- [Referencia API HTTP](../referencia/api-http.md)
+- [Checklist Ejecutar y Probar](ejecutar-y-probar.md)

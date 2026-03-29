@@ -1,0 +1,10 @@
+{
+  "invoke": {
+    "methods": ["POST"],
+    "summary": "Verify Stripe webhook signature (dry_run=true by default)"
+  },
+  "timeout_ms": 1500,
+  "max_concurrency": 20,
+  "max_body_bytes": 1048576
+}
+

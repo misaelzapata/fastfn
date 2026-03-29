@@ -1,0 +1,6 @@
+{
+  "runtime": "rust",
+  "name": "test/new-rust",
+  "version": "1.0.0",
+  "entrypoint": "handler.rs"
+}

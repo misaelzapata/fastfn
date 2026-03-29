@@ -1,0 +1,17 @@
+{
+  "name": "@fastfn/runtime",
+  "version": "0.1.0",
+  "description": "TypeScript/JavaScript definitions for FastFN serverless runtime",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "scripts": {
+    "test": "node smoke.test.cjs"
+  },
+  "keywords": [
+    "serverless",
+    "fastfn",
+    "functions"
+  ],
+  "author": "FastFN",
+  "license": "MIT"
+}
