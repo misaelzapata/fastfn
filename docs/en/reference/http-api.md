@@ -40,6 +40,37 @@ Mapped routes come from:
 - `fn.routes.json`,
 - or explicit `fn.config.json -> invoke.routes`.
 
+### `fn.routes.json` quick reference
+
+`fn.routes.json` is the folder-level route manifest. It is useful when one folder should expose explicit URLs without forcing those URLs into the file names.
+
+Example:
+
+```json
+{
+  "routes": {
+    "GET /healthz": "health.py",
+    "POST /hooks/rebuild": "rebuild.js",
+    "GET,POST /contact": "contact.php",
+    "/status": "status.py"
+  }
+}
+```
+
+How it works:
+
+- keys are public route definitions
+- values are entry files relative to the folder
+- omitting the method prefix defaults to `GET`
+- multiple methods can be declared in the key, such as `GET,POST /hook`
+- runtime is inferred from the target file extension
+
+Precedence note:
+
+- `fn.routes.json` and file-based routes are merged for the same folder
+- if both declare the same route, `fn.routes.json` wins for that route and the file-based duplicate is skipped
+- reserved prefixes like `/_fn/*` and `/console/*` still cannot be mapped
+
 ### GET example
 
 ```bash
@@ -85,6 +116,12 @@ By default, a function at `functions/my-func/handler.py` is reachable at `/my-fu
 - `methods` restricts which HTTP methods are allowed (default: all methods).
 - After discovery (startup or hot-reload), the gateway registers these routes automatically.
 - If another function already maps the same route, the request is rejected unless `invoke.force-url` is `true`.
+
+When to choose each routing tool:
+
+- Use file routes when the folder tree already matches the public URL shape.
+- Use `fn.routes.json` when one folder needs a small explicit route manifest across several files.
+- Use `invoke.routes` when one function needs extra public aliases and that policy should live in its `fn.config.json`.
 
 ### Debug headers (opt-in)
 

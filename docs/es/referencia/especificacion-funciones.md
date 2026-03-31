@@ -432,6 +432,77 @@ Notas:
 - Los configs por versión (por ejemplo `mi-fn/v2/fn.config.json`) no pueden \"tomar\" una URL existente por sí solos; usa `FN_FORCE_URL=1` si necesitas que una ruta versionada gane.
 - Override global: setea `FN_FORCE_URL=1` (o `fastfn dev --force-url`) para tratar todas las rutas config/policy como forced.
 
+### Mapeo de rutas con `fn.routes.json` e `invoke.routes`
+
+FastFN te da tres herramientas para mapear rutas. La regla práctica es:
+
+- usa nombres de archivo cuando la URL puede seguir el árbol de carpetas
+- usa `fn.routes.json` cuando una carpeta necesita mapear varios archivos a rutas públicas explícitas
+- usa `invoke.routes` cuando una función lógica necesita uno o más aliases públicos
+
+#### `fn.routes.json`
+
+Pon `fn.routes.json` en una carpeta cuando quieras un manifiesto corto que conecte rutas públicas con entry files de esa misma carpeta.
+
+Ejemplo:
+
+```json
+{
+  "routes": {
+    "GET /healthz": "health.py",
+    "POST /hooks/rebuild": "rebuild.js",
+    "GET,POST /contact": "contact.php",
+    "/status": "status.py"
+  }
+}
+```
+
+Reglas:
+
+- Las claves son definiciones de ruta.
+- Los valores son archivos relativos a la carpeta que contiene `fn.routes.json`.
+- Si omites el prefijo de método HTTP, FastFN trata esa ruta como `GET`.
+- Puedes listar más de un método en la clave, por ejemplo `GET,POST /hook`.
+- El runtime se infiere a partir de la extensión del archivo target.
+- Los prefijos reservados como `/_fn/*` y `/console/*` siguen bloqueados.
+
+Casos típicos:
+
+- una carpeta poliglota donde los nombres de archivo deben quedar cortos, pero las URLs deben ser explícitas
+- migrar una API sin renombrar handlers
+- mezclar handlers Node/Python/PHP detrás de un mapa de rutas escrito a mano
+
+#### `invoke.routes`
+
+Usa `invoke.routes` dentro del `fn.config.json` de una función cuando la función ya tiene identidad propia y quieres publicarla también en una o más URLs adicionales.
+
+Ejemplo:
+
+```json
+{
+  "invoke": {
+    "methods": ["GET", "POST"],
+    "routes": ["/api/forms/contact", "/contact"]
+  }
+}
+```
+
+Esta opción conviene cuando:
+
+- una sola función es dueña de la política de rutas y aliases
+- métodos, host rules, summary y otros `invoke.*` deben vivir junto al config de la función
+- estás agregando una ruta vanity o un alias de migración a una función existente
+
+#### Precedencia y conflictos
+
+Comportamiento importante:
+
+- Las file routes y `fn.routes.json` se descubren juntas para la misma carpeta.
+- Cuando la misma ruta existe en ambos lugares, `fn.routes.json` gana para esa ruta y se salta el duplicado basado en archivo.
+- `invoke.routes` registra aliases públicos explícitos después del discovery y puede chocar con otras URLs ya mapeadas.
+- Si dos rutas colisionan con la misma prioridad, FastFN registra el conflicto y responde `409` en esa URL hasta que lo resuelvas.
+- Usa `invoke.force-url: true` solo cuando quieras reemplazar de forma intencional una URL pública ya tomada.
+
 ### Assets públicos en root
 
 Usa `assets` en el `fn.config.json` raíz cuando quieres que FastFN sirva una carpeta desde `/` sin pasar por un handler.

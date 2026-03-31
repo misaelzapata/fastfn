@@ -600,6 +600,77 @@ Notes:
 - Version-scoped configs (for example `my-fn/v2/fn.config.json`) never take over an existing URL by themselves; use `FN_FORCE_URL=1` if you need a version route to win.
 - Global override: set `FN_FORCE_URL=1` (or `fastfn dev --force-url`) to treat all config/policy routes as forced.
 
+### Route mapping with `fn.routes.json` and `invoke.routes`
+
+FastFN gives you three route-mapping tools. The simplest rule is:
+
+- use file names when the URL can follow the folder tree
+- use `fn.routes.json` when one folder needs to map several files to explicit public routes
+- use `invoke.routes` when one logical function needs one or more public aliases
+
+#### `fn.routes.json`
+
+Place `fn.routes.json` in a folder when you want a small manifest that maps public routes to entry files in that same folder.
+
+Example:
+
+```json
+{
+  "routes": {
+    "GET /healthz": "health.py",
+    "POST /hooks/rebuild": "rebuild.js",
+    "GET,POST /contact": "contact.php",
+    "/status": "status.py"
+  }
+}
+```
+
+Rules:
+
+- Keys are route definitions.
+- Values are entry files relative to the folder that contains `fn.routes.json`.
+- If you omit the HTTP method prefix, FastFN treats that route as `GET`.
+- You can list more than one method in the key, such as `GET,POST /hook`.
+- Runtime is inferred from the target file extension.
+- Reserved prefixes like `/_fn/*` and `/console/*` still cannot be claimed.
+
+Typical use cases:
+
+- a polyglot folder where file names should stay short, but URLs should be explicit
+- migrating an API without renaming handler files
+- mixing Node/Python/PHP handlers behind a hand-written route map
+
+#### `invoke.routes`
+
+Use `invoke.routes` inside one function's `fn.config.json` when the function already has an identity and you want to publish one or more extra URLs for it.
+
+Example:
+
+```json
+{
+  "invoke": {
+    "methods": ["GET", "POST"],
+    "routes": ["/api/forms/contact", "/contact"]
+  }
+}
+```
+
+This is the better choice when:
+
+- one function owns the route policy and aliases
+- methods, host rules, summary, and other `invoke.*` settings should live with the function config
+- you are adding vanity paths or a migration alias to an existing function
+
+#### Precedence and conflict behavior
+
+Important behavior:
+
+- File routes and `fn.routes.json` are discovered together for the same folder.
+- When the same route exists in both, `fn.routes.json` wins for that route and the file-based duplicate is skipped.
+- `invoke.routes` registers explicit public aliases after discovery and can collide with other mapped URLs.
+- If two routes collide at the same discovery priority, FastFN records a conflict and serves `409` for that URL until you disambiguate it.
+- Use `invoke.force-url: true` only when you intentionally want one function to replace an already mapped public URL.
+
 Example with advanced fields:
 
 ```json

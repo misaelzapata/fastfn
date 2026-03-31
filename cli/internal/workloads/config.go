@@ -169,11 +169,11 @@ func validateCommonSpec(name, image, dockerfile string, port int) error {
 	if !isValidName(name) {
 		return fmt.Errorf("invalid name %q", name)
 	}
-	if image == "" && dockerfile == "" {
-		return fmt.Errorf("must set image or dockerfile")
+	if strings.TrimSpace(dockerfile) != "" {
+		return fmt.Errorf("dockerfile is not supported for Firecracker workloads in this branch; set image to a local Firecracker bundle directory")
 	}
-	if image != "" && dockerfile != "" {
-		return fmt.Errorf("set either image or dockerfile, not both")
+	if strings.TrimSpace(image) == "" {
+		return fmt.Errorf("must set image to a local Firecracker bundle directory")
 	}
 	if port < 1 || port > 65535 {
 		return fmt.Errorf("port must be between 1 and 65535")

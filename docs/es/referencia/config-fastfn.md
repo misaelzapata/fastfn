@@ -10,6 +10,7 @@
 - Complejidad: Referencia
 - Tiempo típico: 10-20 minutos
 - Úsala cuando: quieres definir en un solo lugar el directorio de funciones, el comportamiento de rutas, la cantidad de daemons y los binarios del host
+- Nota sobre workloads con imágenes: `apps` y `services` en este branch viven en modo native (`fastfn dev --native`, `fastfn run --native`) y usan directorios bundle de Firecracker como valor de `image`
 - Resultado: comportamiento reproducible en local y en CI sin comandos largos
 
 ## Claves soportadas
@@ -24,6 +25,8 @@
 | `runtime-daemons` | `object` o `string` | Cuántas instancias de daemon arrancar por runtime externo. |
 | `runtime-binaries` | `object` o `string` | Qué ejecutable del host debe usar FastFN para cada runtime o herramienta. |
 | `hot-reload` | `boolean` | Habilita/deshabilita hot reload para comandos `dev` y `run`. Default: `true`. |
+| `apps` | `object` | Apps HTTP públicas respaldadas por bundles locales de Firecracker. |
+| `services` | `object` | Workloads privados de soporte respaldados por bundles locales de Firecracker. |
 
 Notas:
 
@@ -31,6 +34,11 @@ Notas:
 - Los alias de compatibilidad siguen funcionando en proyectos anteriores.
 - `domains` solo afecta a `fastfn doctor domains`; no bloquea hosts entrantes por sí sola.
 - `runtime-daemons` aplica a runtimes externos (`node`, `python`, `php`, `rust`, `go`). `lua` corre dentro de OpenResty, así que un count para `lua` se ignora.
+- `apps` requieren al menos una entrada en `routes` y un único `port`.
+- `services` quedan privados y exponen variables de conexión hacia funciones y apps.
+- `image` debe apuntar a un directorio bundle local de Firecracker. Referencias de registry como `mysql:8.4` no se resuelven en este branch.
+- En este branch, los workloads con imágenes solo están disponibles en modo native y sobre hosts Linux/KVM.
+- `dockerfile` queda reservado, pero todavía no está soportado para convertir a bundles Firecracker.
 
 ## Ejemplo 1: Directorio de funciones por defecto
 
@@ -168,6 +176,94 @@ Valida:
 curl -sS http://127.0.0.1:8080/_fn/openapi.json | jq '{server: .servers[0].url, has_health: (.paths | has("/_fn/health"))}'
 ```
 
+## Ejemplo 6: app Firecracker simple y servicio MySQL
+
+`fastfn.json`
+
+```json
+{
+  "functions-dir": "functions",
+  "apps": {
+    "admin": {
+      "image": "./images/admin",
+      "port": 3000,
+      "routes": ["/admin/*"],
+      "env": {
+        "NODE_ENV": "production"
+      }
+    }
+  },
+  "services": {
+    "mysql": {
+      "image": "./images/mysql",
+      "port": 3306,
+      "volume": "mysql-data",
+      "env": {
+        "MYSQL_DATABASE": "app",
+        "MYSQL_USER": "app",
+        "MYSQL_PASSWORD": "secret",
+        "MYSQL_ROOT_PASSWORD": "rootsecret"
+      }
+    }
+  }
+}
+```
+
+Ejecuta:
+
+```bash
+fastfn dev --native
+```
+
+Qué esperar:
+
+- Requests que matchean `/admin/*` se proxyean al workload `admin` sobre Firecracker.
+- Las funciones reciben `SERVICE_MYSQL_HOST`, `SERVICE_MYSQL_PORT` y `SERVICE_MYSQL_URL`.
+- Servicios conocidos también reciben aliases de conveniencia como `MYSQL_HOST`, `MYSQL_PORT` y `MYSQL_URL`.
+- `/_fn/health` incluye snapshots de `apps` y `services` junto con la salud de runtimes.
+
+## Layout del bundle Firecracker
+
+El campo `image` es una ruta a un directorio local. FastFN espera este layout:
+
+```text
+images/
+  admin/
+    vmlinux
+    rootfs.ext4
+    fastfn-image.json   # opcional
+  mysql/
+    vmlinux
+    rootfs.ext4
+    fastfn-image.json   # opcional
+```
+
+Requisitos mínimos:
+
+- `vmlinux`: kernel del guest.
+- `rootfs.ext4`: filesystem raíz del guest.
+- El software dentro del guest debe arrancar un proceso persistente escuchando en el puerto configurado.
+
+Claves opcionales de `fastfn-image.json`:
+
+```json
+{
+  "kernel": "vmlinux",
+  "rootfs": "rootfs.ext4",
+  "kernel_args": "console=ttyS0 reboot=k panic=1 pci=off",
+  "guest_port": 10700,
+  "vcpu_count": 1,
+  "memory_mib": 256,
+  "config_drive_bytes": 65536
+}
+```
+
+Notas:
+
+- Las rutas dentro de `fastfn-image.json` son relativas al directorio bundle.
+- Si omites el manifiesto, FastFN usa `vmlinux`, `rootfs.ext4`, guest port `10700`, `1` vCPU y `256 MiB`.
+- La conversión `dockerfile` -> bundle todavía no está implementada en este branch; construye el bundle por fuera y apunta `image` a ese directorio.
+
 ## Prioridad
 
 Ubicación del archivo:
@@ -212,6 +308,8 @@ curl -sS http://127.0.0.1:8080/_fn/openapi.json | jq '.servers[0].url'
 - Si `runtime-daemons` parece no tener efecto, confirma que estás escalando un runtime externo y no `lua`.
 - Si los sockets no coinciden con el patrón generado, revisa si tienes `FN_RUNTIME_SOCKETS` en el entorno.
 - Si no sabes si un setting va en config o en el entorno, revisa primero la referencia de variables de entorno.
+- Si un app o service dice que no encontró el bundle, confirma que `image` apunta a un directorio local con `vmlinux` y `rootfs.ext4`.
+- Si los workloads con imágenes fallan enseguida en macOS o Windows, es esperado en este branch: Firecracker requiere un host Linux/KVM.
 
 ### Variables de entorno adicionales
 

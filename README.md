@@ -181,14 +181,14 @@ FastFN reads `fastfn.json` in the current directory by default.
   "openapi-include-internal": false,
   "apps": {
     "admin": {
-      "image": "ghcr.io/acme/admin:latest",
+      "image": "./images/admin",
       "port": 3000,
       "routes": ["/admin/*"]
     }
   },
   "services": {
     "mysql": {
-      "image": "mysql:8.4",
+      "image": "./images/mysql",
       "port": 3306,
       "volume": "mysql-data"
     }
@@ -202,9 +202,15 @@ Key behavior:
 - Env override for internal visibility: `FN_OPENAPI_INCLUDE_INTERNAL`.
 - `public-base-url` controls `servers[0].url` in generated OpenAPI.
 - `domains` helps CLI doctor checks; host enforcement at runtime lives in per-function `invoke.allow_hosts`.
-- `apps` registers simple public HTTP routes backed by image workloads.
-- `services` registers private image workloads and injects connection env vars into functions.
-- In this branch, `apps` and `services` are wired for `fastfn dev --native` and `fastfn run --native`.
+- `apps` registers simple public HTTP routes backed by Firecracker image bundles.
+- `services` registers private Firecracker image bundles and injects connection env vars into functions.
+- In this branch, `apps` and `services` are wired for `fastfn dev --native` and `fastfn run --native` on Linux/KVM hosts.
+
+Bundle note:
+
+- `image` points to a local Firecracker bundle directory, not a registry image reference.
+- Each bundle should contain `vmlinux`, `rootfs.ext4`, and can optionally include `fastfn-image.json`.
+- `dockerfile`-based conversion is not implemented in this branch yet.
 
 Reference:
 

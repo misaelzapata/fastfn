@@ -1,6 +1,9 @@
 package workloads
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestNormalizeAppSpecs(t *testing.T) {
 	apps, ok, err := NormalizeAppSpecs(map[string]any{
@@ -75,6 +78,21 @@ func TestNormalizeServiceSpecs_ImageOnlyLeavesDockerfileEmpty(t *testing.T) {
 	}
 	if services[0].Dockerfile != "" {
 		t.Fatalf("Dockerfile = %q, want empty", services[0].Dockerfile)
+	}
+}
+
+func TestNormalizeServiceSpecs_RejectsDockerfile(t *testing.T) {
+	_, _, err := NormalizeServiceSpecs(map[string]any{
+		"mysql": map[string]any{
+			"dockerfile": "./Dockerfile",
+			"port":       3306,
+		},
+	})
+	if err == nil {
+		t.Fatal("expected error for dockerfile-based workload")
+	}
+	if got := err.Error(); !strings.Contains(got, "dockerfile is not supported for Firecracker workloads") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

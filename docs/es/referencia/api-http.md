@@ -40,6 +40,37 @@ Las rutas se generan desde:
 - `fn.routes.json`,
 - o `fn.config.json -> invoke.routes`.
 
+### Referencia rápida de `fn.routes.json`
+
+`fn.routes.json` es el manifiesto de rutas a nivel carpeta. Sirve cuando una carpeta necesita exponer URLs explícitas sin obligarte a meter esas URLs en los nombres de archivo.
+
+Ejemplo:
+
+```json
+{
+  "routes": {
+    "GET /healthz": "health.py",
+    "POST /hooks/rebuild": "rebuild.js",
+    "GET,POST /contact": "contact.php",
+    "/status": "status.py"
+  }
+}
+```
+
+Cómo funciona:
+
+- las claves son definiciones de rutas públicas
+- los valores son archivos relativos a la carpeta
+- si omites el prefijo de método, el default es `GET`
+- puedes declarar varios métodos en una clave, por ejemplo `GET,POST /hook`
+- el runtime se infiere por la extensión del archivo target
+
+Nota de precedencia:
+
+- `fn.routes.json` y las file routes se fusionan para la misma carpeta
+- si ambos declaran la misma ruta, `fn.routes.json` gana y el duplicado basado en archivo se descarta
+- prefijos reservados como `/_fn/*` y `/console/*` siguen sin poder mapearse
+
 ### Ejemplo GET
 
 ```bash
@@ -85,6 +116,12 @@ Por defecto, una función en `functions/mi-func/handler.py` es accesible en `/mi
 - `methods` restringe qué métodos HTTP están permitidos (default: todos).
 - Después del discovery (inicio o hot-reload), el gateway registra estas rutas automáticamente.
 - Si otra función ya mapea la misma ruta, la petición es rechazada a menos que `invoke.force-url` sea `true`.
+
+Cuándo elegir cada herramienta:
+
+- Usa file routes cuando el árbol de carpetas ya coincide con la URL pública.
+- Usa `fn.routes.json` cuando una carpeta necesita un manifiesto explícito para varios archivos.
+- Usa `invoke.routes` cuando una función necesita aliases públicos extra y esa política debe vivir en su `fn.config.json`.
 
 ### Debug headers (opt-in)
 

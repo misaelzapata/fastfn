@@ -103,7 +103,7 @@ var (
 	runtimeSocketURIsFn       = runtimeSocketURIsByRuntime
 	newNativeManagerFn        = func() nativeServiceManager { return NewManager() }
 	newImageWorkloadManagerFn = func(cfg workloads.ManagerConfig) (nativeImageWorkloadManager, error) {
-		return workloads.NewDockerNativeManager(cfg)
+		return workloads.NewFirecrackerManager(cfg)
 	}
 	awaitNativeStopFn = func(pm nativeServiceManager) error {
 		sigChan := make(chan os.Signal, 1)

@@ -1,3 +1,5 @@
+//go:build !linux
+
 package workloads
 
 import (
@@ -6,8 +8,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"net"
-	"net/http"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -23,13 +23,6 @@ import (
 	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/go-connections/nat"
 )
-
-type ManagerConfig struct {
-	ProjectDir string
-	StatePath  string
-	Apps       []AppSpec
-	Services   []ServiceSpec
-}
 
 type NativeManager struct {
 	cfg         ManagerConfig
@@ -451,68 +444,6 @@ func (m *NativeManager) runContainer(ctx context.Context, kind, name, imageRef s
 	return hostPort, resp.ID, nil
 }
 
-func effectiveHealthcheck(spec HealthcheckSpec) HealthcheckSpec {
-	out := spec
-	if out.Type == "" {
-		out.Type = "tcp"
-	}
-	if out.IntervalMS <= 0 {
-		out.IntervalMS = 1000
-	}
-	if out.TimeoutMS <= 0 {
-		out.TimeoutMS = 1000
-	}
-	return out
-}
-
-func waitForEndpoint(host string, port int, check HealthcheckSpec, timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
-	for {
-		var err error
-		switch strings.ToLower(strings.TrimSpace(check.Type)) {
-		case "http":
-			err = checkHTTP(host, port, check)
-		default:
-			err = checkTCP(host, port, check)
-		}
-		if err == nil {
-			return nil
-		}
-		if time.Now().After(deadline) {
-			return err
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
-}
-
-func checkTCP(host string, port int, check HealthcheckSpec) error {
-	timeout := time.Duration(check.TimeoutMS) * time.Millisecond
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", host, port), timeout)
-	if err != nil {
-		return err
-	}
-	_ = conn.Close()
-	return nil
-}
-
-func checkHTTP(host string, port int, check HealthcheckSpec) error {
-	timeout := time.Duration(check.TimeoutMS) * time.Millisecond
-	path := check.Path
-	if path == "" {
-		path = "/"
-	}
-	client := &http.Client{Timeout: timeout}
-	resp, err := client.Get(fmt.Sprintf("http://%s:%d%s", host, port, path))
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 500 {
-		return fmt.Errorf("status %d", resp.StatusCode)
-	}
-	return nil
-}
-
 func resolvePath(root, raw string) (string, error) {
 	if strings.TrimSpace(raw) == "" {
 		return "", fmt.Errorf("empty path")
@@ -521,22 +452,6 @@ func resolvePath(root, raw string) (string, error) {
 		return raw, nil
 	}
 	return filepath.Abs(filepath.Join(root, raw))
-}
-
-func sanitizeName(raw string) string {
-	value := strings.ToLower(strings.TrimSpace(raw))
-	if value == "" {
-		return "workload"
-	}
-	var out strings.Builder
-	for _, ch := range value {
-		if (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '-' {
-			out.WriteRune(ch)
-			continue
-		}
-		out.WriteByte('-')
-	}
-	return strings.Trim(out.String(), "-")
 }
 
 func shortHash(raw string) string {
