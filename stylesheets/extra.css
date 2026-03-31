@@ -1,0 +1,190 @@
+:root {
+  --md-primary-fg-color:        #009485; /* Teal */
+  --md-primary-fg-color--light: #00b3a1;
+  --md-primary-fg-color--dark:  #00756a;
+  --md-accent-fg-color:         #009485; /* Teal Accent */
+}
+
+
+
+.md-content__button {
+  display: none;
+}
+
+/* --- Hero Section (Clean & Open) --- */
+.hero-section {
+  text-align: center;
+  padding: 3rem 1rem 2rem; 
+  margin-bottom: 2rem;
+  background: transparent;
+  color: var(--md-typeset-color);
+}
+
+.hero-content {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.hero-logo {
+  width: 180px;
+  height: auto;
+  margin: 0 auto 1rem;
+  display: block;
+}
+
+/* Big Solid Title */
+.hero-title {
+  font-size: 3rem;
+  font-weight: 800;
+  margin-bottom: 0.5rem;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  color: var(--md-typeset-color);
+}
+
+[data-md-color-scheme="slate"] .hero-title {
+  color: var(--md-typeset-color);
+}
+
+.hero-subtitle {
+  font-size: 1.2rem;
+  font-weight: 400;
+  margin-bottom: 2rem;
+  line-height: 1.5;
+  color: var(--md-typeset-color--light);
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Buttons */
+.hero-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin-top: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.7rem 1.8rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  border-radius: 50px;
+  text-decoration: none !important;
+  transition: all 0.2s ease;
+}
+
+.btn-primary {
+  background: var(--md-primary-fg-color);
+  color: white !important;
+  box-shadow: 0 4px 15px rgba(0, 148, 133, 0.4);
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 148, 133, 0.6);
+  background: var(--md-primary-fg-color--light);
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--md-typeset-color) !important;
+  border: 2px solid var(--md-default-fg-color--lightest);
+}
+
+.btn-secondary:hover {
+  border-color: var(--md-primary-fg-color);
+  color: var(--md-primary-fg-color) !important;
+  background: var(--md-default-bg-color--lighter);
+}
+
+/* --- Badges Section (Small & Minimal) --- */
+.hero-badges-container {
+    margin-top: 2.5rem;
+}
+
+.hero-badges {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  margin-top: 1.5rem;
+  opacity: 0.85;
+}
+
+/* Force small height for badges */
+.hero-badges img {
+  height: 20px; 
+  width: auto;
+  border-radius: 3px;
+  vertical-align: middle;
+}
+
+.hero-badges a {
+  display: inline-flex; /* Remove underline/decoration issues */
+}
+
+/* --- Feature Cards (Grid) --- */
+.grid.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin: 3rem 0;
+}
+
+.grid.cards ul {
+  display: contents; 
+  list-style: none;
+  margin: 0; padding: 0;
+}
+
+.grid.cards li {
+  background: var(--md-default-bg-color);
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.8rem;
+  padding: 1.5rem; /* Reduced padding */
+  transition: all 0.2s ease;
+  list-style: none;
+  margin: 0 !important;
+}
+
+[data-md-color-scheme="slate"] .grid.cards li {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.grid.cards li:hover {
+  transform: translateY(-3px);
+  border-color: var(--md-primary-fg-color);
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.2);
+}
+
+/* Card Icons */
+.card-icon {
+  width: 32px; /* Smaller icons */
+  height: 32px;
+  margin-bottom: 0.8rem;
+  color: var(--md-primary-fg-color);
+  display: block;
+}
+
+/* Typography map */
+.grid.cards strong {
+   display: block;
+   font-size: 1.1rem; /* Reduced from 1.2rem */
+   margin-bottom: 0.4rem;
+   color: var(--md-typeset-color);
+   font-weight: 700;
+   line-height: 1.3;
+}
+
+.grid.cards p {
+    color: var(--md-typeset-color--light);
+    font-size: 0.9rem; /* Reduced from 0.95rem */
+    line-height: 1.5;
+    margin: 0;
+}

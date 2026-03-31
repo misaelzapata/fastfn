@@ -1,0 +1,91 @@
+{
+  "version": 1,
+  "generated_at": "2026-03-12T00:00:00Z",
+  "assets": [
+    {
+      "id": "assets-screenshots-admin-console-dashboard-png",
+      "path": "assets/screenshots/admin-console-dashboard.png",
+      "sha256": "607aac4c636685ce959b565b0b904e5c6b3cb5a5c149c38e0e9f241ae8e35000",
+      "source": {
+        "kind": "playwright",
+        "script": "scripts/docs/capture-ui.mjs",
+        "command": "node scripts/docs/capture-ui.mjs"
+      },
+      "used_by": [
+        "en/how-to/console-admin-access.md",
+        "es/como-hacer/consola-admin.md"
+      ]
+    },
+    {
+      "id": "assets-screenshots-browser-hello-world-png",
+      "path": "assets/screenshots/browser-hello-world.png",
+      "sha256": "048797183487e031444118abc05db960036aaf28622626e31695b0313a086bf5",
+      "source": {
+        "kind": "playwright",
+        "script": "scripts/docs/capture-ui.mjs",
+        "command": "node scripts/docs/capture-ui.mjs"
+      },
+      "used_by": [
+        "index.md"
+      ]
+    },
+    {
+      "id": "assets-screenshots-browser-json-tasks-png",
+      "path": "assets/screenshots/browser-json-tasks.png",
+      "sha256": "b6a6ac87b5866fae7e67cdfda4c99f6fec393c96c7e2905f927a49a04cb4a20d",
+      "source": {
+        "kind": "playwright",
+        "script": "scripts/docs/capture-ui.mjs",
+        "command": "node scripts/docs/capture-ui.mjs"
+      },
+      "used_by": [
+        "en/tutorial/from-zero/1-setup-and-first-route.md",
+        "es/tutorial/desde-cero/1-setup-y-primera-ruta.md"
+      ]
+    },
+    {
+      "id": "assets-screenshots-swagger-ui-png",
+      "path": "assets/screenshots/swagger-ui.png",
+      "sha256": "8b80c3e9da7ff752e2602859b9888552103958ff34a1bc0a41f3ea64090c5060",
+      "source": {
+        "kind": "playwright",
+        "script": "scripts/docs/capture-ui.mjs",
+        "command": "node scripts/docs/capture-ui.mjs"
+      },
+      "used_by": [
+        "en/tutorial/first-steps.md",
+        "es/tutorial/primeros-pasos.md"
+      ]
+    },
+    {
+      "id": "demo-gif",
+      "path": "demo.gif",
+      "sha256": "b9356635a0b4e270599e2484158ebaa6186292a29cb6aed253acfc298c4d53ae",
+      "source": {
+        "kind": "vhs",
+        "script": "tests/manual/vhs/01-node-create-live.tape",
+        "command": "vhs tests/manual/vhs/01-node-create-live.tape"
+      },
+      "used_by": [
+        "en/index.md",
+        "es/index.md",
+        "index.md"
+      ]
+    },
+    {
+      "id": "logo-png",
+      "path": "logo.png",
+      "sha256": "05f452dbb6da0b50e70b0c3e6cb2629552a8266863b179e930feb7aaaf3a5673",
+      "source": {
+        "kind": "manual-brand",
+        "script": "",
+        "command": ""
+      },
+      "used_by": [
+        "en/index.md",
+        "es/index.md",
+        "index.md"
+      ]
+    }
+  ]
+}

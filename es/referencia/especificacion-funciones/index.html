@@ -1,0 +1,7955 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://fastfn.dev/es/referencia/especificacion-funciones/">
+      
+      
+        <link rel="prev" href="../../como-hacer/zero-config-routing/">
+      
+      
+        <link rel="next" href="../config-fastfn/">
+      
+      
+        
+          <link rel="alternate" href="/en/" hreflang="en">
+        
+          <link rel="alternate" href="/es/" hreflang="es">
+        
+      
+      
+      <link rel="icon" href="../../../logo.PNG">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Configuración de Función (fn.config.json) - FastFN</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="white" data-md-color-accent="teal">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#especificacion-de-funciones" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="FastFN" class="md-header__button md-logo" aria-label="FastFN" data-md-component="logo">
+      
+  <img src="../../../logo.PNG" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            FastFN
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Configuración de Función (fn.config.json)
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="white" data-md-color-accent="teal"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="teal"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+      <div class="md-header__option">
+  <div class="md-select">
+    
+    <button class="md-header__button md-icon" aria-label="Select language">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m12.87 15.07-2.54-2.51.03-.03A17.5 17.5 0 0 0 14.07 6H17V4h-7V2H8v2H1v2h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2zm-2.62 7 1.62-4.33L19.12 17z"/></svg>
+    </button>
+    <div class="md-select__inner">
+      <ul class="md-select__list">
+        
+          <li class="md-select__item">
+            <a href="/en/" hreflang="en" class="md-select__link">
+              English
+            </a>
+          </li>
+        
+          <li class="md-select__item">
+            <a href="/es/" hreflang="es" class="md-select__link">
+              Español
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</div>
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/misaelzapata/fastfn" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    FastFN
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="FastFN" class="md-nav__button md-logo" aria-label="FastFN" data-md-component="logo">
+      
+  <img src="../../../logo.PNG" alt="logo">
+
+    </a>
+    FastFN
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/misaelzapata/fastfn" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    FastFN
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    English Docs
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    English Docs
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_1" id="__nav_2_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Introduction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/how-to/homebrew/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/tutorial/first-steps/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_2" id="__nav_2_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core Concepts
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Core Concepts
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/tutorial/routing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    File-System Routing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/how-to/zero-config-routing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Zero-Config Routing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/reference/function-spec/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Function Config (fn.config.json)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/reference/fastfn-config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Global Config (fastfn.json)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_3" id="__nav_2_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Learn (The Course)
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Learn (The Course)
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/tutorial/from-zero/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/tutorial/from-zero/1-setup-and-first-route/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    1. Setup & First Route
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/tutorial/from-zero/2-routing-and-data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    2. Routing & Data
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/tutorial/from-zero/3-config-and-secrets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    3. Config & Secrets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/tutorial/from-zero/4-advanced-responses/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    4. Advanced Responses
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_4" id="__nav_2_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials & Examples
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials & Examples
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/tutorial/your-first-function/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Your First Function
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/tutorial/direct-params/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Direct Params Injection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/tutorial/typed-inputs-and-responses/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Typed Inputs and Responses
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/tutorial/request-validation-and-schemas/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Request Validation and Schemas
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/tutorial/spa-and-api-together/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Serve a SPA and API Together
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/tutorial/security-for-functions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security for Functions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/tutorial/auth-and-secrets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authentication and Secrets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/tutorial/versioning-and-rollout/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Versioning and Rollout
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/tutorial/request-metadata-and-files/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Request Metadata and Files
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/tutorial/build-complete-api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Build a Complete API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/tutorial/qr-in-python-node/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    QR Generator
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/tutorial/whatsapp-bot-demo/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    WhatsApp Bot
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/tutorial/artistic-qrs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Artistic QRs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_5" id="__nav_2_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How-To Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    How-To Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/how-to/deploy-to-production/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deploy to Production
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/how-to/run-as-a-linux-service/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Run as a Linux Service
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/how-to/debugging-and-troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Debugging and Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/how-to/project-generation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project Generation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/how-to/fastapi-nextjs-playbook/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    FastAPI/Next.js Playbook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/how-to/authentication/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Authentication
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/how-to/reuse-auth-and-validation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reuse Auth and Validation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/how-to/security-confidence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security Confidence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/how-to/scale-runtime-daemons/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scale Runtime Daemons
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/how-to/platform-runtime-plumbing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Platform Runtime Plumbing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/how-to/data-access-patterns/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data Access Patterns
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/how-to/bigger-app-structure/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Bigger App Structure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/how-to/console-admin-access/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Console Access
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/how-to/manage-functions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Manage Functions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/how-to/run-and-test/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Run and Test
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/how-to/operational-recipes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operational Recipes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/how-to/telegram-digest/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Telegram Bot (Cron)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/how-to/telegram-e2e/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Telegram Bot (E2E)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/how-to/contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/how-to/tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/how-to/get-help/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Get Help
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_6" id="__nav_2_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Advanced Articles
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Advanced Articles
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/articles/cloudflare-style-public-assets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cloudflare-Style Public Assets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/articles/local-serverless-hot-reload-openapi/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Local Hot Reload
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/articles/practical-auth-for-functions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Practical Auth
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/articles/polyglot-nextstyle-apis/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Polyglot APIs (Next-style)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/articles/telegram-ai-reply-how-it-works/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Telegram AI Reply
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/articles/telegram-loop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Telegram Loop
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/articles/telegram-ai-memory-cron/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Telegram AI Memory
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/articles/doctor-domains-and-ci/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Doctor Domains
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/articles/ip-geolocation-with-maxmind-and-ipapi/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    IP Geolocation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/articles/workers-compatibility-beta/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workers Compatibility (Beta)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/articles/file-based-method-routing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    File-Based Method Routing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_7" id="__nav_2_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/reference/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/reference/environment-variables/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Environment Variables
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/reference/http-api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    HTTP API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/reference/fn-config-complete/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Complete Config Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/reference/runtime-contract/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runtime Contract
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/reference/external-links/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    External Links
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/reference/builtin-functions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Builtin Functions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/reference/php-template/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    PHP Template
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/reference/rust-template/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rust Template
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_8" id="__nav_2_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture & Explanation
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Architecture & Explanation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/explanation/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/explanation/security-model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security Model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/explanation/support-matrix-advanced-protocols/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Support Matrix (Advanced Protocols)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/explanation/shared-logic-patterns/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Shared Logic Patterns
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/explanation/comparison/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Technical Comparison
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/explanation/concurrency-and-async/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concurrency and Async
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/explanation/history-design-future/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    History, Design, and Future
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/explanation/scheduler-vs-cron/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scheduler vs Cron
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/explanation/nextjs-style-routing-benefits/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Next.js Style Routing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/explanation/invocation-flow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Invocation Lifecycle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/explanation/performance-benchmarks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Performance
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/explanation/visual-flows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Visual Flows
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Documentación en Español
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Documentación en Español
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_1" id="__nav_3_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Empezando
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Empezando
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Introducción
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../como-hacer/homebrew/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Instalación
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/primeros-pasos/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inicio Rápido
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3_2" id="__nav_3_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Conceptos Core
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Conceptos Core
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/routing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Enrutamiento por Archivos
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../como-hacer/zero-config-routing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Enrutamiento Zero-Config
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuración de Función (fn.config.json)
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuración de Función (fn.config.json)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#nombres-y-rutas" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Nombres y rutas
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#estado-de-runtimes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Estado de runtimes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#root-de-funciones-configurable" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Root de funciones configurable
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cableado-de-procesos-runtime" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cableado de procesos runtime
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#archivos-de-codigo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Archivos de codigo
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Archivos de codigo">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#resolucion-de-handler-2-pasos" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resolucion de handler (2 pasos)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#inyeccion-directa-de-parametros" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Inyeccion directa de parametros
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#modos-de-discovery" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Modos de discovery
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Modos de discovery">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-arbol-puro-de-rutas-por-archivos" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Arbol puro de rutas por archivos
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-single-entry-root" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Single-entry root
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-subarbol-mixto" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Subárbol mixto
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#estructura-recomendada-relativa-a-fn_functions_root" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Estructura recomendada (relativa a FN_FUNCTIONS_ROOT)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Estructura recomendada (relativa a FN_FUNCTIONS_ROOT)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#namespaces-anidados-estilo-nextjs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Namespaces anidados (estilo Next.js)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ejemplos-minimos-de-handler-mismo-contrato" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ejemplos minimos de handler (mismo contrato)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Ejemplos minimos de handler (mismo contrato)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#python" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Python
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#node" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Node
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#php" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PHP
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rust" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rust
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#respuesta-sencilla-atajos-por-runtime" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Respuesta sencilla (atajos por runtime)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fnconfigjson" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        fn.config.json
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="fn.config.json">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#assets-publicos-en-root" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Assets públicos en root
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#keep_warm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        keep_warm
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#worker_pool" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        worker_pool
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#adaptadores-de-invocacion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Adaptadores de invocacion
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#config-edge-passthrough-edge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Config edge passthrough (edge)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#gestion-de-dependencias-auto-install-inferencia" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gestion de dependencias (auto-install + inferencia)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Gestion de dependencias (auto-install + inferencia)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#archivos-que-fastfn-escribe-por-runtime" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Archivos que FastFN escribe por runtime
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#python-manifiesto-inferencia" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Python (manifiesto + inferencia)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#node-manifiesto-inferencia" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Node (manifiesto + inferencia)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#php-solo-manifiesto-en-esta-fase" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PHP (solo manifiesto en esta fase)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rust-build-en-esta-fase" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rust (build en esta fase)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#go-build" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Go (build)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lua-in-process" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lua (in-process)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#errores-estrictos-y-transparencia" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Errores estrictos y transparencia
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#packs-de-dependencias-compartidas-shared_deps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Packs de dependencias compartidas (shared_deps)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#schedule-cron-o-intervalo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Schedule (cron o intervalo)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Schedule (cron o intervalo)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#schedule-por-intervalo-every_seconds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Schedule por intervalo (every_seconds)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#schedule-cron-cron" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Schedule cron (cron)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fnenvjson-y-secretos" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        fn.env.json y secretos
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#diagrama-de-flujo-de-ejecucion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Diagrama de Flujo de Ejecución
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#contrato" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Contrato
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ejemplo-end-to-end" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ejemplo End-to-End
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#casos-limite" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Casos Límite
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ver-tambien" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ver también
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../config-fastfn/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuración Global (fastfn.json)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_3" id="__nav_3_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Aprende (El Curso)
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Aprende (El Curso)
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/desde-cero/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Vista General
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/desde-cero/1-setup-y-primera-ruta/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    1. Setup y Primera Ruta
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/desde-cero/2-enrutamiento-y-datos/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    2. Enrutamiento y Datos
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/desde-cero/3-configuracion-y-secretos/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    3. Configuración y Secretos
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/desde-cero/4-respuestas-avanzadas/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    4. Respuestas Avanzadas
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_4" id="__nav_3_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutoriales y Ejemplos
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutoriales y Ejemplos
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/tu-primera-funcion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tu primera función
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/parametros-directos/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inyección Directa de Params
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/inputs-y-respuestas-tipadas/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inputs y Respuestas Tipadas
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/validacion-y-schemas/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validación y Schemas
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/spa-y-api-juntas/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Servir una SPA y una API juntas
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/seguridad-para-funciones/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Seguridad para Funciones
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/auth-y-secretos/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Auth y secretos
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/versionado-y-rollout/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Versionado y rollout
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/metadata-request-y-archivos/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Metadata de Request y Archivos
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/construir-api-completa/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Construir API Completa
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/poliglota-paso-a-paso/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorial Políglota
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/qr-python-node/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    QR (Python/Node)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/demo-bot-whatsapp/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    WhatsApp Bot
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorial/qrs-artisticos/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    QRs Artísticos
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_5" id="__nav_3_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guías Cómo-Hacer
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guías Cómo-Hacer
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../como-hacer/desplegar-a-produccion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Desplegar a Producción
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../como-hacer/ejecutar-como-servicio-linux/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ejecutar como servicio Linux
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../como-hacer/depuracion-y-solucion-de-problemas/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Depuracion y Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../como-hacer/generacion-proyecto/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Generación de Proyecto
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../como-hacer/playbook-fastapi-nextjs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Playbook FastAPI/Next.js
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../como-hacer/autenticacion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Autenticación
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../como-hacer/reutilizar-auth-y-validacion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reutilizar Auth y Validación
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../como-hacer/checklist-seguridad-produccion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Checklist de seguridad
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../como-hacer/escalar-daemons-runtime/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Escalar daemons de runtime
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../como-hacer/plomeria-runtime-plataforma/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plomería Runtime-Plataforma
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../como-hacer/patrones-de-acceso-a-datos/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Patrones de Acceso a Datos
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../como-hacer/estructura-app-grande/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Estructura App Grande
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../como-hacer/consola-admin/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Consola y Administración
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../como-hacer/gestionar-funciones/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Gestionar Funciones
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../como-hacer/recetas-operativas/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Recetas Operativas
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../como-hacer/telegram-digest/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Receta: Digest Telegram (Cron)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../como-hacer/telegram-e2e/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Receta: Bot E2E
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../como-hacer/ejecutar-y-probar/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ejecutar y Probar
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../como-hacer/herramientas/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Herramientas (Tools)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../como-hacer/obtener-ayuda/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Obtener Ayuda
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../como-hacer/contribuir/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contribuir
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_6" id="__nav_3_6_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Artículos Avanzados
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Artículos Avanzados
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../articulos/assets-publicos-estilo-cloudflare/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Assets públicos estilo Cloudflare
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../articulos/serverless-local-hot-reload-openapi/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Hot Reload Local + OpenAPI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../articulos/auth-practica-para-funciones/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Autenticación Práctica
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../articulos/apis-poliglotas-next-style/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    APIs Poliglotas (Next-style)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../articulos/telegram-ai-reply-como-funciona/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Telegram AI Reply
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../articulos/telegram-loop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Telegram Loop
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../articulos/telegram-ai-memoria-cron/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Telegram AI Memoria (Cron)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../articulos/doctor-dominios-y-ci/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Doctor Dominios + CI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../articulos/geolocalizacion-ip-con-maxmind-e-ipapi/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Geolocalizacion IP
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../articulos/workers-compat-beta/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workers Compatibility (Beta)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../articulos/enrutamiento-metodos-por-archivos/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Enrutamiento por Metodos
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_7" id="__nav_3_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Referencia
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Referencia
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../variables-de-entorno/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Variables de Entorno
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api-http/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API HTTP
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../fn-config-completo/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Referencia Completa de Config
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contrato-runtime/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contrato Runtime
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../enlaces-externos/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Enlaces Externos
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../funciones-ejemplo/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Funciones de Ejemplo
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../plantilla-php/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plantilla PHP
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../plantilla-rust/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plantilla Rust
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_8" id="__nav_3_8_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Arquitectura y Explicación
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Arquitectura y Explicación
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explicacion/arquitectura/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Arquitectura
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explicacion/benchmarks-rendimiento/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarks de Rendimiento
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explicacion/flujos-visuales/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Flujos visuales
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explicacion/matriz-soporte-protocolos-avanzados/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Matriz Soporte Protocolos Avanzados
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explicacion/patrones-de-logica-compartida/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Patrones de Lógica Compartida
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explicacion/concurrencia-y-async/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concurrencia y Async
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explicacion/comparacion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Comparación Técnica
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explicacion/historia-diseno-futuro/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Historia, Diseño y Futuro
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explicacion/flujo-invocacion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ciclo de Invocación
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explicacion/modelo-seguridad/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Modelo de Seguridad
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../explicacion/scheduler-vs-cron/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scheduler vs Cron
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#nombres-y-rutas" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Nombres y rutas
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#estado-de-runtimes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Estado de runtimes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#root-de-funciones-configurable" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Root de funciones configurable
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cableado-de-procesos-runtime" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cableado de procesos runtime
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#archivos-de-codigo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Archivos de codigo
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Archivos de codigo">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#resolucion-de-handler-2-pasos" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resolucion de handler (2 pasos)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#inyeccion-directa-de-parametros" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Inyeccion directa de parametros
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#modos-de-discovery" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Modos de discovery
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Modos de discovery">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-arbol-puro-de-rutas-por-archivos" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Arbol puro de rutas por archivos
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-single-entry-root" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Single-entry root
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-subarbol-mixto" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Subárbol mixto
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#estructura-recomendada-relativa-a-fn_functions_root" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Estructura recomendada (relativa a FN_FUNCTIONS_ROOT)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Estructura recomendada (relativa a FN_FUNCTIONS_ROOT)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#namespaces-anidados-estilo-nextjs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Namespaces anidados (estilo Next.js)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ejemplos-minimos-de-handler-mismo-contrato" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ejemplos minimos de handler (mismo contrato)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Ejemplos minimos de handler (mismo contrato)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#python" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Python
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#node" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Node
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#php" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PHP
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rust" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rust
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#respuesta-sencilla-atajos-por-runtime" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Respuesta sencilla (atajos por runtime)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fnconfigjson" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        fn.config.json
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="fn.config.json">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#assets-publicos-en-root" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Assets públicos en root
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#keep_warm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        keep_warm
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#worker_pool" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        worker_pool
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#adaptadores-de-invocacion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Adaptadores de invocacion
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#config-edge-passthrough-edge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Config edge passthrough (edge)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#gestion-de-dependencias-auto-install-inferencia" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gestion de dependencias (auto-install + inferencia)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Gestion de dependencias (auto-install + inferencia)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#archivos-que-fastfn-escribe-por-runtime" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Archivos que FastFN escribe por runtime
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#python-manifiesto-inferencia" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Python (manifiesto + inferencia)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#node-manifiesto-inferencia" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Node (manifiesto + inferencia)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#php-solo-manifiesto-en-esta-fase" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PHP (solo manifiesto en esta fase)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rust-build-en-esta-fase" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rust (build en esta fase)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#go-build" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Go (build)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lua-in-process" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lua (in-process)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#errores-estrictos-y-transparencia" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Errores estrictos y transparencia
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#packs-de-dependencias-compartidas-shared_deps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Packs de dependencias compartidas (shared_deps)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#schedule-cron-o-intervalo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Schedule (cron o intervalo)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Schedule (cron o intervalo)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#schedule-por-intervalo-every_seconds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Schedule por intervalo (every_seconds)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#schedule-cron-cron" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Schedule cron (cron)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fnenvjson-y-secretos" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        fn.env.json y secretos
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#diagrama-de-flujo-de-ejecucion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Diagrama de Flujo de Ejecución
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#contrato" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Contrato
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ejemplo-end-to-end" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ejemplo End-to-End
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#casos-limite" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Casos Límite
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ver-tambien" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ver también
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="especificacion-de-funciones">Especificación de funciones<a class="headerlink" href="#especificacion-de-funciones" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p>Estado verificado al <strong>13 de marzo de 2026</strong>.
+Nota de runtime: FastFN resuelve dependencias y build por función según el runtime: Python usa <code>requirements.txt</code>, Node usa <code>package.json</code>, PHP instala desde <code>composer.json</code> cuando existe, y Rust compila handlers con <code>cargo</code>. En <code>fastfn dev --native</code> necesitas runtimes y herramientas del host; <code>fastfn dev</code> depende de un daemon de Docker activo.</p>
+</blockquote>
+<h2 id="nombres-y-rutas">Nombres y rutas<a class="headerlink" href="#nombres-y-rutas" title="Permanent link">&para;</a></h2>
+<ul>
+<li>nombre (flat): <code>^[a-zA-Z0-9_-]+$</code></li>
+<li>nombre (namespaced): <code>&lt;segmento&gt;/&lt;segmento&gt;/.../&lt;nombre&gt;</code> donde cada segmento cumple <code>^[a-zA-Z0-9_-]+$</code></li>
+<li>versión: <code>^[a-zA-Z0-9_.-]+$</code></li>
+<li>rutas públicas (por defecto):</li>
+<li><code>/&lt;name&gt;</code> (flat)</li>
+<li><code>/&lt;segmento&gt;/&lt;segmento&gt;/.../&lt;nombre&gt;</code> (namespaced — la estructura de directorios se mapea a rutas, estilo Next.js)</li>
+<li><code>/&lt;name&gt;@&lt;version&gt;</code></li>
+</ul>
+<p>Los nombres con namespace mapean la estructura de directorios directamente a rutas URL:</p>
+<table>
+<thead>
+<tr>
+<th>Path en disco (bajo carpeta runtime)</th>
+<th>Nombre de función</th>
+<th>Ruta</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>hello/handler.py</code></td>
+<td><code>hello</code></td>
+<td><code>/hello</code></td>
+</tr>
+<tr>
+<td><code>alice/hello/handler.py</code></td>
+<td><code>alice/hello</code></td>
+<td><code>/alice/hello</code></td>
+</tr>
+<tr>
+<td><code>api/v1/users/handler.py</code></td>
+<td><code>api/v1/users</code></td>
+<td><code>/api/v1/users</code></td>
+</tr>
+</tbody>
+</table>
+<p>Casos de uso: plataformas multi-tenant (<code>alice/hello</code>, <code>bob/greet</code>), namespacing de APIs (<code>api/v1/users</code>), agrupación organizacional (<code>team/service/handler</code>).</p>
+<h2 id="estado-de-runtimes">Estado de runtimes<a class="headerlink" href="#estado-de-runtimes" title="Permanent link">&para;</a></h2>
+<p>Implementados y ejecutables hoy:</p>
+<ul>
+<li><code>python</code></li>
+<li><code>node</code></li>
+<li><code>php</code></li>
+<li><code>lua</code> (corre in-process dentro de OpenResty — no necesita daemon externo)</li>
+</ul>
+<p>Experimentales (opt-in via <code>FN_RUNTIMES</code>):</p>
+<ul>
+<li><code>rust</code></li>
+<li><code>go</code></li>
+</ul>
+<h2 id="root-de-funciones-configurable">Root de funciones configurable<a class="headerlink" href="#root-de-funciones-configurable" title="Permanent link">&para;</a></h2>
+<p>FastFN descubre funciones escaneando un directorio del filesystem.</p>
+<p>Setup común (recomendado):</p>
+<ol>
+<li>Crear <code>functions/</code> en tu repo.</li>
+<li>Correr <code>fastfn dev functions</code> (o setear <code>"functions-dir": "functions"</code> en <code>fastfn.json</code>).</li>
+</ol>
+<p>También puedes controlar discovery con:</p>
+<ul>
+<li><code>FN_RUNTIMES</code> (CSV, ejemplo <code>python,node,php,rust</code>)</li>
+<li><code>FN_RUNTIME_SOCKETS</code> (JSON runtime -&gt; socket URI)</li>
+<li><code>FN_SOCKET_BASE_DIR</code> (base de sockets si no hay mapa explícito)</li>
+</ul>
+<p>Precedencia de runtime (cuando hay colisiones):</p>
+<ul>
+<li>Si el mismo nombre existe en varios runtimes, <code>/&lt;name&gt;</code> usa el primer runtime en <code>FN_RUNTIMES</code>.</li>
+<li>Si <code>FN_RUNTIMES</code> no está definido, usa orden alfabético de carpetas runtime.</li>
+</ul>
+<h2 id="cableado-de-procesos-runtime">Cableado de procesos runtime<a class="headerlink" href="#cableado-de-procesos-runtime" title="Permanent link">&para;</a></h2>
+<p>El cableado global de runtimes vive fuera de <code>fn.config.json</code>.</p>
+<p>Controles principales:</p>
+<ul>
+<li><code>FN_RUNTIMES</code> para habilitar runtimes</li>
+<li><code>runtime-daemons</code> o <code>FN_RUNTIME_DAEMONS</code> para definir counts por runtime externo</li>
+<li><code>FN_RUNTIME_SOCKETS</code> para pasar un mapa explícito de sockets</li>
+<li><code>runtime-binaries</code> o <code>FN_*_BIN</code> para elegir el ejecutable del host usado por cada runtime o herramienta</li>
+</ul>
+<p>Reglas importantes:</p>
+<ul>
+<li><code>lua</code> corre dentro de OpenResty, así que los counts para <code>lua</code> se ignoran.</li>
+<li><code>FN_RUNTIME_SOCKETS</code> acepta string o array por runtime.</li>
+<li>Si defines <code>FN_RUNTIME_SOCKETS</code>, gana sobre los sockets generados desde <code>runtime-daemons</code>.</li>
+<li>FastFN elige un ejecutable por clave. Si ejecutas tres daemons de Python, los tres usan el mismo <code>FN_PYTHON_BIN</code>.</li>
+</ul>
+<p>Ejemplo:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="p">{</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nt">&quot;runtime-daemons&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">    </span><span class="nt">&quot;node&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">    </span><span class="nt">&quot;python&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">3</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">  </span><span class="p">},</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">  </span><span class="nt">&quot;runtime-binaries&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">    </span><span class="nt">&quot;python&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;python3.12&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">    </span><span class="nt">&quot;node&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;node20&quot;</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="p">}</span>
+</code></pre></div>
+<h2 id="archivos-de-codigo">Archivos de codigo<a class="headerlink" href="#archivos-de-codigo" title="Permanent link">&para;</a></h2>
+<p>Archivos de entrada por runtime (en orden de resolucion):</p>
+<table>
+<thead>
+<tr>
+<th>Runtime</th>
+<th>Candidatos (en orden)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Python</td>
+<td><code>handler.py</code> → <code>main.py</code></td>
+</tr>
+<tr>
+<td>Node</td>
+<td><code>handler.js</code> → <code>handler.ts</code> → <code>index.js</code> → <code>index.ts</code></td>
+</tr>
+<tr>
+<td>PHP</td>
+<td><code>handler.php</code> → <code>index.php</code></td>
+</tr>
+<tr>
+<td>Lua</td>
+<td><code>handler.lua</code> → <code>main.lua</code> → <code>index.lua</code></td>
+</tr>
+<tr>
+<td>Go</td>
+<td><code>handler.go</code> → <code>main.go</code></td>
+</tr>
+<tr>
+<td>Rust</td>
+<td><code>handler.rs</code></td>
+</tr>
+</tbody>
+</table>
+<div class="admonition tip">
+<p class="admonition-title">Convencion</p>
+<p>Usa <code>handler.&lt;ext&gt;</code> como default. El nombre coincide con el callable por defecto (<code>handler(event)</code>) y mantiene el contrato publico consistente entre runtimes.</p>
+</div>
+<h3 id="resolucion-de-handler-2-pasos">Resolucion de handler (2 pasos)<a class="headerlink" href="#resolucion-de-handler-2-pasos" title="Permanent link">&para;</a></h3>
+<p>La resolucion del handler funciona en dos pasos: <strong>seleccion de archivo</strong> y luego <strong>seleccion del callable</strong>.</p>
+<p><strong>Paso 1 — Seleccion de archivo:</strong></p>
+<ol>
+<li><code>entrypoint</code> explicito en <code>fn.config.json</code> (e.g. <code>src/my_handler.py</code>).</li>
+<li>Rutas por archivo (estilo Next.js): <code>&lt;method&gt;.&lt;tokens&gt;.&lt;ext&gt;</code> o <code>&lt;method&gt;.&lt;ext&gt;</code>.</li>
+<li>Archivos de entrada por defecto en orden fijo por runtime (ver tabla arriba).</li>
+</ol>
+<p>No existe fallback a "el primer archivo del directorio". Si ninguna regla coincide, la carpeta no expone endpoint.</p>
+<p><strong>Paso 2 — Seleccion del callable:</strong></p>
+<ul>
+<li>Default: <code>handler(event)</code></li>
+<li>Override con <code>fn.config.json</code> → <code>invoke.handler</code> (debe ser identificador valido: <code>^[a-zA-Z_][a-zA-Z0-9_]*$</code>).</li>
+<li>Python: si el callable <code>handler</code> no existe, FastFN busca <code>main(event)</code> como fallback.</li>
+<li>Cloudflare Workers adapter: si <code>invoke.adapter</code> es <code>cloudflare-worker</code>, FastFN busca primero <code>fetch</code> antes del nombre configurado.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Campo</th>
+<th>Alcance</th>
+<th>Ejemplo</th>
+<th>Efecto</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>entrypoint</code></td>
+<td>Seleccion de archivo</td>
+<td><code>"src/api.py"</code></td>
+<td>Carga <code>src/api.py</code> en vez de archivos por convencion</td>
+</tr>
+<tr>
+<td><code>invoke.handler</code></td>
+<td>Seleccion de callable</td>
+<td><code>"process_request"</code></td>
+<td>Llama <code>process_request(event)</code> en vez de <code>handler(event)</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="inyeccion-directa-de-parametros">Inyeccion directa de parametros<a class="headerlink" href="#inyeccion-directa-de-parametros" title="Permanent link">&para;</a></h3>
+<p>Cuando una ruta tiene segmentos dinamicos (e.g. <code>[id]</code>, <code>[...slug]</code>), los parametros extraidos se inyectan en el handler. El mecanismo varia por runtime:</p>
+<table>
+<thead>
+<tr>
+<th>Runtime</th>
+<th>Metodo de inyeccion</th>
+<th>Firma de ejemplo</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Python</td>
+<td><code>inspect.signature</code> → kwargs nombrados</td>
+<td><code>def handler(event, id):</code></td>
+</tr>
+<tr>
+<td>Node</td>
+<td>Segundo argumento (objeto desestructurado)</td>
+<td><code>async (event, { id }) =&gt;</code></td>
+</tr>
+<tr>
+<td>PHP</td>
+<td><code>ReflectionFunction</code> → segundo argumento</td>
+<td><code>function handler($event, $params)</code></td>
+</tr>
+<tr>
+<td>Lua</td>
+<td>Siempre segundo argumento (tabla)</td>
+<td><code>function handler(event, params)</code></td>
+</tr>
+<tr>
+<td>Go</td>
+<td>Merge en event map bajo clave <code>params</code></td>
+<td><code>event["params"]["id"]</code></td>
+</tr>
+<tr>
+<td>Rust</td>
+<td>Merge en event Value bajo clave <code>params</code></td>
+<td><code>event["params"]["id"]</code></td>
+</tr>
+</tbody>
+</table>
+<p>Los parametros siempre estan disponibles en <code>event.params</code> sin importar el runtime. La inyeccion directa es una conveniencia que evita extraccion manual.</p>
+<h2 id="modos-de-discovery">Modos de discovery<a class="headerlink" href="#modos-de-discovery" title="Permanent link">&para;</a></h2>
+<p>FastFN usa tres modos de discovery de rutas. El modo sale de la estructura real de la carpeta, no de una blacklist ad hoc de nombres.</p>
+<h3 id="1-arbol-puro-de-rutas-por-archivos">1. Arbol puro de rutas por archivos<a class="headerlink" href="#1-arbol-puro-de-rutas-por-archivos" title="Permanent link">&para;</a></h3>
+<p>Si una carpeta <strong>no</strong> define un entrypoint único, FastFN trata los archivos compatibles como rutas públicas.</p>
+<p>Ejemplos:</p>
+<ul>
+<li><code>users/index.js</code> -&gt; <code>GET /users</code></li>
+<li><code>users/[id].js</code> -&gt; <code>GET /users/:id</code></li>
+<li><code>admin/post.users.[id].py</code> -&gt; <code>POST /admin/users/:id</code></li>
+<li><code>hello.js</code> -&gt; <code>GET /hello</code></li>
+<li>Se permite exactamente un prefijo de método por archivo. <code>get.post.items.js</code> es ambiguo y FastFN lo ignora con warning.</li>
+</ul>
+<p>Los helpers privados en este modo deben usar prefijo <code>_</code>:</p>
+<ul>
+<li><code>_shared.js</code></li>
+<li><code>_helpers.py</code></li>
+<li><code>_csv.php</code></li>
+</ul>
+<p>Esos archivos quedan privados y no aparecen en OpenAPI ni en el catálogo.</p>
+<h3 id="2-single-entry-root">2. Single-entry root<a class="headerlink" href="#2-single-entry-root" title="Permanent link">&para;</a></h3>
+<p>Si una carpeta declara un único entrypoint de función, esa carpeta se comporta como una función single-entry, similar a un directorio Lambda.</p>
+<p>Una carpeta entra en este modo cuando tiene:</p>
+<ol>
+<li><code>fn.config.json</code> con <code>entrypoint</code> explícito, o</li>
+<li>un archivo canónico como <code>handler.*</code>, <code>main.*</code> o <code>index.*</code> (ver tabla por runtime arriba)</li>
+</ol>
+<p>Ejemplos:</p>
+<ul>
+<li><code>payments/handler.js</code> -&gt; <code>GET/POST/DELETE /payments</code></li>
+<li><code>risk-score/main.py</code> -&gt; <code>GET /risk-score</code></li>
+</ul>
+<p>En este modo, los archivos hermanos son módulos internos por defecto:</p>
+<ul>
+<li><code>payments/core.js</code> se puede importar desde <code>handler.js</code>, pero <strong>no</strong> se publica como <code>/payments/core</code></li>
+<li><code>risk-score/model.py</code> se puede importar desde <code>main.py</code>, pero <strong>no</strong> se publica como <code>/risk-score/model</code></li>
+</ul>
+<h3 id="3-subarbol-mixto">3. Subárbol mixto<a class="headerlink" href="#3-subarbol-mixto" title="Permanent link">&para;</a></h3>
+<p>Dentro de una función single-entry, las subcarpetas todavía pueden exponer subrutas file-based explícitas.</p>
+<p>Ejemplos:</p>
+<ul>
+<li><code>shop/handler.js</code> -&gt; <code>/shop</code></li>
+<li><code>shop/admin/index.js</code> -&gt; <code>/shop/admin</code></li>
+<li><code>shop/admin/get.health.js</code> -&gt; <code>GET /shop/admin/health</code></li>
+</ul>
+<p>Dentro de un subárbol mixto solo se publican archivos de ruta explícitos:</p>
+<ul>
+<li><code>index.*</code>, <code>handler.*</code>, <code>main.*</code></li>
+<li>archivos con prefijo de método como <code>get.*</code>, <code>post.*</code>, <code>put.*</code>, <code>patch.*</code>, <code>delete.*</code></li>
+<li>archivos dinámicos como <code>[id].*</code>, <code>[...slug].*</code>, <code>[[...slug]].*</code></li>
+</ul>
+<p>Helpers planos como <code>core.js</code>, <code>shared.py</code>, <code>lib.php</code>, <code>common.rs</code> o <code>utils.go</code> quedan privados.</p>
+<h2 id="estructura-recomendada-relativa-a-fn_functions_root">Estructura recomendada (relativa a <code>FN_FUNCTIONS_ROOT</code>)<a class="headerlink" href="#estructura-recomendada-relativa-a-fn_functions_root" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>&lt;FN_FUNCTIONS_ROOT&gt;/
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>  hello/
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    handler.py        # GET /hello
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>  users/
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    get.js            # GET /users
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    [id]/
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>      get.py          # GET /users/:id
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>      delete.py       # DELETE /users/:id
+</code></pre></div>
+<div class="admonition info">
+<p class="admonition-title">Categorias de layout</p>
+<ul>
+<li><strong>Recomendado:</strong> Path-neutral (<code>hello/handler.py</code>, <code>users/get.js</code>). Usado en tutoriales y <code>fastfn init</code>.</li>
+<li><strong>Soportado (compatibilidad):</strong> Agrupado por runtime (<code>python/hello/handler.py</code>, <code>node/echo/handler.js</code>). Util para monorepos con muchos runtimes. Discovery usa <code>FN_NAMESPACE_DEPTH</code> (default <code>3</code>, max <code>5</code>).</li>
+<li><strong>No recomendado:</strong> Mezclar ambos layouts en el mismo root de funciones. Discovery funciona pero la precedencia de rutas se vuelve dificil de razonar.</li>
+</ul>
+</div>
+<p>FastFN también soporta árboles agrupados por runtime para monorepos y repos mixtos grandes. <code>fastfn init</code> ahora genera por defecto directorios path-neutral de función única, así que toma el layout agrupado por runtime como una opción de organización y no como el camino principal que enseña esta documentación.</p>
+<h3 id="namespaces-anidados-estilo-nextjs">Namespaces anidados (estilo Next.js)<a class="headerlink" href="#namespaces-anidados-estilo-nextjs" title="Permanent link">&para;</a></h3>
+<p>Los directorios anidados bajo tu árbol de funciones se mapean directamente a rutas URL:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>hello/handler.py                  # GET /hello
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>api/
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>  v1/
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    users/handler.py              # GET /api/v1/users
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    orders/handler.py             # GET /api/v1/orders
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>alice/
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>  dashboard/handler.py            # GET /alice/dashboard
+</code></pre></div>
+<p>El discovery recursa en directorios que no contienen un single-entry root, tratándolos como segmentos de namespace. Un directorio que contiene un single-entry root (<code>handler.py</code>, <code>handler.js</code>, <code>main.py</code>, <code>entrypoint</code> explícito, etc.) se trata como una función. Las subcarpetas descendientes pueden seguir exponiendo rutas file-based explícitas, pero los módulos helper hermanos quedan privados.</p>
+<p><strong>Límite de profundidad</strong>: <code>FN_NAMESPACE_DEPTH</code> controla cuántos niveles profundiza el scanner para árboles agrupados por runtime en modo compatibilidad (default <code>3</code>, max <code>5</code>). Por ejemplo, con depth 3 el path <code>python/a/b/c/handler.py</code> se descubre como función <code>a/b/c</code> → ruta <code>/a/b/c</code>.</p>
+<div class="admonition note">
+<p class="admonition-title">Límites de Profundidad</p>
+<p>El ajuste <code>FN_NAMESPACE_DEPTH</code> aplica a directorios agrupados por runtime en modo compatibilidad (por ejemplo <code>python/</code>, <code>node/</code>).
+Las rutas zero-config basadas en archivos usan un límite de profundidad fijo separado de <strong>6 niveles</strong>.
+Los paths que exceden ese límite fijo zero-config se omiten con warning de discovery, en lugar de fallar silenciosamente.</p>
+</div>
+<p>No existe fallback a "el primer archivo del directorio". Si ninguna regla de entrypoint o ruta explícita coincide, esa carpeta no expone un endpoint público.</p>
+<p>Si una carpeta contiene múltiples entry files compatibles entre runtimes, FastFN resuelve de forma determinista en el orden <code>go</code>, <code>lua</code>, <code>node</code>, <code>php</code>, <code>python</code>, <code>rust</code> y emite un warning con los matches ignorados.</p>
+<p>El discovery de namespaces y file routes también avisa cuando un segmento cae fuera del set ASCII soportado o cuando la ruta pública normalizada colisiona con prefijos reservados como <code>/_fn</code> o <code>/console</code>.</p>
+<p>Archivos opcionales por funcion/version:</p>
+<ul>
+<li><code>fn.config.json</code></li>
+<li><code>fn.env.json</code></li>
+<li><code>requirements.txt</code> (Python)</li>
+<li><code>package.json</code>, <code>package-lock.json</code> (Node)</li>
+<li><code>composer.json</code>, <code>composer.lock</code> (PHP, opcional)</li>
+<li><code>Cargo.toml</code>, <code>Cargo.lock</code> (Rust, opcional)</li>
+</ul>
+<h2 id="ejemplos-minimos-de-handler-mismo-contrato">Ejemplos minimos de handler (mismo contrato)<a class="headerlink" href="#ejemplos-minimos-de-handler-mismo-contrato" title="Permanent link">&para;</a></h2>
+<p>Todos consumen <code>event</code>. El contrato portable recomendado es devolver <code>{status, headers, body}</code>.</p>
+<h3 id="python">Python<a class="headerlink" href="#python" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="k">def</span><span class="w"> </span><span class="nf">handler</span><span class="p">(</span><span class="n">event</span><span class="p">):</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="n">name</span> <span class="o">=</span> <span class="p">(</span><span class="n">event</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;query&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;world&quot;</span><span class="p">)</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    <span class="k">return</span> <span class="p">{</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>        <span class="s2">&quot;status&quot;</span><span class="p">:</span> <span class="mi">200</span><span class="p">,</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>        <span class="s2">&quot;headers&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;Content-Type&quot;</span><span class="p">:</span> <span class="s2">&quot;application/json&quot;</span><span class="p">},</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>        <span class="s2">&quot;body&quot;</span><span class="p">:</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s2">&quot;hello&quot;</span><span class="p">:</span> <span class="n">name</span><span class="p">}),</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>    <span class="p">}</span>
+</code></pre></div>
+<h3 id="node">Node<a class="headerlink" href="#node" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nx">exports</span><span class="p">.</span><span class="nx">handler</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">(</span><span class="nx">event</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span><span class="kd">const</span><span class="w"> </span><span class="nx">query</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">event</span><span class="p">.</span><span class="nx">query</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="p">{};</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span><span class="kd">const</span><span class="w"> </span><span class="nx">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">query</span><span class="p">.</span><span class="nx">name</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="s1">&#39;world&#39;</span><span class="p">;</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span><span class="k">return</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">    </span><span class="nx">status</span><span class="o">:</span><span class="w"> </span><span class="mf">200</span><span class="p">,</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">    </span><span class="nx">headers</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="s1">&#39;Content-Type&#39;</span><span class="o">:</span><span class="w"> </span><span class="s1">&#39;application/json&#39;</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">    </span><span class="nx">body</span><span class="o">:</span><span class="w"> </span><span class="nb">JSON</span><span class="p">.</span><span class="nx">stringify</span><span class="p">({</span><span class="w"> </span><span class="nx">hello</span><span class="o">:</span><span class="w"> </span><span class="nx">name</span><span class="w"> </span><span class="p">}),</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="w">  </span><span class="p">};</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="p">};</span>
+</code></pre></div>
+<h3 id="php">PHP<a class="headerlink" href="#php" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="cp">&lt;?php</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="k">function</span> <span class="nf">handler</span><span class="p">(</span><span class="nv">$event</span><span class="p">)</span> <span class="p">{</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="nv">$query</span> <span class="o">=</span> <span class="nv">$event</span><span class="p">[</span><span class="s1">&#39;query&#39;</span><span class="p">]</span> <span class="o">??</span> <span class="p">[];</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="nv">$name</span> <span class="o">=</span> <span class="nv">$query</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span> <span class="o">??</span> <span class="s1">&#39;world&#39;</span><span class="p">;</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    <span class="k">return</span> <span class="p">[</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>        <span class="s1">&#39;status&#39;</span> <span class="o">=&gt;</span> <span class="mi">200</span><span class="p">,</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>        <span class="s1">&#39;headers&#39;</span> <span class="o">=&gt;</span> <span class="p">[</span><span class="s1">&#39;Content-Type&#39;</span> <span class="o">=&gt;</span> <span class="s1">&#39;application/json&#39;</span><span class="p">],</span>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>        <span class="s1">&#39;body&#39;</span> <span class="o">=&gt;</span> <span class="nb">json_encode</span><span class="p">([</span><span class="s1">&#39;hello&#39;</span> <span class="o">=&gt;</span> <span class="nv">$name</span><span class="p">]),</span>
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>    <span class="p">];</span>
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="p">}</span>
+</code></pre></div>
+<h3 id="rust">Rust<a class="headerlink" href="#rust" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">use</span><span class="w"> </span><span class="n">serde_json</span><span class="p">::{</span><span class="n">json</span><span class="p">,</span><span class="w"> </span><span class="n">Value</span><span class="p">};</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">handler</span><span class="p">(</span><span class="n">event</span><span class="p">:</span><span class="w"> </span><span class="nc">Value</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nc">Value</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">event</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">        </span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="s">&quot;query&quot;</span><span class="p">)</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">        </span><span class="p">.</span><span class="n">and_then</span><span class="p">(</span><span class="o">|</span><span class="n">q</span><span class="o">|</span><span class="w"> </span><span class="n">q</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="s">&quot;name&quot;</span><span class="p">))</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="w">        </span><span class="p">.</span><span class="n">and_then</span><span class="p">(</span><span class="o">|</span><span class="n">n</span><span class="o">|</span><span class="w"> </span><span class="n">n</span><span class="p">.</span><span class="n">as_str</span><span class="p">())</span>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="w">        </span><span class="p">.</span><span class="n">unwrap_or</span><span class="p">(</span><span class="s">&quot;mundo&quot;</span><span class="p">);</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="w">    </span><span class="n">json</span><span class="o">!</span><span class="p">({</span>
+<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="w">        </span><span class="s">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">200</span><span class="p">,</span>
+<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a><span class="w">        </span><span class="s">&quot;headers&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="s">&quot;Content-Type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;application/json&quot;</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a><span class="w">        </span><span class="s">&quot;body&quot;</span><span class="p">:</span><span class="w"> </span><span class="nc">json</span><span class="o">!</span><span class="p">({</span><span class="w"> </span><span class="s">&quot;hello&quot;</span><span class="p">:</span><span class="w"> </span><span class="nc">name</span><span class="w"> </span><span class="p">}).</span><span class="n">to_string</span><span class="p">()</span>
+<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a><span class="w">    </span><span class="p">})</span>
+<a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a><span class="p">}</span>
+</code></pre></div>
+<h2 id="respuesta-sencilla-atajos-por-runtime">Respuesta sencilla (atajos por runtime)<a class="headerlink" href="#respuesta-sencilla-atajos-por-runtime" title="Permanent link">&para;</a></h2>
+<p>El contrato canonico portable sigue siendo:</p>
+<ul>
+<li><code>{ status, headers, body }</code></li>
+<li>o binario <code>{ status, headers, is_base64, body_base64 }</code></li>
+</ul>
+<p>Soporte de atajos por runtime:</p>
+<table>
+<thead>
+<tr>
+<th>Runtime</th>
+<th>Soporte</th>
+<th>Formas aceptadas</th>
+<th>Notas</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Node</td>
+<td>si</td>
+<td>dict/object, string, number, array</td>
+<td>Valores sin envelope se envuelven como JSON body con status <code>200</code></td>
+</tr>
+<tr>
+<td>Python</td>
+<td>si</td>
+<td><code>dict</code>, <code>tuple</code> <code>(body, status, headers)</code>, <code>(body, status)</code>, <code>(body,)</code>, <code>dict</code>/<code>list</code> plano</td>
+<td>Dict sin clave <code>status</code> se envuelve como JSON <code>200</code>. <code>statusCode</code> aceptado como alias de <code>status</code>. <code>bytes</code> en body se codifica como base64 automaticamente.</td>
+</tr>
+<tr>
+<td>PHP</td>
+<td>si</td>
+<td>array, object, primitivo</td>
+<td>Se envuelve como JSON body con status <code>200</code></td>
+</tr>
+<tr>
+<td>Lua</td>
+<td>si</td>
+<td>table, string, number</td>
+<td>Se envuelve como JSON body con status <code>200</code></td>
+</tr>
+<tr>
+<td>Go</td>
+<td>no</td>
+<td>—</td>
+<td>Requiere envelope explicito <code>{ "status", "headers", "body" }</code></td>
+</tr>
+<tr>
+<td>Rust</td>
+<td>no</td>
+<td>—</td>
+<td>Requiere envelope explicito <code>{ "status", "headers", "body" }</code></td>
+</tr>
+</tbody>
+</table>
+<p>Respuestas binarias: usa <code>is_base64: true</code> y proporciona el contenido en <code>body_base64</code>. Python detecta <code>bytes</code> en <code>body</code> y codifica como base64 automaticamente.</p>
+<p>Validacion de status: todos los runtimes validan codigos de estado en rango <code>100-599</code>.</p>
+<p>Para paridad entre runtimes, usa respuesta explicita en ejemplos compartidos.</p>
+<h2 id="fnconfigjson"><code>fn.config.json</code><a class="headerlink" href="#fnconfigjson" title="Permanent link">&para;</a></h2>
+<p>Campos clave:</p>
+<ul>
+<li><code>timeout_ms</code></li>
+<li><code>max_concurrency</code></li>
+<li><code>max_body_bytes</code></li>
+<li><code>group</code> (opcional)</li>
+<li><code>shared_deps</code> (opcional)</li>
+<li><code>edge</code> (opcional, passthrough tipo edge)</li>
+<li><code>include_debug_headers</code></li>
+<li><code>schedule</code> (cron simple por intervalo, opcional)</li>
+<li><code>invoke.methods</code></li>
+<li><code>invoke.handler</code> (opcional, nombre de función exportada dentro del archivo resuelto; default <code>handler</code>)</li>
+<li><code>invoke.routes</code> (mapeo opcional de endpoint publico)</li>
+<li><code>invoke.force-url</code> (opcional, si <code>true</code> puede sobrescribir una URL ya mapeada)</li>
+<li><code>invoke.adapter</code> (Beta, Node/Python): modo de compatibilidad (<code>native</code>, <code>aws-lambda</code>, <code>cloudflare-worker</code>)</li>
+<li><code>home</code> (opcional, overlay por carpeta/root):</li>
+<li><code>home.route</code> o <code>home.function</code>: path interno a ejecutar como home.</li>
+<li><code>home.redirect</code>: URL/path para redirección home (<code>302</code>).</li>
+<li><code>assets</code> (opcional, solo en root) para montar una carpeta estática en <code>/</code>:</li>
+<li><code>assets.directory</code>: carpeta relativa a servir, por ejemplo <code>public</code> o <code>dist</code>.</li>
+<li><code>assets.not_found_handling</code>: <code>404</code> o <code>single-page-application</code>.</li>
+<li><code>assets.run_worker_first</code>: si es <code>true</code>, las rutas de funciones ganan antes que los assets.</li>
+<li><code>invoke.summary</code></li>
+<li><code>invoke.query</code></li>
+<li><code>invoke.body</code></li>
+</ul>
+<p>Ejemplo:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="p">{</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span><span class="nt">&quot;group&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;demos&quot;</span><span class="p">,</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span><span class="nt">&quot;shared_deps&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;common_http&quot;</span><span class="p">],</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">  </span><span class="nt">&quot;timeout_ms&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1500</span><span class="p">,</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">  </span><span class="nt">&quot;max_concurrency&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">10</span><span class="p">,</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="w">  </span><span class="nt">&quot;max_body_bytes&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1048576</span><span class="p">,</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="w">  </span><span class="nt">&quot;include_debug_headers&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="w">  </span><span class="nt">&quot;invoke&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="w">    </span><span class="nt">&quot;handler&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;main&quot;</span><span class="p">,</span>
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="w">    </span><span class="nt">&quot;adapter&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;native&quot;</span><span class="p">,</span>
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="w">    </span><span class="nt">&quot;force-url&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="w">    </span><span class="nt">&quot;methods&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;GET&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;POST&quot;</span><span class="p">],</span>
+<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a><span class="w">    </span><span class="nt">&quot;routes&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;/api/mi-funcion&quot;</span><span class="p">],</span>
+<a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a><span class="w">    </span><span class="nt">&quot;summary&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Mi funcion&quot;</span><span class="p">,</span>
+<a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a><span class="w">    </span><span class="nt">&quot;query&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;World&quot;</span><span class="p">},</span>
+<a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a><span class="w">    </span><span class="nt">&quot;body&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&quot;</span>
+<a id="__codelineno-7-17" name="__codelineno-7-17" href="#__codelineno-7-17"></a><span class="w">  </span><span class="p">},</span>
+<a id="__codelineno-7-18" name="__codelineno-7-18" href="#__codelineno-7-18"></a><span class="w">  </span><span class="nt">&quot;home&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-7-19" name="__codelineno-7-19" href="#__codelineno-7-19"></a><span class="w">    </span><span class="nt">&quot;route&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;/api/mi-funcion&quot;</span>
+<a id="__codelineno-7-20" name="__codelineno-7-20" href="#__codelineno-7-20"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-7-21" name="__codelineno-7-21" href="#__codelineno-7-21"></a><span class="p">}</span>
+</code></pre></div>
+<p>Notas:</p>
+<ul>
+<li><code>invoke.handler</code> permite estilo Lambda con nombre de handler custom (<code>main</code>, <code>run</code>, etc.).</li>
+<li><code>invoke.handler</code> elige el símbolo a invocar dentro del archivo ya resuelto; no cambia la selección del archivo.</li>
+<li>En runtimes Node y Python, esa función debe existir/exportarse en el mismo archivo.</li>
+<li>Python además acepta <code>main(req)</code> cuando no existe <code>handler</code>.</li>
+<li><code>invoke.routes</code> es opcional.</li>
+<li>Si existe, cada ruta debe ser absoluta (por ejemplo <code>/api/mi-funcion</code>).</li>
+<li>En layout por archivos, <code>home.route</code> permite aliasar la raíz de una carpeta (por ejemplo <code>/portal</code>) hacia otra ruta detectada en esa carpeta (por ejemplo <code>/portal/dashboard</code>).</li>
+<li>En <code>fn.config.json</code> raíz, <code>home.route</code>/<code>home.redirect</code> permite override de <code>/</code> sin editar Nginx.</li>
+<li>En <code>fn.config.json</code> raíz también puedes definir <code>assets</code> para que FastFN sirva una carpeta pública directamente desde el gateway, estilo Cloudflare.</li>
+<li><code>assets.directory</code> debe ser un path relativo seguro dentro del root de funciones y la carpeta debe existir.</li>
+<li><code>assets</code> es root-only en v1; los <code>fn.config.json</code> anidados no crean mounts públicos adicionales.</li>
+<li><code>/_fn/*</code> y <code>/console/*</code> siguen reservados y nunca se sirven desde <code>assets</code>.</li>
+<li><code>assets</code> no expone carpetas hermanas de funciones: solo se sirve el directorio configurado y FastFN bloquea dotfiles e intentos de traversal.</li>
+<li>Prefijos reservados no permitidos (<code>/_fn</code>, <code>/console</code>, <code>/docs</code>).</li>
+<li>Si dos rutas colisionan con la misma prioridad de discovery, FastFN no conserva ninguna de las dos para esa URL, la registra como conflicto y responde <code>409</code> hasta que la desambigües.</li>
+<li>Por defecto, FastFN no sobrescribe silenciosamente un mapeo de URL existente.</li>
+<li>Usa <code>invoke.force-url: true</code> solo cuando realmente quieres que esta función se quede con una ruta (por ejemplo, durante una migración).</li>
+<li>Los configs por versión (por ejemplo <code>mi-fn/v2/fn.config.json</code>) no pueden \"tomar\" una URL existente por sí solos; usa <code>FN_FORCE_URL=1</code> si necesitas que una ruta versionada gane.</li>
+<li>Override global: setea <code>FN_FORCE_URL=1</code> (o <code>fastfn dev --force-url</code>) para tratar todas las rutas config/policy como forced.</li>
+</ul>
+<h3 id="assets-publicos-en-root">Assets públicos en root<a class="headerlink" href="#assets-publicos-en-root" title="Permanent link">&para;</a></h3>
+<p>Usa <code>assets</code> en el <code>fn.config.json</code> raíz cuando quieres que FastFN sirva una carpeta desde <code>/</code> sin pasar por un handler.</p>
+<p>Ejemplo:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="p">{</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span><span class="nt">&quot;assets&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">    </span><span class="nt">&quot;directory&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;public&quot;</span><span class="p">,</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">    </span><span class="nt">&quot;not_found_handling&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;single-page-application&quot;</span><span class="p">,</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">    </span><span class="nt">&quot;run_worker_first&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="p">}</span>
+</code></pre></div>
+<p>Comportamiento:</p>
+<ul>
+<li><code>GET</code> y <code>HEAD</code> se sirven directo desde el gateway.</li>
+<li><code>/</code> y las URLs de directorio resuelven a <code>index.html</code>.</li>
+<li>En modo <code>single-page-application</code>, los misses de navegación vuelven a <code>index.html</code>.</li>
+<li>Los paths tipo archivo inexistentes, como <code>/missing.js</code>, siguen devolviendo <code>404</code>.</li>
+<li>Una carpeta de assets vacía no crea una home sintética. Si no hay asset real, ni home explícito, ni rutas descubiertas, <code>/</code> devuelve <code>404</code>.</li>
+<li>Si <code>run_worker_first</code> es <code>true</code>, FastFN prueba primero las rutas de funciones y solo cae a assets cuando no hubo match.</li>
+<li>Esto vuelve first-class a carpetas tipo <code>public/</code> o <code>dist/</code> sin perder handlers normales.</li>
+<li>Mira los demos ejecutables en <code>examples/functions/assets-static-first</code>, <code>examples/functions/assets-spa-fallback</code> y <code>examples/functions/assets-worker-first</code>.</li>
+</ul>
+<h3 id="keep_warm"><code>keep_warm</code><a class="headerlink" href="#keep_warm" title="Permanent link">&para;</a></h3>
+<p>La configuración <code>keep_warm</code> indica al scheduler que mantenga la función cargada y lista.</p>
+<ul>
+<li><code>enabled</code>: activa el scheduler de keep-warm.</li>
+<li><code>min_warm</code>: cantidad mínima a mantener caliente.</li>
+<li><code>ping_every_seconds</code>: intervalo entre heartbeats.</li>
+<li><code>idle_ttl_seconds</code>: cuánto tiempo puede quedar ociosa antes de enfriarse.</li>
+</ul>
+<h3 id="worker_pool"><code>worker_pool</code><a class="headerlink" href="#worker_pool" title="Permanent link">&para;</a></h3>
+<p><code>worker_pool</code> es la forma más simple de controlar una función sin cambiar sus rutas.</p>
+<p>Detalle importante del modelo:</p>
+<ul>
+<li><code>worker_pool</code> es <strong>por función</strong>.</li>
+<li><code>runtime-daemons</code> es <strong>por runtime</strong> y vive en <code>fastfn.json</code> o en variables de entorno, no en <code>fn.config.json</code>.</li>
+<li>OpenResty/Lua aplica <code>worker_pool.max_workers</code>, <code>max_queue</code> y timeouts de cola <strong>antes</strong> de entrar al runtime.</li>
+<li>Después de admitir la request, el gateway elige un socket sano del runtime. Si el runtime tiene más de un socket, la selección es <code>round_robin</code>.</li>
+</ul>
+<p>Ejemplo:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="p">{</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">  </span><span class="nt">&quot;worker_pool&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">    </span><span class="nt">&quot;enabled&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">    </span><span class="nt">&quot;max_workers&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="w">    </span><span class="nt">&quot;max_queue&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">6</span><span class="p">,</span>
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="w">    </span><span class="nt">&quot;queue_timeout_ms&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">5000</span><span class="p">,</span>
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="w">    </span><span class="nt">&quot;idle_ttl_seconds&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">300</span><span class="p">,</span>
+<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="w">    </span><span class="nt">&quot;overflow_status&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">429</span>
+<a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a><span class="p">}</span>
+</code></pre></div>
+<p>Campos principales:</p>
+<ul>
+<li><code>enabled</code>: activa la ejecución con pool para esa función.</li>
+<li><code>max_workers</code>: máximo de ejecuciones activas admitidas para la función.</li>
+<li><code>max_queue</code>: requests extra permitidas en cola cuando todos los workers están ocupados.</li>
+<li><code>queue_timeout_ms</code>: cuánto puede esperar una request en cola antes de devolver <code>overflow_status</code>.</li>
+<li><code>idle_ttl_seconds</code>: cuánto tiempo permanecen vivos los workers ociosos antes de limpiarse.</li>
+<li><code>overflow_status</code>: estado de respuesta al desbordar cola o agotar espera (<code>429</code> o <code>503</code>).</li>
+<li><code>min_warm</code>: mantiene algunos workers ya creados cuando el runtime lo soporta.</li>
+<li><code>queue_poll_ms</code>: Frecuencia de verificacion de capacidad disponible cuando un request esta en cola (ajuste interno, raramente necesita cambiarse).</li>
+</ul>
+<p>Comportamiento actual por runtime:</p>
+<table>
+<thead>
+<tr>
+<th>Runtime</th>
+<th>Routing multi-daemon</th>
+<th>Fan-out interno del runtime</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Node</td>
+<td>soportado</td>
+<td>además usa workers hijos dentro de <code>node-daemon.js</code></td>
+</tr>
+<tr>
+<td>Python</td>
+<td>soportado</td>
+<td>la ejecución sigue dependiendo del comportamiento del daemon Python</td>
+</tr>
+<tr>
+<td>PHP</td>
+<td>soportado</td>
+<td>el despacho sucede mediante el lanzador PHP</td>
+</tr>
+<tr>
+<td>Rust</td>
+<td>soportado</td>
+<td>el despacho sucede mediante el binario compilado</td>
+</tr>
+<tr>
+<td>Lua</td>
+<td>no aplica</td>
+<td>corre dentro de OpenResty</td>
+</tr>
+</tbody>
+</table>
+<p>El snapshot de benchmark verificado el <strong>14 de marzo de 2026</strong> mostró resultados dependientes del runtime: algunos mejoraron mucho con más daemons, otros poco, y un path native de PHP llegó a empeorar antes de un fix posterior.</p>
+<p>Usa la página canónica de benchmarks para ver los números exactos y los artefactos crudos antes de activar más daemons en todos los runtimes:</p>
+<ul>
+<li><a href="../../explicacion/benchmarks-rendimiento/">Benchmarks de rendimiento</a></li>
+</ul>
+<h3 id="adaptadores-de-invocacion">Adaptadores de invocacion<a class="headerlink" href="#adaptadores-de-invocacion" title="Permanent link">&para;</a></h3>
+<p>El campo <code>invoke.adapter</code> en <code>fn.config.json</code> controla la convencion de llamada del handler. Default: <code>native</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Adaptador</th>
+<th>Firma del handler</th>
+<th>Disponible para</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>native</code></td>
+<td><code>handler(event)</code></td>
+<td>Todos los runtimes</td>
+</tr>
+<tr>
+<td><code>aws-lambda</code></td>
+<td><code>handler(event, context)</code></td>
+<td>Python, Node</td>
+</tr>
+<tr>
+<td><code>cloudflare-worker</code></td>
+<td><code>fetch(request, env, ctx)</code></td>
+<td>Python, Node</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Aliases:</strong> <code>lambda</code>, <code>apigw-v2</code>, <code>api-gateway-v2</code> → <code>aws-lambda</code>. <code>worker</code>, <code>workers</code> → <code>cloudflare-worker</code>.</p>
+<p><strong>Adaptador AWS Lambda:</strong></p>
+<ul>
+<li><code>event</code> se transforma al formato API Gateway v2.</li>
+<li><code>context</code> provee <code>getRemainingTimeInMillis()</code>, <code>done()</code>, <code>fail()</code>, <code>succeed()</code>.</li>
+<li>El valor de retorno se normaliza de vuelta al envelope FastFN.</li>
+</ul>
+<p><strong>Adaptador Cloudflare Workers:</strong></p>
+<ul>
+<li>Busqueda de handler: FastFN busca primero un export <code>fetch</code>, luego cae al nombre configurado.</li>
+<li><code>request</code> provee <code>.text()</code>, <code>.json()</code>, <code>.url</code>, <code>.method</code>, <code>.headers</code>.</li>
+<li><code>env</code> contiene las variables de entorno de la funcion desde <code>fn.env.json</code>.</li>
+<li><code>ctx</code> provee <code>waitUntil()</code> y <code>passThroughOnException()</code>.</li>
+<li><code>ctx.waitUntil()</code> corre como trabajo best-effort en background: no retrasa la respuesta HTTP y los awaitables rechazados quedan logueados como eventos de runtime.</li>
+</ul>
+<p>Nota Node + Lambda callback:</p>
+<ul>
+<li>En modo <code>aws-lambda</code>, Node soporta tanto handlers async como handlers con callback (<code>event, context, callback</code>).</li>
+</ul>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="p">{</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="w">  </span><span class="nt">&quot;invoke&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">    </span><span class="nt">&quot;adapter&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;aws-lambda&quot;</span><span class="p">,</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="w">    </span><span class="nt">&quot;handler&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;handler&quot;</span>
+<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="p">}</span>
+</code></pre></div>
+<h2 id="config-edge-passthrough-edge">Config edge passthrough (<code>edge</code>)<a class="headerlink" href="#config-edge-passthrough-edge" title="Permanent link">&para;</a></h2>
+<p>Si quieres un comportamiento estilo Cloudflare Workers (el handler devuelve un <code>proxy</code> y el gateway hace el request saliente), habilítalo por función en <code>fn.config.json</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="p">{</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">  </span><span class="nt">&quot;edge&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">    </span><span class="nt">&quot;base_url&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://api.example.com&quot;</span><span class="p">,</span>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="w">    </span><span class="nt">&quot;allow_hosts&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;api.example.com&quot;</span><span class="p">],</span>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="w">    </span><span class="nt">&quot;allow_private&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="w">    </span><span class="nt">&quot;max_response_bytes&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1048576</span>
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="p">}</span>
+</code></pre></div>
+<p>Después el handler puede devolver <code>{ "proxy": { ... } }</code>. Ver el contrato completo en: <strong>Contrato Runtime</strong>.</p>
+<h2 id="gestion-de-dependencias-auto-install-inferencia">Gestion de dependencias (auto-install + inferencia)<a class="headerlink" href="#gestion-de-dependencias-auto-install-inferencia" title="Permanent link">&para;</a></h2>
+<p>FastFN resuelve dependencias o build por carpeta de función y agrega inferencia autónoma para Python/Node.</p>
+<p>Modelo de resolucion:</p>
+<ul>
+<li>Python, Node y PHP usan manifiestos locales por función (<code>requirements.txt</code>, <code>package.json</code>, <code>composer.json</code>).</li>
+<li>Los handlers Rust se compilan con <code>cargo</code> dentro de un workspace <code>.rust-build/</code> por función.</li>
+<li>FastFN no busca automaticamente dependencias en la raiz del repo.</li>
+<li>Para reutilizacion entre muchas funciones, usa <code>shared_deps</code>.</li>
+<li>Python y Node dejan trazabilidad de resolucion en <code>&lt;function_dir&gt;/.fastfn-deps-state.json</code>.</li>
+<li>PHP y Rust hoy resuelven/installan/build-ean directo sin ese archivo de estado por funcion.</li>
+</ul>
+<h3 id="archivos-que-fastfn-escribe-por-runtime">Archivos que FastFN escribe por runtime<a class="headerlink" href="#archivos-que-fastfn-escribe-por-runtime" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Runtime</th>
+<th>Archivo de estado</th>
+<th>Lock/snapshot</th>
+<th>Directorio de deps</th>
+<th>Directorio de build</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Python</td>
+<td><code>.fastfn-deps-state.json</code></td>
+<td><code>requirements.lock.txt</code> (informativo, output de <code>pip freeze</code>)</td>
+<td><code>.deps/</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Node</td>
+<td><code>.fastfn-deps-state.json</code></td>
+<td><code>package-lock.json</code> (funcional, lo usa <code>npm ci</code>)</td>
+<td><code>node_modules/</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>PHP</td>
+<td>—</td>
+<td>—</td>
+<td><code>vendor/</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Rust</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td><code>.rust-build/</code></td>
+</tr>
+<tr>
+<td>Go</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td><code>.go-build/</code></td>
+</tr>
+<tr>
+<td>Lua</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+<td>— (in-process, sin deps externas)</td>
+</tr>
+</tbody>
+</table>
+<p><code>requirements.lock.txt</code> es un snapshot informativo generado por <code>pip freeze</code>. NO se usa para instalacion — solo para auditar lo que se instalo. <code>package-lock.json</code> es funcional — <code>npm ci</code> lo usa para instalaciones deterministas.</p>
+<p>Cuando corre la inferencia en Python o Node, FastFN tambien guarda:</p>
+<ul>
+<li><code>infer_backend</code></li>
+<li><code>inference_duration_ms</code></li>
+</ul>
+<h3 id="python-manifiesto-inferencia">Python (manifiesto + inferencia)<a class="headerlink" href="#python-manifiesto-inferencia" title="Permanent link">&para;</a></h3>
+<p>Entradas soportadas:</p>
+<ul>
+<li><code>requirements.txt</code></li>
+<li>hints inline <code>#@requirements ...</code></li>
+<li>inferencia de imports cuando falta o esta incompleto el manifiesto</li>
+</ul>
+<p>Hints inline: FastFN escanea las primeras 30 lineas del handler buscando comentarios <code>#@requirements &lt;paquete&gt; [&lt;paquete&gt;...]</code>. Se combinan con las entradas de <code>requirements.txt</code>.</p>
+<p>Comportamiento:</p>
+<ul>
+<li>Si falta <code>requirements.txt</code> y la inferencia resuelve imports, FastFN lo crea automaticamente.</li>
+<li>Si <code>requirements.txt</code> existe, agrega paquetes faltantes inferidos sin borrar tus pins.</li>
+<li>Tras una instalacion exitosa, escribe <code>requirements.lock.txt</code> (lock informativo en v1).</li>
+</ul>
+<p>Toggles:</p>
+<ul>
+<li><code>FN_AUTO_REQUIREMENTS=0</code> desactiva auto-install de Python.</li>
+<li><code>FN_AUTO_INFER_PY_DEPS=0</code> desactiva inferencia Python.</li>
+<li><code>FN_PY_INFER_BACKEND=native|pipreqs</code> elige el backend de inferencia Python.</li>
+<li><code>FN_AUTO_INFER_WRITE_MANIFEST=0</code> evita escribir manifiestos desde inferencia.</li>
+<li><code>FN_AUTO_INFER_STRICT=1</code> falla si hay imports no resolubles.</li>
+<li><code>FN_PREINSTALL_PY_DEPS_ON_START=1</code> preinstala deps al iniciar runtime.</li>
+</ul>
+<p>Invalidacion de cache: FastFN calcula una firma con el mtime del handler, mtime del manifiesto e inline requirements. Si la firma coincide con la instalacion previa y <code>.deps/</code> no esta vacio, reutiliza las dependencias. Timeout de instalacion: 180 segundos.</p>
+<p>La inferencia es opcional y normalmente mas lenta que usar un manifiesto explicito porque FastFN puede tener que analizar imports o invocar una herramienta externa.
+Para el loop mas rapido y para produccion, prefiere <code>requirements.txt</code> o <code>#@requirements</code>.</p>
+<p>La inferencia solo auto-agrega nombres directos de paquete, por ejemplo <code>requests -&gt; requests</code>.
+FastFN no mantiene una tabla interna de aliases de imports Python.
+Si el nombre del import no coincide con el paquete que instalas (<code>PIL</code>/<code>Pillow</code>, <code>yaml</code>/<code>PyYAML</code>, <code>jwt</code>/<code>PyJWT</code>, etc.), decláralo explícitamente en <code>requirements.txt</code> o con <code>#@requirements</code>.
+Cuando lo declaras explícitamente, ese manifiesto pasa a ser la fuente de verdad y los imports alias no resueltos quedan como información, no como bloqueo de instalación.</p>
+<p>Notas de backend:</p>
+<ul>
+<li><code>native</code> es el default y es intencionalmente conservador.</li>
+<li><code>pipreqs</code> es opt-in y requiere que <code>pipreqs</code> exista en el entorno donde corre el daemon Python.</li>
+</ul>
+<h3 id="node-manifiesto-inferencia">Node (manifiesto + inferencia)<a class="headerlink" href="#node-manifiesto-inferencia" title="Permanent link">&para;</a></h3>
+<p>Entradas soportadas:</p>
+<ul>
+<li><code>package.json</code></li>
+<li>inferencia de <code>import/require</code> para dependencias faltantes</li>
+</ul>
+<p>Comportamiento:</p>
+<ul>
+<li>Si falta <code>package.json</code> y hay imports resolubles, FastFN crea <code>package.json</code>.</li>
+<li>Si existe <code>package.json</code>, agrega dependencias faltantes inferidas.</li>
+<li>Con lockfile usa <code>npm ci</code>; sin lockfile usa <code>npm install</code>.</li>
+</ul>
+<p>Si <code>npm ci</code> falla con lockfile presente, FastFN reintenta con <code>npm install</code>. Timeout de instalacion: 180 segundos.</p>
+<p>Toggles:</p>
+<ul>
+<li><code>FN_AUTO_NODE_DEPS=0</code> desactiva auto-install de Node.</li>
+<li><code>FN_AUTO_INFER_NODE_DEPS=0</code> desactiva inferencia Node.</li>
+<li><code>FN_NODE_INFER_BACKEND=native|detective|require-analyzer</code> elige el backend de inferencia Node.</li>
+<li><code>FN_AUTO_INFER_WRITE_MANIFEST=0</code> evita escritura de manifiesto inferido.</li>
+<li><code>FN_AUTO_INFER_STRICT=1</code> activa fail-fast en imports no resolubles.</li>
+<li><code>FN_PREINSTALL_NODE_DEPS_ON_START=1</code> preinstala deps al iniciar.</li>
+<li><code>FN_PREINSTALL_NODE_DEPS_CONCURRENCY=4</code> controla concurrencia de preinstall.</li>
+</ul>
+<p>Invalidacion de cache: FastFN calcula una firma con el mtime de <code>package.json</code> y de <code>package-lock.json</code> (o <code>"no-lock"</code> si no existe). Si la firma coincide y <code>node_modules/</code> existe, reutiliza las dependencias.</p>
+<p>La inferencia de Node excluye paquetes que coincidan con nombres de <code>shared_deps</code> para evitar duplicar dependencias compartidas.</p>
+<p>La inferencia de Node tambien es opcional y normalmente mas lenta que declarar <code>package.json</code> desde el inicio.
+Usa manifiestos explicitos cuando ya conoces las dependencias o cuando quieres el arranque mas corto posible.</p>
+<p>Notas de backend:</p>
+<ul>
+<li><code>native</code> es el default.</li>
+<li><code>detective</code> es opt-in y funciona mejor con <code>require(...)</code> estatico.</li>
+<li><code>require-analyzer</code> es opt-in y sirve como ayuda de bootstrap mas amplia, pero no reemplaza un <code>package.json</code> explicito.</li>
+</ul>
+<h3 id="php-solo-manifiesto-en-esta-fase">PHP (solo manifiesto en esta fase)<a class="headerlink" href="#php-solo-manifiesto-en-esta-fase" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Usa <code>composer.json</code> (y opcionalmente <code>composer.lock</code>) por funcion.</li>
+<li>FastFN ejecuta <code>composer install</code> por funcion cuando corresponde.</li>
+<li>No hay inferencia por imports en PHP en esta fase.</li>
+<li><code>FN_AUTO_PHP_DEPS=0</code> desactiva auto-install de Composer.</li>
+<li>PHP hoy no emite <code>metadata.dependency_resolution</code>.</li>
+</ul>
+<h3 id="rust-build-en-esta-fase">Rust (build en esta fase)<a class="headerlink" href="#rust-build-en-esta-fase" title="Permanent link">&para;</a></h3>
+<p>Comportamiento:</p>
+<ul>
+<li>FastFN compila handlers Rust con <code>cargo build --release</code>.</li>
+<li>El runtime prepara un workspace <code>.rust-build/</code> por función y compila el handler allí.</li>
+<li>No hay inferencia por imports para Rust en esta fase.</li>
+<li>El modo native requiere <code>cargo</code> en <code>PATH</code>.</li>
+<li>Rust hoy no emite <code>metadata.dependency_resolution</code>.</li>
+</ul>
+<h3 id="go-build">Go (build)<a class="headerlink" href="#go-build" title="Permanent link">&para;</a></h3>
+<ul>
+<li>FastFN compila handlers Go con <code>go build</code> dentro de un workspace <code>.go-build/</code> por funcion.</li>
+<li>Si <code>go.mod</code> y <code>go.sum</code> existen en el directorio de la funcion, se usan para resolucion de modulos.</li>
+<li>Timeout de build controlado por <code>GO_BUILD_TIMEOUT_S</code> (default: <code>180</code> segundos).</li>
+<li>El modo native requiere <code>go</code> en <code>PATH</code>.</li>
+<li>Go es experimental y debe habilitarse via <code>FN_RUNTIMES</code>.</li>
+</ul>
+<h3 id="lua-in-process">Lua (in-process)<a class="headerlink" href="#lua-in-process" title="Permanent link">&para;</a></h3>
+<p>Los handlers Lua corren dentro del proceso OpenResty. No hay daemon externo, no hay instalacion de dependencias ni archivos de estado. Los modulos disponibles en el entorno OpenResty (<code>cjson</code>, <code>resty.*</code>) se pueden usar directamente.</p>
+<h3 id="errores-estrictos-y-transparencia">Errores estrictos y transparencia<a class="headerlink" href="#errores-estrictos-y-transparencia" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Si la inferencia no resuelve imports (con strict activo), la invocacion falla con error accionable.</li>
+<li>Los fallos de install o build muestran un tail corto de pip/npm/composer/cargo para debug rapido.</li>
+<li><code>GET /_fn/function</code> expone <code>metadata.dependency_resolution</code> cuando el runtime escribe ese estado (hoy sobre todo Python/Node).</li>
+</ul>
+<p>Flujo resumido:</p>
+<ol>
+<li>FastFN lee el manifiesto local de la funcion.</li>
+<li>Si el manifiesto ya alcanza, instala desde ahi.</li>
+<li>Si falta o esta incompleto, Python y Node pueden inferir imports y escribir el manifiesto.</li>
+<li>Luego el runtime guarda estado de resolucion y lock info cuando aplica.</li>
+<li>Finalmente ejecuta el handler o compila el binario Rust.</li>
+</ol>
+<h2 id="packs-de-dependencias-compartidas-shared_deps">Packs de dependencias compartidas (<code>shared_deps</code>)<a class="headerlink" href="#packs-de-dependencias-compartidas-shared_deps" title="Permanent link">&para;</a></h2>
+<p>Si quieres que varias funciones reutilicen la misma instalación de dependencias (por ejemplo un <code>node_modules</code> compartido para Node, o una carpeta de pip compartida para Python), puedes usar packs compartidos.</p>
+<p>Los nombres de pack los defines tú, y una función puede combinar sus dependencias locales con uno o más packs compartidos.</p>
+<p>En <code>fn.config.json</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="p">{</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="w">  </span><span class="nt">&quot;shared_deps&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;qrcode_pack&quot;</span><span class="p">]</span>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="p">}</span>
+</code></pre></div>
+<p>Los packs viven dentro del root de funciones (funciona con el volumen default de Docker):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>&lt;FN_FUNCTIONS_ROOT&gt;/.fastfn/packs/&lt;runtime&gt;/&lt;pack&gt;/
+</code></pre></div>
+<p>Si tu functions root es runtime-scoped (por ejemplo <code>&lt;root&gt;/python</code> o <code>&lt;root&gt;/node</code>), FastFN también revisa un nivel arriba buscando el mismo layout <code>.fastfn/packs/&lt;runtime&gt;/...</code> para mantener compatibilidad con esa variante.</p>
+<p>Ejemplos:</p>
+<ul>
+<li>Pack Python: <code>&lt;FN_FUNCTIONS_ROOT&gt;/.fastfn/packs/python/qrcode_pack/requirements.txt</code></li>
+<li>Pack Node: <code>&lt;FN_FUNCTIONS_ROOT&gt;/.fastfn/packs/node/qrcode_pack/package.json</code></li>
+<li>Pack Node TypeScript (esbuild): <code>&lt;FN_FUNCTIONS_ROOT&gt;/.fastfn/packs/node/ts_pack/package.json</code></li>
+</ul>
+<p>En Node, el pack también puede traer un <code>node_modules/</code> ya resuelto dentro del propio pack. Si existe <code>package.json</code>, FastFN puede instalar ahí las dependencias del pack.</p>
+<p>En runtime:</p>
+<ul>
+<li>la función conserva sus dependencias locales si las tiene</li>
+<li><code>shared_deps</code> suma uno o más roots reutilizables por encima de eso</li>
+<li>Python instala en <code>&lt;pack&gt;/.deps</code> y lo agrega a <code>sys.path</code></li>
+<li>Node instala en <code>&lt;pack&gt;/node_modules</code> y lo agrega a la resolucion de modulos para esa invocacion</li>
+<li>si falta un pack configurado, FastFN falla rápido con un error accionable</li>
+</ul>
+<p>Esto no es aislamiento nivel kernel (virtualenv/cargo completo), pero sirve para deduplicar instalaciones de forma simple.</p>
+<h2 id="schedule-cron-o-intervalo">Schedule (cron o intervalo)<a class="headerlink" href="#schedule-cron-o-intervalo" title="Permanent link">&para;</a></h2>
+<p>Puedes adjuntar un schedule a una funcion usando:</p>
+<ul>
+<li><code>every_seconds</code> (intervalo)</li>
+<li><code>cron</code> (expresion cron)</li>
+</ul>
+<h3 id="schedule-por-intervalo-every_seconds">Schedule por intervalo (<code>every_seconds</code>)<a class="headerlink" href="#schedule-por-intervalo-every_seconds" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="p">{</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="w">  </span><span class="nt">&quot;schedule&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="w">    </span><span class="nt">&quot;enabled&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="w">    </span><span class="nt">&quot;every_seconds&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">60</span><span class="p">,</span>
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="w">    </span><span class="nt">&quot;method&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;GET&quot;</span><span class="p">,</span>
+<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="w">    </span><span class="nt">&quot;query&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{},</span>
+<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="w">    </span><span class="nt">&quot;headers&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{},</span>
+<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a><span class="w">    </span><span class="nt">&quot;body&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&quot;</span><span class="p">,</span>
+<a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a><span class="w">    </span><span class="nt">&quot;context&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{}</span>
+<a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a><span class="p">}</span>
+</code></pre></div>
+<h3 id="schedule-cron-cron">Schedule cron (<code>cron</code>)<a class="headerlink" href="#schedule-cron-cron" title="Permanent link">&para;</a></h3>
+<p>Cron soporta:</p>
+<ul>
+<li>5 campos: <code>min hour dom mon dow</code></li>
+<li>6 campos: <code>sec min hour dom mon dow</code></li>
+<li>macros: <code>@hourly</code>, <code>@daily</code>, <code>@midnight</code>, <code>@weekly</code>, <code>@monthly</code>, <code>@yearly</code>, <code>@annually</code></li>
+<li>aliases de mes/dia: <code>JAN..DEC</code>, <code>SUN..SAT</code></li>
+<li>day-of-week acepta <code>0..6</code> y tambien <code>7</code> para domingo</li>
+</ul>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="p">{</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="w">  </span><span class="nt">&quot;schedule&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="w">    </span><span class="nt">&quot;enabled&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="w">    </span><span class="nt">&quot;cron&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;*/5 * * * *&quot;</span><span class="p">,</span>
+<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="w">    </span><span class="nt">&quot;timezone&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;UTC&quot;</span><span class="p">,</span>
+<a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="w">    </span><span class="nt">&quot;method&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;GET&quot;</span><span class="p">,</span>
+<a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a><span class="w">    </span><span class="nt">&quot;query&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{},</span>
+<a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a><span class="w">    </span><span class="nt">&quot;headers&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{},</span>
+<a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a><span class="w">    </span><span class="nt">&quot;body&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;&quot;</span><span class="p">,</span>
+<a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a><span class="w">    </span><span class="nt">&quot;context&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{}</span>
+<a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a><span class="w">  </span><span class="p">}</span>
+<a id="__codelineno-15-12" name="__codelineno-15-12" href="#__codelineno-15-12"></a><span class="p">}</span>
+</code></pre></div>
+<p>Timezones:</p>
+<ul>
+<li><code>UTC</code>, <code>Z</code></li>
+<li><code>local</code> (default si se omite)</li>
+<li>
+<p>offsets fijos como <code>+02:00</code>, <code>-05:00</code>, <code>+0200</code> o <code>-0500</code></p>
+</li>
+<li>
+<p>El scheduler corre dentro de OpenResty (worker 0).</p>
+</li>
+<li>Invoca el runtime por unix socket.</li>
+<li>La policy aplica igual (metodos, body, concurrencia, timeout).</li>
+<li>Para correr cada <strong>X minutos</strong>, usa <code>every_seconds = X * 60</code> (ejemplo: 15 minutos =&gt; <code>900</code>).</li>
+<li>Cuando day-of-month y day-of-week estan restringidos a la vez, el match sigue semantica tipo Vixie (<code>OR</code>).</li>
+<li>Estado del scheduler: <code>GET /_fn/schedules</code> (<code>next</code>, <code>last</code>, <code>last_status</code>, <code>last_error</code>).</li>
+<li>Cuando hay retries pendientes, el snapshot tambien expone <code>retry_due</code> y <code>retry_attempt</code>.</li>
+<li>Los schedules se guardan en <code>fn.config.json</code> (la definicion persiste entre restarts).</li>
+<li>El estado del scheduler se persiste por defecto en <code>&lt;FN_FUNCTIONS_ROOT&gt;/.fastfn/scheduler-state.json</code> (para mantener <code>last/next/status/error</code> entre restarts).</li>
+<li>Fallos comunes (<code>last_status</code> / <code>last_error</code>):</li>
+<li><code>405</code>: el <code>method</code> del schedule no esta permitido por la policy de la funcion.</li>
+<li><code>413</code>: el <code>body</code> excedio <code>max_body_bytes</code>.</li>
+<li><code>429</code>: la funcion estaba ocupada (gate de concurrencia).</li>
+<li><code>503</code>: runtime caido/no saludable.</li>
+<li>Retry/backoff (opcional):</li>
+<li>Setea <code>schedule.retry=true</code> para defaults, o un objeto:</li>
+<li><code>max_attempts</code> (default <code>3</code>), <code>base_delay_seconds</code> (default <code>1</code>), <code>max_delay_seconds</code> (default <code>30</code>), <code>jitter</code> (default <code>0.2</code>).</li>
+<li>El runtime clamp-ea: <code>max_attempts</code> <code>1..10</code>, delays <code>0..3600</code>, <code>jitter</code> <code>0..0.5</code>.</li>
+<li>Retries aplican a status <code>0</code>, <code>429</code>, <code>503</code> y <code>&gt;=500</code>. El scheduler actualiza <code>last_error</code> con <code>retrying ...</code>.</li>
+<li>Consola: <code>GET /console/scheduler</code> muestra schedules + keep_warm (requiere <code>FN_UI_ENABLED=1</code>).</li>
+<li>Toggles globales:</li>
+<li><code>FN_SCHEDULER_ENABLED=0</code> deshabilita el scheduler.</li>
+<li><code>FN_SCHEDULER_INTERVAL</code> controla el tick (default <code>1</code> segundo, minimo efectivo <code>1</code>).</li>
+<li><code>FN_SCHEDULER_PERSIST_ENABLED=0</code> deshabilita persistencia de estado.</li>
+<li><code>FN_SCHEDULER_PERSIST_INTERVAL</code> controla cada cuánto se escribe el estado (segundos, clamp <code>5..3600</code>).</li>
+<li><code>FN_SCHEDULER_STATE_PATH</code> permite override del path del archivo.</li>
+</ul>
+<h2 id="fnenvjson-y-secretos"><code>fn.env.json</code> y secretos<a class="headerlink" href="#fnenvjson-y-secretos" title="Permanent link">&para;</a></h2>
+<ul>
+<li><code>fn.env.json</code>: valores inyectados en <code>event.env</code></li>
+<li>los secretos se marcan en el mismo archivo con <code>is_secret</code></li>
+</ul>
+<p>Ejemplo:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="p">{</span>
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="w">  </span><span class="nt">&quot;API_KEY&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;value&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;secret-value&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;is_secret&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">},</span>
+<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="w">  </span><span class="nt">&quot;PUBLIC_FLAG&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;value&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;on&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;is_secret&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">}</span>
+<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="p">}</span>
+</code></pre></div>
+<h2 id="diagrama-de-flujo-de-ejecucion">Diagrama de Flujo de Ejecución<a class="headerlink" href="#diagrama-de-flujo-de-ejecucion" title="Permanent link">&para;</a></h2>
+<pre class="mermaid"><code>flowchart LR
+  A["Request HTTP entrante"] --&gt; B["Resolución de ruta"]
+  B --&gt; C["Evaluación de política fn.config"]
+  C --&gt; D["Adaptador de runtime"]
+  D --&gt; E["Normalización de respuesta del handler"]
+  E --&gt; F["Salida consistente con OpenAPI"]</code></pre>
+<h2 id="contrato">Contrato<a class="headerlink" href="#contrato" title="Permanent link">&para;</a></h2>
+<p>Define la forma esperada de request/response, campos de configuración y garantías de comportamiento.</p>
+<h2 id="ejemplo-end-to-end">Ejemplo End-to-End<a class="headerlink" href="#ejemplo-end-to-end" title="Permanent link">&para;</a></h2>
+<p>Usa los ejemplos de esta página como plantillas canónicas para implementación y testing.</p>
+<h2 id="casos-limite">Casos Límite<a class="headerlink" href="#casos-limite" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Fallbacks ante configuración faltante</li>
+<li>Conflictos de rutas y precedencia</li>
+<li>Matices por runtime</li>
+</ul>
+<h2 id="ver-tambien">Ver también<a class="headerlink" href="#ver-tambien" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../api-http/">Referencia API HTTP</a></li>
+<li><a href="../../como-hacer/ejecutar-y-probar/">Checklist Ejecutar y Probar</a></li>
+<li><a href="../../explicacion/arquitectura/">Arquitectura</a></li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
