@@ -1,9 +1,11 @@
 package process
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"github.com/misaelzapata/fastfn/cli/embed/runtime"
+	"github.com/misaelzapata/fastfn/cli/internal/workloads"
 	"net"
 	"os"
 	"os/exec"
@@ -16,10 +18,12 @@ import (
 )
 
 type RunConfig struct {
-	FnDir     string
-	HotReload bool
-	VerifyTLS bool
-	Watch     bool
+	ProjectDir string
+	FnDir      string
+	HotReload  bool
+	VerifyTLS  bool
+	Watch      bool
+	Workloads  workloads.Config
 }
 
 func ensurePortAvailable(hostPort string) error {
@@ -73,26 +77,35 @@ type nativeServiceManager interface {
 	Done() <-chan struct{}
 }
 
+type nativeImageWorkloadManager interface {
+	Start(context.Context) error
+	Stop(context.Context) error
+	StatePath() string
+}
+
 var (
-	socketStatFn             = os.Stat
-	socketDialTimeoutFn      = net.DialTimeout
-	socketRemoveFn           = os.Remove
-	checkDependenciesFn      = CheckDependencies
-	runtimeExtractFn         = runtime.Extract
-	generateNativeConfigFn   = GenerateNativeConfig
-	mkdirAllFn               = os.MkdirAll
-	chmodFn                  = os.Chmod
-	removeAllFn              = os.RemoveAll
-	lookPathFn               = exec.LookPath
-	startHotReloadWatcherFn  = StartHotReloadWatcher
-	ensurePortAvailableFn    = ensurePortAvailable
-	ensureSocketPathAvailFn  = ensureSocketPathAvailable
-	writeNativeSessionFn     = WriteNativeSession
-	clearNativeSessionForPID = ClearNativeSessionForPID
-	notifySignalFn           = signal.Notify
-	runtimeSocketURIsFn      = runtimeSocketURIsByRuntime
-	newNativeManagerFn       = func() nativeServiceManager { return NewManager() }
-	awaitNativeStopFn        = func(pm nativeServiceManager) error {
+	socketStatFn              = os.Stat
+	socketDialTimeoutFn       = net.DialTimeout
+	socketRemoveFn            = os.Remove
+	checkDependenciesFn       = CheckDependencies
+	runtimeExtractFn          = runtime.Extract
+	generateNativeConfigFn    = GenerateNativeConfig
+	mkdirAllFn                = os.MkdirAll
+	chmodFn                   = os.Chmod
+	removeAllFn               = os.RemoveAll
+	lookPathFn                = exec.LookPath
+	startHotReloadWatcherFn   = StartHotReloadWatcher
+	ensurePortAvailableFn     = ensurePortAvailable
+	ensureSocketPathAvailFn   = ensureSocketPathAvailable
+	writeNativeSessionFn      = WriteNativeSession
+	clearNativeSessionForPID  = ClearNativeSessionForPID
+	notifySignalFn            = signal.Notify
+	runtimeSocketURIsFn       = runtimeSocketURIsByRuntime
+	newNativeManagerFn        = func() nativeServiceManager { return NewManager() }
+	newImageWorkloadManagerFn = func(cfg workloads.ManagerConfig) (nativeImageWorkloadManager, error) {
+		return workloads.NewDockerNativeManager(cfg)
+	}
+	awaitNativeStopFn = func(pm nativeServiceManager) error {
 		sigChan := make(chan os.Signal, 1)
 		notifySignalFn(sigChan, os.Interrupt, syscall.SIGTERM)
 		select {
@@ -347,6 +360,33 @@ func RunNative(cfg RunConfig) error {
 	}
 	if v := strings.TrimSpace(os.Getenv("FN_FORCE_URL")); v != "" {
 		baseEnv = append(baseEnv, "FN_FORCE_URL="+v)
+	}
+
+	if cfg.Workloads.HasWorkloads() {
+		projectDir := strings.TrimSpace(cfg.ProjectDir)
+		if projectDir == "" {
+			projectDir = cfg.FnDir
+		}
+		workloadMgr, err := newImageWorkloadManagerFn(workloads.ManagerConfig{
+			ProjectDir: projectDir,
+			StatePath:  filepath.Join(socketDir, "image-workloads-state.json"),
+			Apps:       cfg.Workloads.Apps,
+			Services:   cfg.Workloads.Services,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to prepare image workloads: %w", err)
+		}
+		if err := workloadMgr.Start(context.Background()); err != nil {
+			return fmt.Errorf("failed to start image workloads: %w", err)
+		}
+		defer func() {
+			if err := workloadMgr.Stop(context.Background()); err != nil {
+				fmt.Printf("Warning: failed to stop image workloads cleanly: %v\n", err)
+			}
+		}()
+		if path := strings.TrimSpace(workloadMgr.StatePath()); path != "" {
+			baseEnv = append(baseEnv, "FN_IMAGE_WORKLOADS_STATE_PATH="+path)
+		}
 	}
 
 	// 5. Initialize Process Manager

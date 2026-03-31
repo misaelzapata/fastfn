@@ -96,6 +96,11 @@ var devCmd = &cobra.Command{
 		applyConfiguredRuntimeBinaries(func(envVar, value string) {
 			fmt.Printf("Using runtime binary from config: %s=%s\n", envVar, value)
 		})
+		imageWorkloads, hasImageWorkloads, err := configuredImageWorkloads()
+		if err != nil {
+			devFatalf("Invalid apps/services config: %v", err)
+			return
+		}
 		if devForceURL {
 			_ = os.Setenv("FN_FORCE_URL", "1")
 			fmt.Println("force-url enabled (will allow config/policy routes to override existing URLs)")
@@ -125,10 +130,14 @@ var devCmd = &cobra.Command{
 				}
 			}
 			fmt.Println("Running in NATIVE mode (embedded runtime stack)...")
-			if err := runNative(absPath); err != nil {
+			if err := runNative(configuredProjectRoot(), absPath, imageWorkloads); err != nil {
 				devFatalf("Native dev failed: %v", err)
 				return
 			}
+			return
+		}
+		if hasImageWorkloads {
+			devFatal("apps/services are only supported in native mode for this branch; rerun with --native")
 			return
 		}
 

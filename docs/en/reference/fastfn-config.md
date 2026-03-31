@@ -10,6 +10,7 @@
 - Complexity: Reference
 - Typical time: 10-20 minutes
 - Use this when: you want one place to define default directories, routing behavior, runtime daemon counts, or host binaries
+- Image workloads note: `apps` and `services` in this branch are available through native mode (`fastfn dev --native`, `fastfn run --native`)
 - Outcome: reproducible local and CI behavior without long command lines
 
 ## Supported keys
@@ -24,6 +25,8 @@
 | `runtime-daemons` | `object` or `string` | How many daemon instances to launch per external runtime. |
 | `runtime-binaries` | `object` or `string` | Which host executable FastFN should use for each runtime or tool. |
 | `hot-reload` | `boolean` | Enable/disable hot reload for `dev` and `run` commands. Default: `true`. |
+| `apps` | `object` | Public HTTP apps backed by Docker/OCI images. |
+| `services` | `object` | Private support workloads backed by Docker/OCI images. |
 
 Notes:
 
@@ -31,6 +34,9 @@ Notes:
 - Compatibility aliases are still accepted for older projects.
 - `domains` only affects `fastfn doctor domains`; it does not block inbound hosts by itself.
 - `runtime-daemons` applies to external runtimes (`node`, `python`, `php`, `rust`, `go`). `lua` runs in-process, so a daemon count for `lua` is ignored.
+- `apps` require at least one public `routes` entry and a single `port`.
+- `services` stay private and expose connection env vars to functions and image-backed apps.
+- Current branch scope keeps image workloads on native mode only; classic Docker dev remains functions-only.
 
 ## Example 1: Default functions directory
 
@@ -167,6 +173,52 @@ Validate:
 ```bash
 curl -sS http://127.0.0.1:8080/_fn/openapi.json | jq '{server: .servers[0].url, has_health: (.paths | has("/_fn/health"))}'
 ```
+
+## Example 6: Simple image-backed app and MySQL service
+
+`fastfn.json`
+
+```json
+{
+  "functions-dir": "functions",
+  "apps": {
+    "admin": {
+      "image": "ghcr.io/acme/admin:latest",
+      "port": 3000,
+      "routes": ["/admin/*"],
+      "env": {
+        "NODE_ENV": "production"
+      }
+    }
+  },
+  "services": {
+    "mysql": {
+      "image": "mysql:8.4",
+      "port": 3306,
+      "volume": "mysql-data",
+      "env": {
+        "MYSQL_DATABASE": "app",
+        "MYSQL_USER": "app",
+        "MYSQL_PASSWORD": "secret",
+        "MYSQL_ROOT_PASSWORD": "rootsecret"
+      }
+    }
+  }
+}
+```
+
+Run:
+
+```bash
+fastfn dev --native
+```
+
+What to expect:
+
+- Requests matching `/admin/*` proxy to the `admin` image workload.
+- Functions receive `SERVICE_MYSQL_HOST`, `SERVICE_MYSQL_PORT`, and `SERVICE_MYSQL_URL`.
+- Known service names also receive convenience aliases such as `MYSQL_HOST`, `MYSQL_PORT`, and `MYSQL_URL`.
+- `/_fn/health` includes `apps` and `services` snapshots alongside runtime health.
 
 ## Precedence
 

@@ -178,7 +178,21 @@ FastFN reads `fastfn.json` in the current directory by default.
 {
   "functions-dir": "functions",
   "public-base-url": "https://api.example.com",
-  "openapi-include-internal": false
+  "openapi-include-internal": false,
+  "apps": {
+    "admin": {
+      "image": "ghcr.io/acme/admin:latest",
+      "port": 3000,
+      "routes": ["/admin/*"]
+    }
+  },
+  "services": {
+    "mysql": {
+      "image": "mysql:8.4",
+      "port": 3306,
+      "volume": "mysql-data"
+    }
+  }
 }
 ```
 
@@ -188,6 +202,9 @@ Key behavior:
 - Env override for internal visibility: `FN_OPENAPI_INCLUDE_INTERNAL`.
 - `public-base-url` controls `servers[0].url` in generated OpenAPI.
 - `domains` helps CLI doctor checks; host enforcement at runtime lives in per-function `invoke.allow_hosts`.
+- `apps` registers simple public HTTP routes backed by image workloads.
+- `services` registers private image workloads and injects connection env vars into functions.
+- In this branch, `apps` and `services` are wired for `fastfn dev --native` and `fastfn run --native`.
 
 Reference:
 

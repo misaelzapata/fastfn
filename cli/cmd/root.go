@@ -3,11 +3,13 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/misaelzapata/fastfn/cli/internal/process"
+	"github.com/misaelzapata/fastfn/cli/internal/workloads"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -103,6 +105,17 @@ func configuredPublicBaseURL() string {
 	return configuredString("public-base-url", "public_base_url", "publicBaseUrl")
 }
 
+func configuredProjectRoot() string {
+	if cfgFile != "" {
+		return filepath.Dir(cfgFile)
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return "."
+	}
+	return wd
+}
+
 func configuredRuntimeDaemons() (string, bool) {
 	if raw := configuredString("runtime-daemons", "runtime_daemons", "runtimeDaemons"); raw != "" {
 		return raw, true
@@ -153,6 +166,22 @@ func configuredRuntimeBinaries() (map[string]string, bool) {
 	}
 
 	return nil, false
+}
+
+func configuredImageWorkloads() (workloads.Config, bool, error) {
+	var cfg workloads.Config
+
+	apps, appsSet, err := workloads.NormalizeAppSpecs(viper.Get("apps"))
+	if err != nil {
+		return cfg, false, err
+	}
+	services, servicesSet, err := workloads.NormalizeServiceSpecs(viper.Get("services"))
+	if err != nil {
+		return cfg, false, err
+	}
+	cfg.Apps = apps
+	cfg.Services = services
+	return cfg, appsSet || servicesSet, nil
 }
 
 func normalizeRuntimeDaemonConfigValue(raw any) (string, bool) {

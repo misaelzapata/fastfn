@@ -1439,6 +1439,32 @@ func TestDevCmdRun_NativePublicBaseURLEnvAlreadySet(t *testing.T) {
 	}
 }
 
+func TestDevCmdRun_DockerModeRejectsImageWorkloads(t *testing.T) {
+	stubDevGlobals(t)
+	viper.Set("apps", map[string]any{
+		"admin": map[string]any{
+			"image":  "ghcr.io/acme/admin:latest",
+			"port":   3000,
+			"routes": []string{"/admin/*"},
+		},
+	})
+
+	tmpDir := t.TempDir()
+	var fatalMsg string
+	devFatal = func(v ...interface{}) {
+		fatalMsg = fmt.Sprint(v...)
+	}
+	devFatalf = func(format string, v ...interface{}) {
+		t.Fatalf("unexpected fatalf: "+format, v...)
+	}
+
+	devCmd.Run(devCmd, []string{tmpDir})
+
+	if !strings.Contains(fatalMsg, "apps/services are only supported in native mode") {
+		t.Fatalf("expected Docker-mode image workload guard, got %q", fatalMsg)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // devCmd.Run – Docker compose error paths
 // ---------------------------------------------------------------------------

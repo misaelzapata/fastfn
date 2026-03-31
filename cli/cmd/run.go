@@ -56,6 +56,11 @@ At the moment, production mode is supported through --native.`,
 		applyConfiguredRuntimeBinaries(func(envVar, value string) {
 			fmt.Printf("Using runtime binary from config: %s=%s\n", envVar, value)
 		})
+		imageWorkloads, _, err := configuredImageWorkloads()
+		if err != nil {
+			runFatalf("Invalid apps/services config: %v", err)
+			return
+		}
 		if runForceURL {
 			_ = os.Setenv("FN_FORCE_URL", "1")
 			fmt.Println("force-url enabled (will allow config/policy routes to override existing URLs)")
@@ -100,10 +105,12 @@ At the moment, production mode is supported through --native.`,
 			fmt.Printf("Functions root: %s\n", absPath)
 
 			err := runProcessRunner(process.RunConfig{
-				FnDir:     absPath,
-				HotReload: hotReload,
-				VerifyTLS: true,
-				Watch:     hotReload,
+				ProjectDir: configuredProjectRoot(),
+				FnDir:      absPath,
+				HotReload:  hotReload,
+				VerifyTLS:  true,
+				Watch:      hotReload,
+				Workloads:  imageWorkloads,
 			})
 			if err != nil {
 				runFatalf("Native run failed: %v", err)

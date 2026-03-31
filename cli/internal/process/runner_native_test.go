@@ -1,6 +1,7 @@
 package process
 
 import (
+	"context"
 	"errors"
 	"net"
 	"os"
@@ -10,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/misaelzapata/fastfn/cli/internal/workloads"
 )
 
 type fakeNativeManager struct {
@@ -20,6 +23,28 @@ type fakeNativeManager struct {
 	done          chan struct{}
 	stopped       bool
 	addedCount    int
+}
+
+type fakeImageWorkloadManager struct {
+	statePath string
+	started   bool
+	stopped   bool
+	startErr  error
+	stopErr   error
+}
+
+func (m *fakeImageWorkloadManager) Start(context.Context) error {
+	m.started = true
+	return m.startErr
+}
+
+func (m *fakeImageWorkloadManager) Stop(context.Context) error {
+	m.stopped = true
+	return m.stopErr
+}
+
+func (m *fakeImageWorkloadManager) StatePath() string {
+	return m.statePath
 }
 
 func newFakeNativeManager() *fakeNativeManager {
@@ -101,6 +126,7 @@ func patchRunnerDeps(t *testing.T) {
 	origRuntimeSocketURIs := runtimeSocketURIsFn
 	origNativeSocketFallbackRoot := nativeSocketFallbackRootFn
 	origNewManager := newNativeManagerFn
+	origNewImageManager := newImageWorkloadManagerFn
 	origAwait := awaitNativeStopFn
 	origBinaryOutput := binaryOutputFn
 
@@ -124,6 +150,7 @@ func patchRunnerDeps(t *testing.T) {
 		runtimeSocketURIsFn = origRuntimeSocketURIs
 		nativeSocketFallbackRootFn = origNativeSocketFallbackRoot
 		newNativeManagerFn = origNewManager
+		newImageWorkloadManagerFn = origNewImageManager
 		awaitNativeStopFn = origAwait
 		binaryOutputFn = origBinaryOutput
 	})
@@ -141,6 +168,74 @@ func patchRunnerDeps(t *testing.T) {
 		default:
 			return "ok", nil
 		}
+	}
+}
+
+func TestRunNative_StartsImageWorkloadsAndPassesStatePath(t *testing.T) {
+	patchRunnerDeps(t)
+	runtimeDir, nginxConf := prepareRuntimeDir(t)
+	functionsDir := t.TempDir()
+	hostPort := reserveFreePort(t)
+	t.Setenv("FN_HOST_PORT", hostPort)
+	t.Setenv("FN_RUNTIMES", "")
+
+	checkDependenciesFn = func() error { return nil }
+	runtimeExtractFn = func() (string, error) { return runtimeDir, nil }
+	generateNativeConfigFn = func(_ string, _ string) (string, error) { return nginxConf, nil }
+	lookPathFn = func(string) (string, error) { return "", errors.New("missing") }
+
+	mgr := newFakeNativeManager()
+	newNativeManagerFn = func() nativeServiceManager { return mgr }
+	awaitNativeStopFn = func(pm nativeServiceManager) error { return nil }
+
+	fakeImages := &fakeImageWorkloadManager{
+		statePath: filepath.Join(t.TempDir(), "image-workloads-state.json"),
+	}
+	newImageWorkloadManagerFn = func(cfg workloads.ManagerConfig) (nativeImageWorkloadManager, error) {
+		if cfg.ProjectDir != functionsDir {
+			t.Fatalf("project dir = %q, want %q", cfg.ProjectDir, functionsDir)
+		}
+		if len(cfg.Apps) != 1 || cfg.Apps[0].Name != "admin" {
+			t.Fatalf("unexpected apps config: %+v", cfg.Apps)
+		}
+		if len(cfg.Services) != 1 || cfg.Services[0].Name != "mysql" {
+			t.Fatalf("unexpected services config: %+v", cfg.Services)
+		}
+		return fakeImages, nil
+	}
+
+	err := RunNative(RunConfig{
+		ProjectDir: functionsDir,
+		FnDir:      functionsDir,
+		HotReload:  false,
+		VerifyTLS:  true,
+		Watch:      false,
+		Workloads: workloads.Config{
+			Apps: []workloads.AppSpec{{
+				Name:   "admin",
+				Image:  "ghcr.io/acme/admin:latest",
+				Port:   3000,
+				Routes: []string{"/admin/*"},
+			}},
+			Services: []workloads.ServiceSpec{{
+				Name:  "mysql",
+				Image: "mysql:8.4",
+				Port:  3306,
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("RunNative() error = %v", err)
+	}
+	if !fakeImages.started {
+		t.Fatal("expected image workloads to start")
+	}
+	if !fakeImages.stopped {
+		t.Fatal("expected image workloads to stop")
+	}
+	env := strings.Join(mgr.envByName["openresty"], "\n")
+	if !strings.Contains(env, "FN_IMAGE_WORKLOADS_STATE_PATH="+fakeImages.statePath) {
+		t.Fatalf("expected image workload state path in openresty env, got %q", env)
 	}
 }
 

@@ -240,6 +240,39 @@ func TestConfiguredRuntimeDaemons_FromJSONConfigFile(t *testing.T) {
 	}
 }
 
+func TestConfiguredImageWorkloads_FromConfig(t *testing.T) {
+	t.Cleanup(viper.Reset)
+	viper.Reset()
+	viper.Set("apps", map[string]any{
+		"admin": map[string]any{
+			"image":  "ghcr.io/acme/admin:latest",
+			"port":   3000,
+			"routes": []string{"/admin/*"},
+		},
+	})
+	viper.Set("services", map[string]any{
+		"mysql": map[string]any{
+			"image":  "mysql:8.4",
+			"port":   3306,
+			"volume": "mysql-data",
+		},
+	})
+
+	cfg, ok, err := configuredImageWorkloads()
+	if err != nil {
+		t.Fatalf("configuredImageWorkloads() error = %v", err)
+	}
+	if !ok {
+		t.Fatalf("expected image workloads to be detected")
+	}
+	if len(cfg.Apps) != 1 || cfg.Apps[0].Name != "admin" {
+		t.Fatalf("unexpected apps config: %+v", cfg.Apps)
+	}
+	if len(cfg.Services) != 1 || cfg.Services[0].Name != "mysql" {
+		t.Fatalf("unexpected services config: %+v", cfg.Services)
+	}
+}
+
 func TestApplyConfiguredRuntimeDaemons_FromConfig(t *testing.T) {
 	t.Cleanup(viper.Reset)
 	viper.Reset()

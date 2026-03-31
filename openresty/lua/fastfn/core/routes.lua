@@ -1,6 +1,7 @@
 local cjson = require "cjson.safe"
 local invoke_rules = require "fastfn.core.invoke_rules"
 local home_rules = require "fastfn.core.home"
+local image_workloads = require "fastfn.core.image_workloads"
 local watchdog = require "fastfn.core.watchdog"
 
 local M = {}
@@ -3067,6 +3068,8 @@ function M.health_snapshot()
       states = {},
     },
     runtimes = {},
+    apps = {},
+    services = {},
   }
 
   for runtime, rt_cfg in pairs(cfg.runtimes or {}) do
@@ -3078,6 +3081,10 @@ function M.health_snapshot()
       health = M.runtime_status(runtime, rt_cfg),
     }
   end
+
+  local workload_snapshot = image_workloads.health_snapshot()
+  out.apps = workload_snapshot.apps or {}
+  out.services = workload_snapshot.services or {}
 
   for runtime, rt_entry in pairs((catalog and catalog.runtimes) or {}) do
     for fn_name, fn_entry in pairs((rt_entry and rt_entry.functions) or {}) do

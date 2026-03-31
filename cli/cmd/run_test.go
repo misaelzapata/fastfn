@@ -98,6 +98,41 @@ func TestRunCmd_NativeMode_HappyPath(t *testing.T) {
 	}
 }
 
+func TestRunCmd_NativeModePassesImageWorkloads(t *testing.T) {
+	saveRunGlobals(t)
+	viper.Reset()
+
+	tmpDir := t.TempDir()
+	runNativeMode = true
+	runForceURL = false
+	viper.Set("services", map[string]any{
+		"mysql": map[string]any{
+			"image":  "mysql:8.4",
+			"port":   3306,
+			"volume": "mysql-data",
+		},
+	})
+
+	var captured process.RunConfig
+	runProcessRunner = func(cfg process.RunConfig) error {
+		captured = cfg
+		return nil
+	}
+	runFatalf = func(format string, args ...interface{}) {
+		t.Fatalf("unexpected fatalf: "+format, args...)
+	}
+	runFatal = func(args ...interface{}) {
+		t.Fatalf("unexpected fatal: %v", args)
+	}
+	runAbsFn = filepath.Abs
+
+	runCmd.Run(runCmd, []string{tmpDir})
+
+	if len(captured.Workloads.Services) != 1 || captured.Workloads.Services[0].Name != "mysql" {
+		t.Fatalf("expected services workload to be forwarded, got %+v", captured.Workloads.Services)
+	}
+}
+
 func TestRunCmd_NativeMode_ProcessError(t *testing.T) {
 	saveRunGlobals(t)
 	viper.Reset()

@@ -6,6 +6,7 @@ local lua_runtime = require "fastfn.core.lua_runtime"
 local limits = require "fastfn.core.limits"
 local utils = require "fastfn.core.gateway_utils"
 local http_client = require "fastfn.core.http_client"
+local image_workloads = require "fastfn.core.image_workloads"
 local invoke_rules = require "fastfn.core.invoke_rules"
 local assets_http = require "fastfn.http.assets"
 
@@ -457,6 +458,81 @@ local function execute_proxy(proxy, edge_cfg, default_timeout_ms)
   return resp
 end
 
+local function sanitize_app_request_headers(raw)
+  if type(raw) ~= "table" then
+    return {}
+  end
+  local out = {}
+  local drop = {
+    host = true,
+    connection = true,
+    ["content-length"] = true,
+    ["transfer-encoding"] = true,
+    expect = true,
+  }
+  for k, v in pairs(raw) do
+    local key = tostring(k)
+    if not drop[key:lower()] and not key:find("[\r\n]") then
+      local val = tostring(v)
+      if not val:find("[\r\n]") then
+        out[key] = val
+      end
+    end
+  end
+  return out
+end
+
+local function execute_app_proxy(app)
+  if type(app) ~= "table" then
+    return nil, "app config missing"
+  end
+  if type(app.health) == "table" and app.health.up ~= true then
+    return nil, tostring(app.health.reason or "app unavailable")
+  end
+
+  local host = tostring(app.host or "")
+  local port = tonumber(app.port)
+  if host == "" or not port or port < 1 then
+    return nil, "invalid app endpoint"
+  end
+
+  local body, body_err = read_body_limited(10 * 1024 * 1024)
+  if body_err == "too_large" then
+    return { status = 413, headers = { ["Content-Type"] = "application/json" }, body = json_error("payload too large") }
+  end
+  if body_err == "body_file_open_error" then
+    return { status = 500, headers = { ["Content-Type"] = "application/json" }, body = json_error("failed to read request body") }
+  end
+
+  local resp, err = http_client.request({
+    url = string.format("http://%s:%d%s", host, port, ngx.var.request_uri or "/"),
+    method = ngx.req.get_method(),
+    headers = sanitize_app_request_headers(ngx.req.get_headers()),
+    body = body,
+    timeout_ms = 30000,
+    max_body_bytes = 10 * 1024 * 1024,
+  })
+  if not resp then
+    return nil, err
+  end
+
+  local filtered = {}
+  local drop = {
+    ["connection"] = true,
+    ["keep-alive"] = true,
+    ["transfer-encoding"] = true,
+    ["content-length"] = true,
+    ["upgrade"] = true,
+  }
+  for k, v in pairs(resp.headers or {}) do
+    if not drop[tostring(k):lower()] then
+      filtered[k] = v
+    end
+  end
+  resp.headers = filtered
+  return resp
+end
+
 local function method_is_allowed(request_method, allowed_methods)
   if type(request_method) ~= "string" then
     return false
@@ -613,6 +689,21 @@ if type(routes_mod.discover_functions) == "function" then
   if ok_catalog and type(catalog) == "table" then
     request_catalog = catalog
   end
+end
+
+local matched_app = image_workloads.match_app(request_uri)
+if type(matched_app) == "table" then
+  local app_resp, app_err = execute_app_proxy(matched_app)
+  if not app_resp then
+    local status = 502
+    if tostring(app_err or ""):find("unavailable", 1, true) then
+      status = 503
+    end
+    write_response(status, { ["Content-Type"] = "application/json" }, json_error("app proxy failed: " .. tostring(app_err)))
+    return
+  end
+  write_response(app_resp.status or 502, app_resp.headers or {}, app_resp.body or "")
+  return
 end
 
 runtime, fn_name, requested_version, path_params, resolve_err = resolve_request_target(request_uri, req_method, request_catalog)
@@ -807,6 +898,10 @@ local ok, run_err = xpcall(function()
       user = user_context,
     },
   }
+  local service_env = image_workloads.function_env()
+  if next(service_env) ~= nil then
+    event.env = service_env
+  end
 
   -- Inject only the secrets that this specific function references via its
   -- fn.env.json (keys with is_secret=true).  This prevents function A from
