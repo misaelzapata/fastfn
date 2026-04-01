@@ -63,6 +63,10 @@ Common ways to set the functions directory:
 - `fastfn.json` -> `"functions-dir": "functions"`
 - `FN_FUNCTIONS_ROOT=/absolute/path/to/functions`
 
+`fastfn.json` only points FastFN at the root. Once that root is known, nested folders can carry their own `fn.config.json` files. That means a folder such as `functions/payments/` can declare a local `service`, `app`, `services`, or `apps` block without editing the global `fastfn.json`.
+
+For Firecracker workloads, that folder-local ownership is about declaration and scope. Persistent storage is still managed as FastFN-owned volume images under `.fastfn/firecracker-volumes/`; host-folder bind mounts are not supported in this branch yet.
+
 Runtime order is also configurable:
 
 - `FN_RUNTIMES=python,node,php,rust`

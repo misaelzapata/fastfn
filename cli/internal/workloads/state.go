@@ -24,7 +24,9 @@ type AppState struct {
 	ImageDigest  string            `json:"image_digest,omitempty"`
 	Host         string            `json:"host"`
 	Port         int               `json:"port"`
+	InternalHost string            `json:"internal_host,omitempty"`
 	InternalPort int               `json:"internal_port"`
+	InternalURL  string            `json:"internal_url,omitempty"`
 	Routes       []string          `json:"routes,omitempty"`
 	ContainerID  string            `json:"container_id,omitempty"`
 	Health       WorkloadHealth    `json:"health"`
@@ -45,6 +47,7 @@ type ServiceState struct {
 	ContainerID  string            `json:"container_id,omitempty"`
 	Health       WorkloadHealth    `json:"health"`
 	Volume       *VolumeSpec       `json:"volume,omitempty"`
+	BaseEnv      map[string]string `json:"-"`
 	FunctionEnv  map[string]string `json:"function_env,omitempty"`
 }
 
@@ -63,17 +66,18 @@ func WriteState(path string, state State) error {
 }
 
 func BuildFunctionServiceEnv(serviceName string, service ServiceState, baseEnv map[string]string) map[string]string {
-	out := map[string]string{}
-	for key, value := range baseEnv {
-		out[key] = value
-	}
+	out := cloneEnvMap(baseEnv)
+	appendScopedServiceEnv(out, serviceName, baseEnv)
 
-	upper := strings.ToUpper(strings.ReplaceAll(serviceName, "-", "_"))
+	upper := serviceEnvToken(serviceName)
 	out["SERVICE_"+upper+"_HOST"] = service.Host
 	out["SERVICE_"+upper+"_PORT"] = fmt.Sprintf("%d", service.Port)
 	out["SERVICE_"+upper+"_URL"] = service.URL
 	out["SERVICE_"+upper+"_INTERNAL_HOST"] = service.InternalHost
 	out["SERVICE_"+upper+"_INTERNAL_PORT"] = fmt.Sprintf("%d", service.InternalPort)
+	if strings.TrimSpace(service.InternalURL) != "" {
+		out["SERVICE_"+upper+"_INTERNAL_URL"] = service.InternalURL
+	}
 
 	switch strings.ToLower(serviceName) {
 	case "mysql":
@@ -94,12 +98,13 @@ func BuildFunctionServiceEnv(serviceName string, service ServiceState, baseEnv m
 }
 
 func BuildAppServiceEnv(serviceName string, service ServiceState, baseEnv map[string]string) map[string]string {
-	out := map[string]string{}
-	for key, value := range baseEnv {
+	out := cloneEnvMap(baseEnv)
+	for key, value := range service.BaseEnv {
 		out[key] = value
 	}
+	appendScopedServiceEnv(out, serviceName, service.BaseEnv)
 
-	upper := strings.ToUpper(strings.ReplaceAll(serviceName, "-", "_"))
+	upper := serviceEnvToken(serviceName)
 	internalURL := strings.TrimSpace(service.InternalURL)
 	if internalURL == "" {
 		internalURL = internalServiceURL(serviceName, service)
@@ -155,18 +160,80 @@ func internalServiceURL(name string, service ServiceState) string {
 	return BuildServiceURL(name, service.InternalHost, service.InternalPort, nil)
 }
 
+func BuildAppURL(host string, port int, protocol string) string {
+	host = strings.TrimSpace(host)
+	if host == "" || port < 1 {
+		return ""
+	}
+	scheme := strings.ToLower(strings.TrimSpace(protocol))
+	switch scheme {
+	case "", "tcp":
+		scheme = "http"
+	case "http", "https":
+	default:
+		scheme = "http"
+	}
+	return fmt.Sprintf("%s://%s:%d", scheme, host, port)
+}
+
 func buildCredentialURL(scheme, host string, port int, user, pass, db string) string {
 	creds := ""
 	if user != "" {
 		creds = user
-		if pass != "" {
-			creds += ":" + pass
-		}
 		creds += "@"
 	}
+	_ = pass
 	path := ""
 	if db != "" {
 		path = "/" + db
 	}
 	return fmt.Sprintf("%s://%s%s:%d%s", scheme, creds, host, port, path)
+}
+
+func cloneEnvMap(source map[string]string) map[string]string {
+	out := map[string]string{}
+	for key, value := range source {
+		out[key] = value
+	}
+	return out
+}
+
+func appendScopedServiceEnv(out map[string]string, serviceName string, source map[string]string) {
+	prefix := "SERVICE_" + serviceEnvToken(serviceName) + "_"
+	for key, value := range source {
+		scopedKey := normalizeEnvKey(key)
+		if scopedKey == "" {
+			continue
+		}
+		out[prefix+scopedKey] = value
+	}
+}
+
+func serviceEnvToken(raw string) string {
+	token := normalizeEnvKey(strings.ReplaceAll(raw, "-", "_"))
+	if token == "" {
+		return "SERVICE"
+	}
+	return token
+}
+
+func normalizeEnvKey(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	var out strings.Builder
+	for _, ch := range raw {
+		switch {
+		case ch >= 'a' && ch <= 'z':
+			out.WriteRune(ch - ('a' - 'A'))
+		case ch >= 'A' && ch <= 'Z':
+			out.WriteRune(ch)
+		case ch >= '0' && ch <= '9':
+			out.WriteRune(ch)
+		default:
+			out.WriteByte('_')
+		}
+	}
+	return strings.Trim(out.String(), "_")
 }

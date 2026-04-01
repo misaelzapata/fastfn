@@ -63,6 +63,10 @@ Formas comunes de definir el directorio de funciones:
 - `fastfn.json` -> `"functions-dir": "functions"`
 - `FN_FUNCTIONS_ROOT=/ruta/absoluta/a/functions`
 
+`fastfn.json` solo le indica a FastFN cuál es el root. Una vez conocido ese root, las carpetas hijas pueden tener su propio `fn.config.json`. Eso permite que una carpeta como `functions/payments/` declare un `service`, `app`, `services` o `apps` local sin tocar el `fastfn.json` global.
+
+En workloads Firecracker, ese ownership por carpeta aplica a la declaración y al scope. El almacenamiento persistente sigue siendo un volumen gestionado por FastFN bajo `.fastfn/firecracker-volumes/`; en esta branch todavía no hay bind mounts de carpetas reales del host.
+
 El orden de runtimes también se puede configurar:
 
 - `FN_RUNTIMES=python,node,php,rust`

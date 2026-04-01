@@ -3,14 +3,17 @@
 package workloads
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -22,6 +25,7 @@ import (
 const (
 	defaultFirecrackerBin       = "firecracker"
 	defaultVolumeBytes    int64 = 10 * 1024 * 1024 * 1024
+	guestServiceVsockBase       = 30000
 )
 
 type FirecrackerManager struct {
@@ -36,6 +40,9 @@ type managedVM struct {
 	specName       string
 	vmDir          string
 	hostPort       int
+	vsockPath      string
+	guestPort      int
+	internalHost   string
 	check          HealthcheckSpec
 	machine        *firecracker.Machine
 	proxies        []io.Closer
@@ -43,20 +50,47 @@ type managedVM struct {
 }
 
 type workloadBootConfig struct {
-	Version  int                      `json:"version"`
-	Kind     string                   `json:"kind"`
-	Name     string                   `json:"name"`
-	Port     int                      `json:"port"`
-	Command  []string                 `json:"command,omitempty"`
-	Env      map[string]string        `json:"env,omitempty"`
-	Services []workloadServiceBinding `json:"services,omitempty"`
+	Version      int                      `json:"version"`
+	Kind         string                   `json:"kind"`
+	Name         string                   `json:"name"`
+	ProcessGroup string                   `json:"process_group,omitempty"`
+	Replica      int                      `json:"replica,omitempty"`
+	Port         int                      `json:"port,omitempty"`
+	Command      []string                 `json:"command,omitempty"`
+	Env          map[string]string        `json:"env,omitempty"`
+	WorkingDir   string                   `json:"working_dir,omitempty"`
+	User         string                   `json:"user,omitempty"`
+	InboundPorts []workloadInboundPort    `json:"inbound_ports,omitempty"`
+	Services     []workloadServiceBinding `json:"services,omitempty"`
+	Volumes      []workloadVolumeMount    `json:"volumes,omitempty"`
+}
+
+type workloadInboundPort struct {
+	Name          string `json:"name"`
+	Protocol      string `json:"protocol,omitempty"`
+	GuestPort     int    `json:"guest_port"`
+	ContainerPort int    `json:"container_port"`
 }
 
 type workloadServiceBinding struct {
-	Name string `json:"name"`
-	Host string `json:"host"`
-	Port int    `json:"port"`
-	URL  string `json:"url,omitempty"`
+	Name      string `json:"name"`
+	LocalHost string `json:"local_host,omitempty"`
+	LocalIP   string `json:"local_ip,omitempty"`
+	LocalPort int    `json:"local_port"`
+	VsockPort int    `json:"vsock_port"`
+	URL       string `json:"url,omitempty"`
+}
+
+type workloadVolumeMount struct {
+	Name   string `json:"name"`
+	Target string `json:"target"`
+	Device string `json:"device"`
+}
+
+type workloadServiceBridgeTarget struct {
+	VsockPort       int
+	TargetVsockPath string
+	TargetGuestPort int
 }
 
 func NewFirecrackerManager(cfg ManagerConfig) (*FirecrackerManager, error) {
@@ -85,26 +119,26 @@ func (m *FirecrackerManager) Start(ctx context.Context) error {
 		return nil
 	}
 
-	services := map[string]ServiceState{}
-	for _, spec := range m.cfg.Services {
-		state, vm, err := m.startService(ctx, spec)
-		if err != nil {
-			_ = m.Stop(context.Background())
-			return err
-		}
-		m.vms = append(m.vms, vm)
-		services[spec.Name] = state
+	plans, err := m.planWorkloads(ctx)
+	if err != nil {
+		return err
 	}
 
+	services := map[string]ServiceState{}
 	apps := map[string]AppState{}
-	for _, spec := range m.cfg.Apps {
-		state, vm, err := m.startApp(ctx, spec, services)
+	for _, plan := range plans {
+		serviceState, appState, vm, err := m.startPlannedWorkload(ctx, plan)
 		if err != nil {
 			_ = m.Stop(context.Background())
 			return err
 		}
 		m.vms = append(m.vms, vm)
-		apps[spec.Name] = state
+		switch plan.Kind {
+		case "service":
+			services[plan.Name] = serviceState
+		case "app":
+			apps[plan.Name] = appState
+		}
 	}
 
 	m.mu.Lock()
@@ -159,123 +193,79 @@ func (m *FirecrackerManager) writeState() error {
 	return WriteState(m.cfg.StatePath, m.state)
 }
 
-func (m *FirecrackerManager) startService(ctx context.Context, spec ServiceSpec) (ServiceState, managedVM, error) {
-	serviceEnv := map[string]string{}
-	for key, value := range spec.Env {
-		serviceEnv[key] = value
-	}
-	bindings := []workloadServiceBinding{}
-	boot := workloadBootConfig{
-		Version: 1,
-		Kind:    "service",
-		Name:    spec.Name,
-		Port:    spec.Port,
-		Command: append([]string{}, spec.Command...),
-		Env:     serviceEnv,
-	}
-
-	vm, bundle, hostPort, err := m.startVM(ctx, "service", spec.Name, spec.Image, spec.Dockerfile, spec.Port, spec.Volume, boot, bindings)
+func (m *FirecrackerManager) startPlannedWorkload(ctx context.Context, plan workloadPlan) (ServiceState, AppState, managedVM, error) {
+	vm, hostPort, err := m.startVMWithBundle(ctx, plan)
 	if err != nil {
-		return ServiceState{}, managedVM{}, err
+		return ServiceState{}, AppState{}, managedVM{}, err
 	}
 
-	service := ServiceState{
-		Name:         spec.Name,
-		Image:        spec.Image,
-		ImageDigest:  bundle.BundleID,
-		Host:         "127.0.0.1",
-		Port:         hostPort,
-		InternalHost: spec.Name + ".internal",
-		InternalPort: spec.Port,
-		Health:       WorkloadHealth{Up: true, Reason: "ok"},
-		Volume:       spec.Volume,
+	switch plan.Kind {
+	case "service":
+		service := ServiceState{
+			Name:         plan.Name,
+			Image:        plan.Image,
+			ImageDigest:  plan.Bundle.BundleID,
+			Host:         "127.0.0.1",
+			Port:         hostPort,
+			InternalHost: plan.InternalHost,
+			InternalPort: plan.InternalPort,
+			InternalURL:  plan.InternalURL,
+			Health:       WorkloadHealth{Up: true, Reason: "ok"},
+			Volume:       plan.Volume,
+			BaseEnv:      cloneEnvMap(plan.SpecEnv),
+		}
+		service.URL = BuildServiceURL(plan.Name, service.Host, service.Port, plan.SpecEnv)
+		service.FunctionEnv = BuildFunctionServiceEnv(plan.Name, service, plan.SpecEnv)
+		if err := waitForEndpoint(service.Host, service.Port, plan.Healthcheck, 30*time.Second); err != nil {
+			service.Health = WorkloadHealth{Up: false, Reason: err.Error()}
+		}
+		vm.specName = plan.Name
+		vm.kind = plan.Kind
+		vm.check = plan.Healthcheck
+		return service, AppState{}, vm, nil
+	case "app":
+		app := AppState{
+			Name:         plan.Name,
+			Image:        plan.Image,
+			ImageDigest:  plan.Bundle.BundleID,
+			Host:         "127.0.0.1",
+			Port:         hostPort,
+			InternalHost: plan.InternalHost,
+			InternalPort: plan.InternalPort,
+			InternalURL:  plan.InternalURL,
+			Routes:       append([]string{}, plan.Routes...),
+			Health:       WorkloadHealth{Up: true, Reason: "ok"},
+			Volume:       plan.Volume,
+			Env:          cloneEnvMap(plan.SpecEnv),
+		}
+		if err := waitForEndpoint(app.Host, app.Port, plan.Healthcheck, 30*time.Second); err != nil {
+			app.Health = WorkloadHealth{Up: false, Reason: err.Error()}
+		}
+		vm.specName = plan.Name
+		vm.kind = plan.Kind
+		vm.check = plan.Healthcheck
+		return ServiceState{}, app, vm, nil
+	default:
+		return ServiceState{}, AppState{}, managedVM{}, fmt.Errorf("unknown workload kind %q", plan.Kind)
 	}
-	service.URL = BuildServiceURL(spec.Name, service.Host, service.Port, spec.Env)
-	service.InternalURL = BuildServiceURL(spec.Name, "127.0.0.1", spec.Port, spec.Env)
-	service.FunctionEnv = BuildFunctionServiceEnv(spec.Name, service, spec.Env)
-
-	if err := waitForEndpoint(service.Host, service.Port, effectiveHealthcheck(spec.Healthcheck), 30*time.Second); err != nil {
-		service.Health = WorkloadHealth{Up: false, Reason: err.Error()}
-	}
-
-	vm.specName = spec.Name
-	vm.kind = "service"
-	vm.check = effectiveHealthcheck(spec.Healthcheck)
-	return service, vm, nil
 }
 
-func (m *FirecrackerManager) startApp(ctx context.Context, spec AppSpec, services map[string]ServiceState) (AppState, managedVM, error) {
-	appEnv := buildGuestLoopbackServiceEnv(services, spec.Env)
-	bindings := buildGuestServiceBindings(services)
-	boot := workloadBootConfig{
-		Version:  1,
-		Kind:     "app",
-		Name:     spec.Name,
-		Port:     spec.Port,
-		Command:  append([]string{}, spec.Command...),
-		Env:      appEnv,
-		Services: bindings,
+func (m *FirecrackerManager) startVMWithBundle(ctx context.Context, plan workloadPlan) (managedVM, int, error) {
+	if err := writeRawConfigDrive(plan.ConfigDrive, plan.Bundle.ConfigDriveBytes, plan.Boot); err != nil {
+		return managedVM{}, 0, err
 	}
 
-	vm, bundle, hostPort, err := m.startVM(ctx, "app", spec.Name, spec.Image, spec.Dockerfile, spec.Port, spec.Volume, boot, bindings)
-	if err != nil {
-		return AppState{}, managedVM{}, err
-	}
-
-	app := AppState{
-		Name:         spec.Name,
-		Image:        spec.Image,
-		ImageDigest:  bundle.BundleID,
-		Host:         "127.0.0.1",
-		Port:         hostPort,
-		InternalPort: spec.Port,
-		Routes:       append([]string{}, spec.Routes...),
-		Health:       WorkloadHealth{Up: true, Reason: "ok"},
-		Volume:       spec.Volume,
-		Env:          spec.Env,
-	}
-
-	if err := waitForEndpoint(app.Host, app.Port, effectiveHealthcheck(spec.Healthcheck), 30*time.Second); err != nil {
-		app.Health = WorkloadHealth{Up: false, Reason: err.Error()}
-	}
-
-	vm.specName = spec.Name
-	vm.kind = "app"
-	vm.check = effectiveHealthcheck(spec.Healthcheck)
-	return app, vm, nil
-}
-
-func (m *FirecrackerManager) startVM(ctx context.Context, kind, name, imageRef, dockerfile string, internalPort int, volume *VolumeSpec, boot workloadBootConfig, services []workloadServiceBinding) (managedVM, FirecrackerBundle, int, error) {
-	if strings.TrimSpace(dockerfile) != "" {
-		return managedVM{}, FirecrackerBundle{}, 0, fmt.Errorf("%s.%s: dockerfile-based bundle conversion is not implemented yet; provide a Firecracker image bundle path in image", kind, name)
-	}
-
-	bundle, err := ResolveFirecrackerBundle(m.cfg.ProjectDir, imageRef)
-	if err != nil {
-		return managedVM{}, FirecrackerBundle{}, 0, fmt.Errorf("%s.%s: %w", kind, name, err)
-	}
-
-	vmDir := filepath.Join(filepath.Dir(m.cfg.StatePath), "firecracker-"+sanitizeName(kind)+"-"+sanitizeName(name)+"-"+shortHashFC(time.Now().UTC().String()))
-	if err := os.MkdirAll(vmDir, 0o755); err != nil {
-		return managedVM{}, FirecrackerBundle{}, 0, fmt.Errorf("create firecracker vm dir for %s.%s: %w", kind, name, err)
-	}
-
-	configDrivePath := filepath.Join(vmDir, "config.raw")
-	if err := writeRawConfigDrive(configDrivePath, bundle.ConfigDriveBytes, boot); err != nil {
-		return managedVM{}, FirecrackerBundle{}, 0, err
-	}
-
-	drives := firecracker.NewDrivesBuilder(bundle.RootFSPath).Build()
+	drives := firecracker.NewDrivesBuilder(plan.Bundle.RootFSPath).Build()
 	drives = append(drives, models.Drive{
 		DriveID:      firecracker.String("config"),
-		PathOnHost:   firecracker.String(configDrivePath),
+		PathOnHost:   firecracker.String(plan.ConfigDrive),
 		IsReadOnly:   firecracker.Bool(true),
 		IsRootDevice: firecracker.Bool(false),
 	})
-	if volume != nil {
-		volumePath, err := ensureVolumeFile(m.cfg.ProjectDir, volume)
+	if plan.Volume != nil {
+		volumePath, err := ensureVolumeFile(m.cfg.ProjectDir, plan.Volume)
 		if err != nil {
-			return managedVM{}, FirecrackerBundle{}, 0, err
+			return managedVM{}, 0, err
 		}
 		drives = append(drives, models.Drive{
 			DriveID:      firecracker.String("data"),
@@ -285,124 +275,173 @@ func (m *FirecrackerManager) startVM(ctx context.Context, kind, name, imageRef, 
 		})
 	}
 
-	socketPath := filepath.Join(vmDir, "api.sock")
-	vsockPath := filepath.Join(vmDir, "vsock.sock")
-	logPath := filepath.Join(vmDir, "firecracker.log")
+	bridgeClosers := make([]io.Closer, 0, len(plan.Bridges))
+	for _, target := range plan.Bridges {
+		bridge, err := startHostServiceBridge(plan.VsockPath, target.VsockPort, target.TargetVsockPath, target.TargetGuestPort)
+		if err != nil {
+			for _, closer := range bridgeClosers {
+				_ = closer.Close()
+			}
+			return managedVM{}, 0, fmt.Errorf("start host service bridge for %s.%s: %w", plan.Kind, plan.Name, err)
+		}
+		bridgeClosers = append(bridgeClosers, bridge)
+	}
+
+	consoleFile, err := os.OpenFile(plan.ConsolePath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+	if err != nil {
+		for _, closer := range bridgeClosers {
+			_ = closer.Close()
+		}
+		return managedVM{}, 0, fmt.Errorf("create console log for %s.%s: %w", plan.Kind, plan.Name, err)
+	}
 	fcCfg := firecracker.Config{
-		SocketPath:      socketPath,
-		LogPath:         logPath,
-		LogLevel:        "Info",
-		KernelImagePath: bundle.KernelPath,
-		KernelArgs:      bundle.KernelArgs,
-		Drives:          drives,
+		SocketPath:        plan.SocketPath,
+		LogPath:           plan.LogPath,
+		LogLevel:          "Info",
+		DisableValidation: true,
+		KernelImagePath:   plan.Bundle.KernelPath,
+		KernelArgs:        plan.Bundle.KernelArgs,
+		Drives:            drives,
 		VsockDevices: []firecracker.VsockDevice{{
 			ID:   "fastfn",
-			Path: vsockPath,
+			Path: plan.VsockPath,
 			CID:  3,
 		}},
 		MachineCfg: models.MachineConfiguration{
-			VcpuCount:  firecracker.Int64(bundle.VCPUCount),
-			MemSizeMib: firecracker.Int64(bundle.MemoryMiB),
-			HtEnabled:  firecracker.Bool(false),
+			VcpuCount:  firecracker.Int64(plan.Bundle.VCPUCount),
+			MemSizeMib: firecracker.Int64(plan.Bundle.MemoryMiB),
 		},
 	}
 
 	cmd := firecracker.VMCommandBuilder{}.
 		WithBin(firecrackerBinary()).
-		WithSocketPath(socketPath).
+		WithSocketPath(plan.SocketPath).
+		WithStdout(consoleFile).
+		WithStderr(consoleFile).
 		Build(ctx)
 
 	machine, err := firecracker.NewMachine(ctx, fcCfg, firecracker.WithProcessRunner(cmd))
 	if err != nil {
-		return managedVM{}, FirecrackerBundle{}, 0, fmt.Errorf("create firecracker machine for %s.%s: %w", kind, name, err)
+		for _, closer := range bridgeClosers {
+			_ = closer.Close()
+		}
+		_ = consoleFile.Close()
+		return managedVM{}, 0, fmt.Errorf("create firecracker machine for %s.%s: %w", plan.Kind, plan.Name, err)
 	}
+	machine.Handlers.FcInit = machine.Handlers.FcInit.Swap(firecracker.Handler{
+		Name: firecracker.CreateMachineHandlerName,
+		Fn: func(handlerCtx context.Context, _ *firecracker.Machine) error {
+			return putMachineConfigSMT(handlerCtx, plan.SocketPath, plan.Bundle.VCPUCount, plan.Bundle.MemoryMiB)
+		},
+	})
 	if err := machine.Start(ctx); err != nil {
-		return managedVM{}, FirecrackerBundle{}, 0, fmt.Errorf("start firecracker machine for %s.%s: %w", kind, name, err)
+		for _, closer := range bridgeClosers {
+			_ = closer.Close()
+		}
+		_ = consoleFile.Close()
+		return managedVM{}, 0, fmt.Errorf("start firecracker machine for %s.%s: %w", plan.Kind, plan.Name, err)
 	}
 
-	proxy, hostPort, err := startGuestTCPProxy(vsockPath, bundle.GuestPort)
+	proxy, hostPort, err := startGuestTCPProxy(plan.VsockPath, plan.Bundle.GuestPort)
 	if err != nil {
 		_ = machine.StopVMM()
-		return managedVM{}, FirecrackerBundle{}, 0, fmt.Errorf("start host proxy for %s.%s: %w", kind, name, err)
+		for _, closer := range bridgeClosers {
+			_ = closer.Close()
+		}
+		_ = consoleFile.Close()
+		return managedVM{}, 0, fmt.Errorf("start host proxy for %s.%s: %w", plan.Kind, plan.Name, err)
 	}
 
 	vm := managedVM{
-		kind:     kind,
-		specName: name,
-		vmDir:    vmDir,
-		hostPort: hostPort,
-		machine:  machine,
-		proxies:  []io.Closer{proxy},
+		kind:           plan.Kind,
+		specName:       plan.Name,
+		vmDir:          plan.VMDir,
+		hostPort:       hostPort,
+		vsockPath:      plan.VsockPath,
+		guestPort:      plan.Bundle.GuestPort,
+		internalHost:   plan.InternalHost,
+		machine:        machine,
+		proxies:        []io.Closer{proxy, consoleFile},
+		serviceBridges: bridgeClosers,
 	}
-
-	for _, service := range services {
-		bridge, err := startHostServiceBridge(vsockPath, service.Port, net.JoinHostPort(service.Host, fmt.Sprintf("%d", service.Port)))
-		if err != nil {
-			_ = proxy.Close()
-			_ = machine.StopVMM()
-			return managedVM{}, FirecrackerBundle{}, 0, fmt.Errorf("start host service bridge for %s.%s: %w", kind, name, err)
-		}
-		vm.serviceBridges = append(vm.serviceBridges, bridge)
-	}
-
-	_ = internalPort
-	return vm, bundle, hostPort, nil
+	return vm, hostPort, nil
 }
 
-func buildGuestLoopbackServiceEnv(services map[string]ServiceState, baseEnv map[string]string) map[string]string {
+func scopeContains(parent, child string) bool {
+	parent = strings.TrimSpace(parent)
+	child = strings.TrimSpace(child)
+	if parent == "" || child == "" {
+		return true
+	}
+	parent = filepath.Clean(parent)
+	child = filepath.Clean(child)
+	if parent == child {
+		return true
+	}
+	if !strings.HasSuffix(parent, string(os.PathSeparator)) {
+		parent += string(os.PathSeparator)
+	}
+	return strings.HasPrefix(child+string(os.PathSeparator), parent)
+}
+
+func mergeWorkloadEnv(defaults, overrides map[string]string) map[string]string {
+	if len(defaults) == 0 && len(overrides) == 0 {
+		return nil
+	}
 	out := map[string]string{}
-	for key, value := range baseEnv {
+	for key, value := range defaults {
 		out[key] = value
 	}
-
-	names := make([]string, 0, len(services))
-	for name := range services {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, serviceName := range names {
-		service := services[serviceName]
-		upper := strings.ToUpper(strings.ReplaceAll(serviceName, "-", "_"))
-		out["SERVICE_"+upper+"_HOST"] = "127.0.0.1"
-		out["SERVICE_"+upper+"_PORT"] = fmt.Sprintf("%d", service.InternalPort)
-		out["SERVICE_"+upper+"_URL"] = BuildServiceURL(serviceName, "127.0.0.1", service.InternalPort, service.FunctionEnv)
-
-		switch strings.ToLower(serviceName) {
-		case "mysql":
-			out["MYSQL_HOST"] = "127.0.0.1"
-			out["MYSQL_PORT"] = fmt.Sprintf("%d", service.InternalPort)
-			out["MYSQL_URL"] = BuildServiceURL(serviceName, "127.0.0.1", service.InternalPort, service.FunctionEnv)
-		case "postgres", "postgresql":
-			out["POSTGRES_HOST"] = "127.0.0.1"
-			out["POSTGRES_PORT"] = fmt.Sprintf("%d", service.InternalPort)
-			out["POSTGRES_URL"] = BuildServiceURL(serviceName, "127.0.0.1", service.InternalPort, service.FunctionEnv)
-		case "redis":
-			out["REDIS_HOST"] = "127.0.0.1"
-			out["REDIS_PORT"] = fmt.Sprintf("%d", service.InternalPort)
-			out["REDIS_URL"] = BuildServiceURL(serviceName, "127.0.0.1", service.InternalPort, service.FunctionEnv)
-		}
+	for key, value := range overrides {
+		out[key] = value
 	}
 	return out
 }
 
-func buildGuestServiceBindings(services map[string]ServiceState) []workloadServiceBinding {
-	names := make([]string, 0, len(services))
-	for name := range services {
-		names = append(names, name)
+func defaultWorkloadCommand(command, fallback []string) []string {
+	if len(command) > 0 {
+		return append([]string{}, command...)
 	}
-	sort.Strings(names)
+	return append([]string{}, fallback...)
+}
 
-	out := make([]workloadServiceBinding, 0, len(names))
-	for _, name := range names {
-		service := services[name]
-		out = append(out, workloadServiceBinding{
-			Name: name,
-			Host: "127.0.0.1",
-			Port: service.InternalPort,
-			URL:  BuildServiceURL(name, "127.0.0.1", service.InternalPort, service.FunctionEnv),
-		})
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
 	}
-	return out
+	return ""
+}
+
+func buildInboundPorts(guestPort int, ports []PortSpec) []workloadInboundPort {
+	if guestPort < 1 || len(ports) == 0 {
+		return nil
+	}
+	primary := ports[0]
+	for _, port := range ports {
+		if port.Public {
+			primary = port
+			break
+		}
+	}
+	return []workloadInboundPort{{
+		Name:          primary.Name,
+		Protocol:      primary.Protocol,
+		GuestPort:     guestPort,
+		ContainerPort: primary.ContainerPort,
+	}}
+}
+
+func buildVolumeMounts(volume *VolumeSpec) []workloadVolumeMount {
+	if volume == nil {
+		return nil
+	}
+	return []workloadVolumeMount{{
+		Name:   volume.Name,
+		Target: volume.Target,
+		Device: "/dev/vdc",
+	}}
 }
 
 func writeRawConfigDrive(path string, size int64, boot workloadBootConfig) error {
@@ -447,6 +486,11 @@ func ensureVolumeFile(projectDir string, volume *VolumeSpec) (string, error) {
 		if err := file.Close(); err != nil {
 			return "", fmt.Errorf("close firecracker volume %s: %w", volume.Name, err)
 		}
+		blocks := defaultVolumeBytes / 1024
+		cmd := exec.Command("mke2fs", "-q", "-t", "ext4", "-F", path, fmt.Sprintf("%d", blocks))
+		if output, err := cmd.CombinedOutput(); err != nil {
+			return "", fmt.Errorf("format firecracker volume %s: %w: %s", volume.Name, err, strings.TrimSpace(string(output)))
+		}
 	} else if err != nil {
 		return "", fmt.Errorf("stat firecracker volume %s: %w", volume.Name, err)
 	}
@@ -479,27 +523,57 @@ func serveGuestTCPProxy(listener net.Listener, vsockPath string, guestPort int) 
 		}
 		go func(clientConn net.Conn) {
 			defer clientConn.Close()
-			guestConn, err := net.Dial("unix", vsockPath)
+			guestConn, err := dialGuestVsock(vsockPath, guestPort)
 			if err != nil {
 				return
 			}
 			defer guestConn.Close()
-			if _, err := fmt.Fprintf(guestConn, "CONNECT %d\n", guestPort); err != nil {
-				return
-			}
 			copyBidirectional(clientConn, guestConn)
 		}(conn)
 	}
 }
 
-func startHostServiceBridge(vsockPath string, guestPort int, targetAddr string) (io.Closer, error) {
+func dialGuestVsock(vsockPath string, guestPort int) (net.Conn, error) {
+	conn, err := net.DialTimeout("unix", vsockPath, 2*time.Second)
+	if err != nil {
+		return nil, err
+	}
+
+	// Firecracker documents a host-initiated vsock handshake on the UDS:
+	// write "CONNECT <port>\n", then consume the "OK <port>\n" ack before
+	// treating the socket as the proxied data stream.
+	if err := conn.SetDeadline(time.Now().Add(1 * time.Second)); err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
+	if _, err := fmt.Fprintf(conn, "CONNECT %d\n", guestPort); err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
+	line, err := bufio.NewReaderSize(conn, 32).ReadString('\n')
+	if err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
+	if err := conn.SetDeadline(time.Time{}); err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
+	if !strings.HasPrefix(line, "OK ") {
+		_ = conn.Close()
+		return nil, fmt.Errorf("unexpected vsock ack for guest port %d: %q", guestPort, strings.TrimSpace(line))
+	}
+	return conn, nil
+}
+
+func startHostServiceBridge(vsockPath string, guestPort int, targetVsockPath string, targetGuestPort int) (io.Closer, error) {
 	path := fmt.Sprintf("%s_%d", vsockPath, guestPort)
 	_ = os.Remove(path)
 	listener, err := net.Listen("unix", path)
 	if err != nil {
 		return nil, err
 	}
-	go serveHostServiceBridge(listener, targetAddr)
+	go serveHostServiceBridge(listener, targetVsockPath, targetGuestPort)
 	return &hostBridgeCloser{Listener: listener, path: path}, nil
 }
 
@@ -514,7 +588,7 @@ func (c *hostBridgeCloser) Close() error {
 	return err
 }
 
-func serveHostServiceBridge(listener net.Listener, targetAddr string) {
+func serveHostServiceBridge(listener net.Listener, targetVsockPath string, targetGuestPort int) {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
@@ -522,7 +596,7 @@ func serveHostServiceBridge(listener net.Listener, targetAddr string) {
 		}
 		go func(clientConn net.Conn) {
 			defer clientConn.Close()
-			targetConn, err := net.Dial("tcp", targetAddr)
+			targetConn, err := dialGuestVsock(targetVsockPath, targetGuestPort)
 			if err != nil {
 				return
 			}
@@ -550,4 +624,40 @@ func copyBidirectional(left net.Conn, right net.Conn) {
 		}
 	}()
 	wg.Wait()
+}
+
+func putMachineConfigSMT(ctx context.Context, socketPath string, vcpuCount, memoryMiB int64) error {
+	payload, err := json.Marshal(map[string]any{
+		"vcpu_count":   vcpuCount,
+		"mem_size_mib": memoryMiB,
+		"smt":          false,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal firecracker machine config: %w", err)
+	}
+
+	transport := &http.Transport{
+		DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
+			return net.Dial("unix", socketPath)
+		},
+	}
+	defer transport.CloseIdleConnections()
+
+	client := &http.Client{Transport: transport}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPut, "http://unix/machine-config", bytes.NewReader(payload))
+	if err != nil {
+		return fmt.Errorf("create firecracker machine-config request: %w", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+
+	response, err := client.Do(request)
+	if err != nil {
+		return fmt.Errorf("put firecracker machine-config: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		body, _ := io.ReadAll(response.Body)
+		return fmt.Errorf("put firecracker machine-config: status %d: %s", response.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return nil
 }
