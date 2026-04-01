@@ -14,7 +14,7 @@ const (
 	defaultFirecrackerKernelArgs = "console=ttyS0 reboot=k panic=1 pci=off"
 	defaultFirecrackerGuestPort  = 10700
 	defaultFirecrackerVCPUCount  = 1
-	defaultFirecrackerMemoryMiB  = 256
+	defaultFirecrackerMemoryMiB  = 512
 	defaultConfigDriveBytes      = 64 * 1024
 	bundleManifestName           = "fastfn-image.json"
 )
@@ -29,16 +29,24 @@ type FirecrackerBundle struct {
 	MemoryMiB        int64
 	ConfigDriveBytes int64
 	BundleID         string
+	DefaultCommand   []string
+	DefaultEnv       map[string]string
+	WorkingDir       string
+	User             string
 }
 
 type firecrackerBundleManifest struct {
-	Kernel           string `json:"kernel,omitempty"`
-	RootFS           string `json:"rootfs,omitempty"`
-	KernelArgs       string `json:"kernel_args,omitempty"`
-	GuestPort        int    `json:"guest_port,omitempty"`
-	VCPUCount        int64  `json:"vcpu_count,omitempty"`
-	MemoryMiB        int64  `json:"memory_mib,omitempty"`
-	ConfigDriveBytes int64  `json:"config_drive_bytes,omitempty"`
+	Kernel           string            `json:"kernel,omitempty"`
+	RootFS           string            `json:"rootfs,omitempty"`
+	KernelArgs       string            `json:"kernel_args,omitempty"`
+	GuestPort        int               `json:"guest_port,omitempty"`
+	VCPUCount        int64             `json:"vcpu_count,omitempty"`
+	MemoryMiB        int64             `json:"memory_mib,omitempty"`
+	ConfigDriveBytes int64             `json:"config_drive_bytes,omitempty"`
+	Command          []string          `json:"command,omitempty"`
+	Env              map[string]string `json:"env,omitempty"`
+	WorkingDir       string            `json:"working_dir,omitempty"`
+	User             string            `json:"user,omitempty"`
 }
 
 func ResolveFirecrackerBundle(projectDir, imageRef string) (FirecrackerBundle, error) {
@@ -66,7 +74,9 @@ func ResolveFirecrackerBundle(projectDir, imageRef string) (FirecrackerBundle, e
 	}
 
 	kernelPath := filepath.Join(bundleDir, "vmlinux")
-	if strings.TrimSpace(manifest.Kernel) != "" {
+	if configured := strings.TrimSpace(os.Getenv("FN_FIRECRACKER_KERNEL")); configured != "" {
+		kernelPath = filepath.Clean(configured)
+	} else if strings.TrimSpace(manifest.Kernel) != "" {
 		kernelPath = filepath.Join(bundleDir, filepath.Clean(strings.TrimSpace(manifest.Kernel)))
 	}
 	rootfsPath := filepath.Join(bundleDir, "rootfs.ext4")
@@ -90,6 +100,10 @@ func ResolveFirecrackerBundle(projectDir, imageRef string) (FirecrackerBundle, e
 		VCPUCount:        positiveInt64Or(manifest.VCPUCount, defaultFirecrackerVCPUCount),
 		MemoryMiB:        positiveInt64Or(manifest.MemoryMiB, defaultFirecrackerMemoryMiB),
 		ConfigDriveBytes: positiveInt64Or(manifest.ConfigDriveBytes, defaultConfigDriveBytes),
+		DefaultCommand:   append([]string{}, manifest.Command...),
+		DefaultEnv:       cloneStringMap(manifest.Env),
+		WorkingDir:       strings.TrimSpace(manifest.WorkingDir),
+		User:             strings.TrimSpace(manifest.User),
 	}
 	bundle.BundleID = shortHashFC(bundle.BundleDir + "|" + bundle.KernelPath + "|" + bundle.RootFSPath)
 	return bundle, nil
@@ -166,4 +180,15 @@ func firstNonEmptyFC(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func cloneStringMap(source map[string]string) map[string]string {
+	if len(source) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(source))
+	for key, value := range source {
+		out[key] = value
+	}
+	return out
 }

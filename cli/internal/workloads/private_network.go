@@ -60,6 +60,9 @@ func visibleWorkloadPeers(source workloadPeer, all []workloadPeer) []workloadPee
 		if strings.EqualFold(peer.Name, source.Name) {
 			continue
 		}
+		if strings.EqualFold(source.Kind, "service") && strings.EqualFold(peer.Kind, "service") {
+			continue
+		}
 		if scopeContains(peer.ScopeDir, source.ScopeDir) {
 			visible = append(visible, peer)
 		}
@@ -93,8 +96,6 @@ func buildImageWorkloadPeerEnv(bindings []workloadPeerBinding, baseEnv map[strin
 		out[key] = value
 	}
 
-	familyCounts := visibleServiceFamilyCounts(bindings)
-
 	for _, binding := range bindings {
 		token := serviceEnvToken(binding.Peer.Name)
 		out["WORKLOAD_"+token+"_HOST"] = binding.Peer.InternalHost
@@ -116,66 +117,10 @@ func buildImageWorkloadPeerEnv(bindings []workloadPeerBinding, baseEnv map[strin
 			out["SERVICE_"+token+"_URL"] = binding.Peer.InternalURL
 			out["SERVICE_"+token+"_INTERNAL_URL"] = binding.Peer.InternalURL
 		}
-
-		family := serviceAliasFamily(binding.Peer.Name)
-		if family == "" || familyCounts[family] != 1 {
-			continue
-		}
-		aliasPrefix := strings.ToUpper(family)
-		out[aliasPrefix+"_HOST"] = binding.Peer.InternalHost
-		out[aliasPrefix+"_PORT"] = strconv.Itoa(binding.Peer.InternalPort)
-		if strings.TrimSpace(binding.Peer.InternalURL) != "" {
-			out[aliasPrefix+"_URL"] = binding.Peer.InternalURL
-		}
-		appendFamilyEnv(out, aliasPrefix, binding.Peer.BaseEnv)
+		appendDirectServiceAlias(out, binding.Peer.Name, binding.Peer.InternalHost, binding.Peer.InternalPort, binding.Peer.InternalURL)
 	}
 
 	return out
-}
-
-func visibleServiceFamilyCounts(bindings []workloadPeerBinding) map[string]int {
-	counts := map[string]int{}
-	for _, binding := range bindings {
-		if !strings.EqualFold(binding.Peer.Kind, "service") {
-			continue
-		}
-		family := serviceAliasFamily(binding.Peer.Name)
-		if family == "" {
-			continue
-		}
-		counts[family]++
-	}
-	return counts
-}
-
-func serviceAliasFamily(name string) string {
-	parts := strings.FieldsFunc(strings.ToLower(strings.TrimSpace(name)), func(r rune) bool {
-		return (r < 'a' || r > 'z') && (r < '0' || r > '9')
-	})
-	if len(parts) == 0 {
-		return ""
-	}
-	switch parts[0] {
-	case "mysql":
-		return "mysql"
-	case "postgres", "postgresql":
-		return "postgres"
-	case "redis":
-		return "redis"
-	default:
-		return ""
-	}
-}
-
-func appendFamilyEnv(out map[string]string, familyPrefix string, source map[string]string) {
-	prefix := familyPrefix + "_"
-	for key, value := range source {
-		normalized := normalizeEnvKey(key)
-		if !strings.HasPrefix(normalized, prefix) {
-			continue
-		}
-		out[normalized] = value
-	}
 }
 
 func buildPeerServiceBindings(bindings []workloadPeerBinding) []workloadServiceBinding {

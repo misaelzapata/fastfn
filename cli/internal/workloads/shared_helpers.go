@@ -2,6 +2,7 @@ package workloads
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -48,8 +49,23 @@ func checkTCP(host string, port int, check HealthcheckSpec) error {
 	if err != nil {
 		return err
 	}
-	_ = conn.Close()
-	return nil
+	defer conn.Close()
+
+	if err := conn.SetReadDeadline(time.Now().Add(minDuration(timeout, 250*time.Millisecond))); err != nil {
+		return err
+	}
+	var probe [1]byte
+	_, err = conn.Read(probe[:])
+	switch {
+	case err == nil:
+		return nil
+	case err == io.EOF:
+		return fmt.Errorf("connection closed immediately")
+	case isTimeoutError(err):
+		return nil
+	default:
+		return err
+	}
 }
 
 func checkHTTP(host string, port int, check HealthcheckSpec) error {
@@ -68,6 +84,21 @@ func checkHTTP(host string, port int, check HealthcheckSpec) error {
 		return fmt.Errorf("status %d", resp.StatusCode)
 	}
 	return nil
+}
+
+func isTimeoutError(err error) bool {
+	netErr, ok := err.(net.Error)
+	return ok && netErr.Timeout()
+}
+
+func minDuration(a, b time.Duration) time.Duration {
+	if a <= 0 {
+		return b
+	}
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func sanitizeName(raw string) string {

@@ -1441,15 +1441,20 @@ func TestDevCmdRun_NativePublicBaseURLEnvAlreadySet(t *testing.T) {
 
 func TestDevCmdRun_DockerModeRejectsImageWorkloads(t *testing.T) {
 	stubDevGlobals(t)
-	viper.Set("apps", map[string]any{
-		"admin": map[string]any{
-			"image":  "ghcr.io/acme/admin:latest",
-			"port":   3000,
-			"routes": []string{"/admin/*"},
-		},
-	})
 
 	tmpDir := t.TempDir()
+	config := `{
+  "apps": {
+    "admin": {
+      "image": "ghcr.io/acme/admin:latest",
+      "port": 3000,
+      "routes": ["/admin/*"]
+    }
+  }
+}`
+	if err := os.WriteFile(filepath.Join(tmpDir, "fastfn.json"), []byte(config), 0o644); err != nil {
+		t.Fatalf("write fastfn.json: %v", err)
+	}
 	var fatalMsg string
 	devFatal = func(v ...interface{}) {
 		fatalMsg = fmt.Sprint(v...)

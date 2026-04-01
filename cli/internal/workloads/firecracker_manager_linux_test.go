@@ -2,7 +2,17 @@
 
 package workloads
 
-import "testing"
+import (
+	"context"
+	"encoding/json"
+	"io"
+	"net"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
 
 func TestPlanWorkloadPeerBindings_AssignsStableIPsAndNativePorts(t *testing.T) {
 	source := workloadPeer{
@@ -78,7 +88,27 @@ func TestVisibleWorkloadPeers_RespectsScope(t *testing.T) {
 	}
 }
 
-func TestBuildImageWorkloadPeerEnv_UsesInternalHostsAndOmitsAmbiguousAliases(t *testing.T) {
+func TestVisibleWorkloadPeers_ServiceSourceSkipsOtherServices(t *testing.T) {
+	source := workloadPeer{
+		Kind:     "service",
+		Name:     "postgres-main",
+		ScopeDir: "/project/functions/data",
+	}
+	visible := visibleWorkloadPeers(source, []workloadPeer{
+		source,
+		{Kind: "service", Name: "postgres-analytics", ScopeDir: "/project/functions/data"},
+		{Kind: "app", Name: "checker", ScopeDir: "/project/functions/data"},
+		{Kind: "service", Name: "payments-db", ScopeDir: "/project/functions"},
+	})
+	if len(visible) != 1 {
+		t.Fatalf("len(visible) = %d, want 1", len(visible))
+	}
+	if visible[0].Kind != "app" || visible[0].Name != "checker" {
+		t.Fatalf("visible = %+v", visible)
+	}
+}
+
+func TestBuildImageWorkloadPeerEnv_UsesInternalHostsAndServiceNameAliases(t *testing.T) {
 	env := buildImageWorkloadPeerEnv([]workloadPeerBinding{
 		{
 			Peer: workloadPeer{
@@ -148,43 +178,222 @@ func TestBuildImageWorkloadPeerEnv_UsesInternalHostsAndOmitsAmbiguousAliases(t *
 	if env["SERVICE_MYSQL_MAIN_MYSQL_PASSWORD"] != "secret" {
 		t.Fatalf("SERVICE_MYSQL_MAIN_MYSQL_PASSWORD = %q", env["SERVICE_MYSQL_MAIN_MYSQL_PASSWORD"])
 	}
-	if _, ok := env["MYSQL_HOST"]; ok {
-		t.Fatalf("MYSQL_HOST should be omitted when multiple MySQL services are visible")
+	if env["MYSQL_MAIN_HOST"] != "mysql-main.internal" {
+		t.Fatalf("MYSQL_MAIN_HOST = %q", env["MYSQL_MAIN_HOST"])
 	}
-	if _, ok := env["MYSQL_PASSWORD"]; ok {
-		t.Fatalf("MYSQL_PASSWORD should be omitted when multiple MySQL services are visible")
+	if env["MYSQL_ANALYTICS_HOST"] != "mysql-analytics.internal" {
+		t.Fatalf("MYSQL_ANALYTICS_HOST = %q", env["MYSQL_ANALYTICS_HOST"])
+	}
+	if _, ok := env["MYSQL_HOST"]; ok {
+		t.Fatalf("MYSQL_HOST should not be synthesized from a hardcoded family alias")
 	}
 }
 
-func TestBuildImageWorkloadPeerEnv_AddsGenericAliasForSingleKnownService(t *testing.T) {
+func TestBuildImageWorkloadPeerEnv_AddsAliasForActualServiceName(t *testing.T) {
 	env := buildImageWorkloadPeerEnv([]workloadPeerBinding{
 		{
 			Peer: workloadPeer{
 				Kind:         "service",
-				Name:         "postgres-primary",
-				InternalHost: "postgres-primary.internal",
+				Name:         "mariadb",
+				InternalHost: "mariadb.internal",
 				InternalPort: 5432,
-				InternalURL:  "postgres://pg@postgres-primary.internal:5432/app",
+				InternalURL:  "mysql://db@mariadb.internal:5432/app",
 				BaseEnv: map[string]string{
-					"POSTGRES_USER":     "pg",
-					"POSTGRES_PASSWORD": "secret",
-					"POSTGRES_DB":       "app",
+					"MARIADB_USER":     "db",
+					"MARIADB_PASSWORD": "secret",
+					"MARIADB_DATABASE": "app",
 				},
 			},
-			LocalHost: "postgres-primary.internal",
+			LocalHost: "mariadb.internal",
 			LocalIP:   "127.77.0.1",
 			LocalPort: 5432,
 			VsockPort: 30000,
 		},
 	}, nil)
 
-	if env["POSTGRES_HOST"] != "postgres-primary.internal" {
-		t.Fatalf("POSTGRES_HOST = %q", env["POSTGRES_HOST"])
+	if env["MARIADB_HOST"] != "mariadb.internal" {
+		t.Fatalf("MARIADB_HOST = %q", env["MARIADB_HOST"])
 	}
-	if env["POSTGRES_PASSWORD"] != "secret" {
-		t.Fatalf("POSTGRES_PASSWORD = %q", env["POSTGRES_PASSWORD"])
+	if env["MARIADB_URL"] != "mysql://db@mariadb.internal:5432/app" {
+		t.Fatalf("MARIADB_URL = %q", env["MARIADB_URL"])
 	}
-	if env["SERVICE_POSTGRES_PRIMARY_URL"] != "postgres://pg@postgres-primary.internal:5432/app" {
-		t.Fatalf("SERVICE_POSTGRES_PRIMARY_URL = %q", env["SERVICE_POSTGRES_PRIMARY_URL"])
+	if env["SERVICE_MARIADB_URL"] != "mysql://db@mariadb.internal:5432/app" {
+		t.Fatalf("SERVICE_MARIADB_URL = %q", env["SERVICE_MARIADB_URL"])
+	}
+	if _, ok := env["MARIADB_PASSWORD"]; ok {
+		t.Fatalf("MARIADB_PASSWORD should stay namespaced under SERVICE_MARIADB_*")
+	}
+}
+
+func TestReadVsockConnectAck_PreservesPayloadAfterAck(t *testing.T) {
+	server, client := net.Pipe()
+	defer server.Close()
+	defer client.Close()
+
+	go func() {
+		_, _ = io.WriteString(server, "OK 5000\nmysql-handshake")
+	}()
+
+	line, err := readVsockConnectAck(client)
+	if err != nil {
+		t.Fatalf("readVsockConnectAck() error = %v", err)
+	}
+	if line != "OK 5000\n" {
+		t.Fatalf("ack line = %q", line)
+	}
+
+	payload := make([]byte, len("mysql-handshake"))
+	if _, err := io.ReadFull(client, payload); err != nil {
+		t.Fatalf("ReadFull() error = %v", err)
+	}
+	if string(payload) != "mysql-handshake" {
+		t.Fatalf("payload = %q", string(payload))
+	}
+}
+
+func TestPutEntropyDevice_UsesFirecrackerEntropyEndpoint(t *testing.T) {
+	var requests chan firecrackerTestRequest
+	socketPath, requests, shutdown := startFirecrackerUnixTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		payload, _ := io.ReadAll(r.Body)
+		_ = r.Body.Close()
+		requests <- firecrackerTestRequest{
+			Method: r.Method,
+			Path:   r.URL.Path,
+			Body:   append([]byte(nil), payload...),
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer shutdown()
+
+	if err := putEntropyDevice(context.Background(), socketPath); err != nil {
+		t.Fatalf("putEntropyDevice() error = %v", err)
+	}
+
+	req := <-requests
+	if req.Method != http.MethodPut {
+		t.Fatalf("method = %q", req.Method)
+	}
+	if req.Path != "/entropy" {
+		t.Fatalf("path = %q", req.Path)
+	}
+	if string(req.Body) != "{}" {
+		t.Fatalf("body = %q", string(req.Body))
+	}
+}
+
+func TestPutMachineConfigSMT_DisablesSMT(t *testing.T) {
+	var requests chan firecrackerTestRequest
+	socketPath, requests, shutdown := startFirecrackerUnixTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		payload, _ := io.ReadAll(r.Body)
+		_ = r.Body.Close()
+		requests <- firecrackerTestRequest{
+			Method: r.Method,
+			Path:   r.URL.Path,
+			Body:   append([]byte(nil), payload...),
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer shutdown()
+
+	if err := putMachineConfigSMT(context.Background(), socketPath, 2, 256); err != nil {
+		t.Fatalf("putMachineConfigSMT() error = %v", err)
+	}
+
+	req := <-requests
+	if req.Method != http.MethodPut {
+		t.Fatalf("method = %q", req.Method)
+	}
+	if req.Path != "/machine-config" {
+		t.Fatalf("path = %q", req.Path)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(req.Body, &body); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if body["vcpu_count"] != float64(2) {
+		t.Fatalf("vcpu_count = %#v", body["vcpu_count"])
+	}
+	if body["mem_size_mib"] != float64(256) {
+		t.Fatalf("mem_size_mib = %#v", body["mem_size_mib"])
+	}
+	if body["smt"] != false {
+		t.Fatalf("smt = %#v", body["smt"])
+	}
+}
+
+func TestPatchFirecrackerVMState_UsesVMEndpoint(t *testing.T) {
+	var requests chan firecrackerTestRequest
+	socketPath, requests, shutdown := startFirecrackerUnixTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		payload, _ := io.ReadAll(r.Body)
+		_ = r.Body.Close()
+		requests <- firecrackerTestRequest{
+			Method: r.Method,
+			Path:   r.URL.Path,
+			Body:   append([]byte(nil), payload...),
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer shutdown()
+
+	if err := patchFirecrackerVMState(context.Background(), socketPath, "Paused"); err != nil {
+		t.Fatalf("patchFirecrackerVMState() error = %v", err)
+	}
+
+	req := <-requests
+	if req.Method != http.MethodPatch {
+		t.Fatalf("method = %q", req.Method)
+	}
+	if req.Path != "/vm" {
+		t.Fatalf("path = %q", req.Path)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(req.Body, &body); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if body["state"] != "Paused" {
+		t.Fatalf("state = %#v", body["state"])
+	}
+}
+
+type firecrackerTestRequest struct {
+	Method string
+	Path   string
+	Body   []byte
+}
+
+func startFirecrackerUnixTestServer(t *testing.T, handler http.Handler) (string, chan firecrackerTestRequest, func()) {
+	t.Helper()
+
+	dir := t.TempDir()
+	socketPath := filepath.Join(dir, "firecracker.sock")
+	listener, err := net.Listen("unix", socketPath)
+	if err != nil {
+		t.Fatalf("Listen(unix) error = %v", err)
+	}
+
+	requests := make(chan firecrackerTestRequest, 8)
+	server := &http.Server{Handler: handler}
+	go func() {
+		_ = server.Serve(listener)
+	}()
+
+	shutdown := func() {
+		_ = server.Close()
+		_ = listener.Close()
+		_ = os.Remove(socketPath)
+	}
+	return socketPath, requests, shutdown
+}
+
+func TestGenerateGuestEntropySeed_UsesExpectedSize(t *testing.T) {
+	seed, err := generateGuestEntropySeed()
+	if err != nil {
+		t.Fatalf("generateGuestEntropySeed() error = %v", err)
+	}
+	if len(seed) != guestEntropySeedBytes*2 {
+		t.Fatalf("len(seed) = %d", len(seed))
+	}
+	if strings.Trim(seed, "0123456789abcdef") != "" {
+		t.Fatalf("seed is not lowercase hex: %q", seed)
 	}
 }

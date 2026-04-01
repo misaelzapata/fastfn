@@ -4,6 +4,8 @@ package workloads
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,11 +13,14 @@ import (
 	"time"
 )
 
+const guestEntropySeedBytes = 256
+
 type workloadPlan struct {
 	Kind         string
 	Name         string
 	ScopeDir     string
 	Image        string
+	Lifecycle    LifecycleSpec
 	InternalHost string
 	InternalPort int
 	InternalURL  string
@@ -26,6 +31,7 @@ type workloadPlan struct {
 	BaseEnv      map[string]string
 	Bundle       FirecrackerBundle
 	Boot         workloadBootConfig
+	DebugSSH     *workloadDebugSSH
 	Peer         workloadPeer
 	Bridges      []workloadServiceBridgeTarget
 	VMDir        string
@@ -69,6 +75,7 @@ func (m *FirecrackerManager) planWorkloads(ctx context.Context) ([]workloadPlan,
 		}
 		plans[idx].Boot.Env = buildImageWorkloadPeerEnv(bindings, plans[idx].BaseEnv)
 		plans[idx].Boot.Services = buildPeerServiceBindings(bindings)
+		plans[idx].Boot.InboundPorts = appendDebugSSHInboundPort(plans[idx].Boot.InboundPorts, plans[idx].DebugSSH)
 		bridges, err := buildPeerBridgeTargets(bindings, targets)
 		if err != nil {
 			return nil, err
@@ -94,12 +101,21 @@ func (m *FirecrackerManager) planService(ctx context.Context, spec ServiceSpec, 
 	internalHost := spec.Name + ".internal"
 	internalURL := BuildServiceURL(spec.Name, internalHost, spec.Port, spec.Env)
 	baseEnv := mergeWorkloadEnv(bundle.DefaultEnv, spec.Env)
+	entropySeed, err := generateGuestEntropySeed()
+	if err != nil {
+		return workloadPlan{}, err
+	}
+	debugSSH, err := planDebugSSH(layout.vmDir)
+	if err != nil {
+		return workloadPlan{}, err
+	}
 
 	plan := workloadPlan{
 		Kind:         "service",
 		Name:         spec.Name,
 		ScopeDir:     spec.ScopeDir,
 		Image:        firstNonEmpty(spec.Image, spec.ImageFile, spec.Dockerfile),
+		Lifecycle:    spec.Lifecycle,
 		InternalHost: internalHost,
 		InternalPort: spec.Port,
 		InternalURL:  internalURL,
@@ -108,10 +124,14 @@ func (m *FirecrackerManager) planService(ctx context.Context, spec ServiceSpec, 
 		SpecEnv:      cloneEnvMap(spec.Env),
 		BaseEnv:      baseEnv,
 		Bundle:       bundle,
+		DebugSSH:     debugSSH,
 		Boot: workloadBootConfig{
 			Version:      1,
 			Kind:         "service",
 			Name:         spec.Name,
+			Debug:        firecrackerDebugEnabled(),
+			EntropySeed:  entropySeed,
+			DebugSSH:     buildWorkloadDebugSSHConfig(debugSSH),
 			Port:         spec.Port,
 			Command:      defaultWorkloadCommand(spec.Command, bundle.DefaultCommand),
 			WorkingDir:   firstNonEmpty(bundle.WorkingDir, spec.WorkingDir),
@@ -154,12 +174,21 @@ func (m *FirecrackerManager) planApp(ctx context.Context, spec AppSpec, seen map
 	internalHost := spec.Name + ".internal"
 	internalURL := BuildAppURL(internalHost, spec.Port, primaryAppProtocol(spec))
 	baseEnv := mergeWorkloadEnv(bundle.DefaultEnv, spec.Env)
+	entropySeed, err := generateGuestEntropySeed()
+	if err != nil {
+		return workloadPlan{}, err
+	}
+	debugSSH, err := planDebugSSH(layout.vmDir)
+	if err != nil {
+		return workloadPlan{}, err
+	}
 
 	plan := workloadPlan{
 		Kind:         "app",
 		Name:         spec.Name,
 		ScopeDir:     spec.ScopeDir,
 		Image:        firstNonEmpty(spec.Image, spec.ImageFile, spec.Dockerfile),
+		Lifecycle:    spec.Lifecycle,
 		InternalHost: internalHost,
 		InternalPort: spec.Port,
 		InternalURL:  internalURL,
@@ -169,10 +198,14 @@ func (m *FirecrackerManager) planApp(ctx context.Context, spec AppSpec, seen map
 		SpecEnv:      cloneEnvMap(spec.Env),
 		BaseEnv:      baseEnv,
 		Bundle:       bundle,
+		DebugSSH:     debugSSH,
 		Boot: workloadBootConfig{
 			Version:      1,
 			Kind:         "app",
 			Name:         spec.Name,
+			Debug:        firecrackerDebugEnabled(),
+			EntropySeed:  entropySeed,
+			DebugSSH:     buildWorkloadDebugSSHConfig(debugSSH),
 			Port:         spec.Port,
 			Command:      defaultWorkloadCommand(spec.Command, bundle.DefaultCommand),
 			WorkingDir:   firstNonEmpty(bundle.WorkingDir, spec.WorkingDir),
@@ -197,6 +230,14 @@ func (m *FirecrackerManager) planApp(ctx context.Context, spec AppSpec, seen map
 		ConsolePath: layout.consolePath,
 	}
 	return plan, nil
+}
+
+func generateGuestEntropySeed() (string, error) {
+	seed := make([]byte, guestEntropySeedBytes)
+	if _, err := rand.Read(seed); err != nil {
+		return "", fmt.Errorf("generate guest entropy seed: %w", err)
+	}
+	return hex.EncodeToString(seed), nil
 }
 
 type vmLayout struct {
@@ -241,6 +282,8 @@ func buildPeerBridgeTargets(bindings []workloadPeerBinding, targets map[string]w
 		}
 		out = append(out, workloadServiceBridgeTarget{
 			VsockPort:       binding.VsockPort,
+			TargetKind:      target.Kind,
+			TargetName:      target.Name,
 			TargetVsockPath: target.VsockPath,
 			TargetGuestPort: target.Bundle.GuestPort,
 		})
@@ -262,4 +305,18 @@ func primaryAppProtocol(spec AppSpec) string {
 
 func workloadPlanKey(kind, name string) string {
 	return strings.ToLower(strings.TrimSpace(kind)) + ":" + strings.ToLower(strings.TrimSpace(name))
+}
+
+func appendDebugSSHInboundPort(inbound []workloadInboundPort, debugSSH *workloadDebugSSH) []workloadInboundPort {
+	if debugSSH == nil || debugSSH.GuestPort < 1 || debugSSH.LocalPort < 1 {
+		return inbound
+	}
+	out := append([]workloadInboundPort{}, inbound...)
+	out = append(out, workloadInboundPort{
+		Name:          "debug-ssh",
+		Protocol:      "tcp",
+		GuestPort:     debugSSH.GuestPort,
+		ContainerPort: debugSSH.LocalPort,
+	})
+	return out
 }

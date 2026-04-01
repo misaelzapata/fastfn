@@ -1,6 +1,6 @@
 # Referencia de `fastfn.json`
 
-> Estado verificado al **13 de marzo de 2026**.
+> Estado verificado al **1 de abril de 2026**.
 > Nota de runtime: FastFN resuelve dependencias y build por función según el runtime: Python usa `requirements.txt`, Node usa `package.json`, PHP instala desde `composer.json` cuando existe, y Rust compila handlers con `cargo`. En `fastfn dev --native` necesitas runtimes y herramientas del host, mientras que `fastfn dev` depende de un daemon de Docker activo.
 
 `fastfn.json` es el archivo de configuración principal del CLI. FastFN lo lee desde el directorio actual, salvo que uses `--config`.
@@ -10,7 +10,7 @@
 - Complejidad: Referencia
 - Tiempo típico: 10-20 minutos
 - Úsala cuando: quieres definir en un solo lugar el directorio de funciones, el comportamiento de rutas, la cantidad de daemons y los binarios del host
-- Nota sobre workloads con imágenes: `apps` y `services` en este branch viven en modo native (`fastfn dev --native`, `fastfn run --native`) y usan directorios bundle de Firecracker como valor de `image`
+- Nota sobre workloads con imágenes: `apps` y `services` en este branch viven en modo native (`fastfn dev --native`, `fastfn run --native`) y corren como microVMs Firecracker desde bundles locales, imágenes de registry, `image_file` o `dockerfile`
 - Resultado: comportamiento reproducible en local y en CI sin comandos largos
 
 ## Claves soportadas
@@ -25,8 +25,8 @@
 | `runtime-daemons` | `object` o `string` | Cuántas instancias de daemon arrancar por runtime externo. |
 | `runtime-binaries` | `object` o `string` | Qué ejecutable del host debe usar FastFN para cada runtime o herramienta. |
 | `hot-reload` | `boolean` | Habilita/deshabilita hot reload para comandos `dev` y `run`. Default: `true`. |
-| `apps` | `object` | Apps HTTP públicas respaldadas por bundles locales de Firecracker. |
-| `services` | `object` | Workloads privados de soporte respaldados por bundles locales de Firecracker. |
+| `apps` | `object` | Apps HTTP públicas respaldadas por microVMs Firecracker. |
+| `services` | `object` | Workloads privados de soporte respaldados por microVMs Firecracker. |
 
 Notas:
 
@@ -34,11 +34,14 @@ Notas:
 - Los alias de compatibilidad siguen funcionando en proyectos anteriores.
 - `domains` solo afecta a `fastfn doctor domains`; no bloquea hosts entrantes por sí sola.
 - `runtime-daemons` aplica a runtimes externos (`node`, `python`, `php`, `rust`, `go`). `lua` corre dentro de OpenResty, así que un count para `lua` se ignora.
-- `apps` requieren al menos una entrada en `routes` y un único `port`.
-- `services` quedan privados y exponen variables de conexión hacia funciones y apps.
-- `image` debe apuntar a un directorio bundle local de Firecracker. Referencias de registry como `mysql:8.4` no se resuelven en este branch.
+- `apps` requieren al menos una entrada pública en `routes` y un `port` principal.
+- `services` quedan privados por defecto y exponen variables de conexión hacia funciones y apps.
+- Cada workload con imagen debe elegir exactamente una fuente: `image`, `image_file` o `dockerfile`.
+- `image` puede ser un directorio bundle local de Firecracker o una referencia OCI/registry como `mysql:8.4`.
+- `image_file` carga un archivo OCI o Docker local y luego lo convierte a un bundle Firecracker cacheado.
+- `dockerfile` builda vía la API de Docker Engine y convierte el resultado a un bundle Firecracker cacheado bajo `.fastfn/firecracker/images/`.
 - En este branch, los workloads con imágenes solo están disponibles en modo native y sobre hosts Linux/KVM.
-- `dockerfile` queda reservado, pero todavía no está soportado para convertir a bundles Firecracker.
+- El fast path queda residente y prewarmed por default: una vez arriba, el tráfico público e interno pasa por brokers estables y no rebuilda ni reinicia Firecracker por request.
 
 ## Ejemplo 1: Directorio de funciones por defecto
 
@@ -176,7 +179,7 @@ Valida:
 curl -sS http://127.0.0.1:8080/_fn/openapi.json | jq '{server: .servers[0].url, has_health: (.paths | has("/_fn/health"))}'
 ```
 
-## Ejemplo 6: app Firecracker simple y servicio MySQL
+## Ejemplo 6: app Firecracker residente y servicio MySQL
 
 `fastfn.json`
 
@@ -185,9 +188,14 @@ curl -sS http://127.0.0.1:8080/_fn/openapi.json | jq '{server: .servers[0].url, 
   "functions-dir": "functions",
   "apps": {
     "admin": {
-      "image": "./images/admin",
+      "dockerfile": "./functions/admin/Dockerfile",
+      "context": "./functions/admin",
       "port": 3000,
       "routes": ["/admin/*"],
+      "lifecycle": {
+        "idle_action": "run",
+        "prewarm": true
+      },
       "env": {
         "NODE_ENV": "production"
       }
@@ -195,9 +203,13 @@ curl -sS http://127.0.0.1:8080/_fn/openapi.json | jq '{server: .servers[0].url, 
   },
   "services": {
     "mysql": {
-      "image": "./images/mysql",
+      "image": "mysql:8.4",
       "port": 3306,
       "volume": "mysql-data",
+      "lifecycle": {
+        "idle_action": "run",
+        "prewarm": true
+      },
       "env": {
         "MYSQL_DATABASE": "app",
         "MYSQL_USER": "app",
@@ -219,12 +231,39 @@ Qué esperar:
 
 - Requests que matchean `/admin/*` se proxyean al workload `admin` sobre Firecracker.
 - Las funciones reciben `SERVICE_MYSQL_HOST`, `SERVICE_MYSQL_PORT` y `SERVICE_MYSQL_URL`.
-- Servicios conocidos también reciben aliases de conveniencia como `MYSQL_HOST`, `MYSQL_PORT` y `MYSQL_URL`.
-- `/_fn/health` incluye snapshots de `apps` y `services` junto con la salud de runtimes.
+- Los services también reciben aliases directos basados en su nombre real, como `MYSQL_HOST` o `MARIADB_HOST` cuando no hay ambigüedad.
+- `/_fn/health` incluye snapshots de `apps` y `services` junto con la salud de runtimes, además de `broker_host`, `broker_port`, `internal_host`, `lifecycle_state` y `firecracker_pid`.
+
+## Fuentes de workloads con imagen y lifecycle
+
+Campos de fuente:
+
+- `image`: directorio bundle local de Firecracker o referencia OCI/registry.
+- `image_file`: archivo OCI o Docker local.
+- `dockerfile`: path local al Dockerfile. Usa `context` cuando el build context no coincide con el directorio del Dockerfile.
+
+Campos de lifecycle:
+
+```json
+{
+  "lifecycle": {
+    "idle_action": "run",
+    "pause_after_ms": 15000,
+    "prewarm": true
+  }
+}
+```
+
+Comportamiento:
+
+- La política por default prioriza velocidad: `idle_action` default a `run` y `prewarm` default a `true` tanto para `apps` como para `services`.
+- `pause_after_ms` solo importa cuando `idle_action` vale `pause`.
+- Normalmente los `services` deberían quedar residentes; `pause` sirve más para apps de baja prioridad donde importa más ahorrar memoria que la latencia.
+- Una vez prewarmed, FastFN atiende tráfico HTTP público y privado `*.internal` a través de brokers estables, así que los requests hot no rebuildan, no repullen y no reinician Firecracker.
 
 ## Layout del bundle Firecracker
 
-El campo `image` es una ruta a un directorio local. FastFN espera este layout:
+Cuando `image` apunta a un directorio local, FastFN espera este layout:
 
 ```text
 images/
@@ -253,7 +292,7 @@ Claves opcionales de `fastfn-image.json`:
   "kernel_args": "console=ttyS0 reboot=k panic=1 pci=off",
   "guest_port": 10700,
   "vcpu_count": 1,
-  "memory_mib": 256,
+  "memory_mib": 512,
   "config_drive_bytes": 65536
 }
 ```
@@ -261,8 +300,8 @@ Claves opcionales de `fastfn-image.json`:
 Notas:
 
 - Las rutas dentro de `fastfn-image.json` son relativas al directorio bundle.
-- Si omites el manifiesto, FastFN usa `vmlinux`, `rootfs.ext4`, guest port `10700`, `1` vCPU y `256 MiB`.
-- La conversión `dockerfile` -> bundle todavía no está implementada en este branch; construye el bundle por fuera y apunta `image` a ese directorio.
+- Si omites el manifiesto, FastFN usa `vmlinux`, `rootfs.ext4`, guest port `10700`, `1` vCPU y `512 MiB`.
+- Los bundles locales son solo una de las fuentes posibles; FastFN también puede hacer pull/build de entradas OCI y cachear el bundle convertido automáticamente.
 
 ## Prioridad
 
@@ -308,7 +347,9 @@ curl -sS http://127.0.0.1:8080/_fn/openapi.json | jq '.servers[0].url'
 - Si `runtime-daemons` parece no tener efecto, confirma que estás escalando un runtime externo y no `lua`.
 - Si los sockets no coinciden con el patrón generado, revisa si tienes `FN_RUNTIME_SOCKETS` en el entorno.
 - Si no sabes si un setting va en config o en el entorno, revisa primero la referencia de variables de entorno.
-- Si un app o service dice que no encontró el bundle, confirma que `image` apunta a un directorio local con `vmlinux` y `rootfs.ext4`.
+- Si un app o service dice que no encontró un bundle local, confirma que `image` apunta a un directorio local con `vmlinux` y `rootfs.ext4`.
+- Si un workload usa `image`, `image_file` o `dockerfile` y falla antes del boot, confirma que el daemon de Docker esté accesible porque hoy FastFN resuelve entradas OCI vía la API de Docker Engine.
+- Si los requests hot se sienten más lentos de lo esperado, revisa `/_fn/health` y confirma que `broker_host`, `broker_port`, `lifecycle_state` y `firecracker_pid` permanezcan estables entre requests.
 - Si los workloads con imágenes fallan enseguida en macOS o Windows, es esperado en este branch: Firecracker requiere un host Linux/KVM.
 
 ### Variables de entorno adicionales

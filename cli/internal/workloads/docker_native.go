@@ -259,6 +259,7 @@ func (m *NativeManager) startService(ctx context.Context, spec ServiceSpec) (Ser
 		ContainerID:  containerID,
 		Health:       WorkloadHealth{Up: true, Reason: "ok"},
 		Volume:       spec.Volume,
+		BaseEnv:      cloneEnvMap(spec.Env),
 	}
 	service.URL = BuildServiceURL(spec.Name, service.Host, service.Port, spec.Env)
 	service.InternalURL = BuildServiceURL(spec.Name, service.InternalHost, service.InternalPort, spec.Env)

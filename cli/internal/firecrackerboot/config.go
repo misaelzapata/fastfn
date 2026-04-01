@@ -4,6 +4,9 @@ type Config struct {
 	Version          int               `json:"version"`
 	Kind             string            `json:"kind,omitempty"`
 	Name             string            `json:"name,omitempty"`
+	Debug            bool              `json:"debug,omitempty"`
+	EntropySeed      string            `json:"entropy_seed,omitempty"`
+	DebugSSH         DebugSSHConfig    `json:"debug_ssh,omitempty"`
 	ProcessGroup     string            `json:"process_group,omitempty"`
 	Replica          int               `json:"replica,omitempty"`
 	Port             int               `json:"port,omitempty"`
@@ -23,6 +26,14 @@ type InboundPort struct {
 	Protocol      string `json:"protocol,omitempty"`
 	GuestPort     int    `json:"guest_port"`
 	ContainerPort int    `json:"container_port"`
+}
+
+type DebugSSHConfig struct {
+	GuestPort     int    `json:"guest_port,omitempty"`
+	LocalPort     int    `json:"local_port,omitempty"`
+	User          string `json:"user,omitempty"`
+	AuthorizedKey string `json:"authorized_key,omitempty"`
+	HostKeyPEM    string `json:"host_key_pem,omitempty"`
 }
 
 type ServiceBinding struct {

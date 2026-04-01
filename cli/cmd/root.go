@@ -107,6 +107,9 @@ func configuredPublicBaseURL() string {
 
 func configuredProjectRoot() string {
 	if cfgFile != "" {
+		if absCfg, err := filepath.Abs(cfgFile); err == nil {
+			return filepath.Dir(absCfg)
+		}
 		return filepath.Dir(cfgFile)
 	}
 	wd, err := os.Getwd()
@@ -114,6 +117,60 @@ func configuredProjectRoot() string {
 		return "."
 	}
 	return wd
+}
+
+func projectConfigPath(dir string) string {
+	dir = strings.TrimSpace(dir)
+	if dir == "" {
+		return ""
+	}
+	for _, name := range []string{"fastfn.json", "fastfn.toml"} {
+		path := filepath.Join(dir, name)
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+	return ""
+}
+
+func resolveTargetProjectRoot(absPath string) string {
+	if cfgFile != "" {
+		return configuredProjectRoot()
+	}
+	current := filepath.Clean(strings.TrimSpace(absPath))
+	if current == "" {
+		return configuredProjectRoot()
+	}
+	original := current
+	for {
+		if projectConfigPath(current) != "" {
+			return current
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return original
+		}
+		current = parent
+	}
+}
+
+func configuredSettingsForProject(projectDir string) (map[string]any, error) {
+	projectDir = filepath.Clean(strings.TrimSpace(projectDir))
+	if cfgFile != "" || filepath.Clean(configuredProjectRoot()) == projectDir {
+		return viper.AllSettings(), nil
+	}
+
+	configPath := projectConfigPath(projectDir)
+	if configPath == "" {
+		return map[string]any{}, nil
+	}
+
+	projectViper := viper.New()
+	projectViper.SetConfigFile(configPath)
+	if err := projectViper.ReadInConfig(); err != nil {
+		return nil, err
+	}
+	return projectViper.AllSettings(), nil
 }
 
 func configuredRuntimeDaemons() (string, bool) {
@@ -182,6 +239,14 @@ func configuredImageWorkloads() (workloads.Config, bool, error) {
 	cfg.Apps = apps
 	cfg.Services = services
 	return cfg, appsSet || servicesSet, nil
+}
+
+func configuredImageWorkloadsFor(projectDir, fnDir string) (workloads.Config, bool, error) {
+	settings, err := configuredSettingsForProject(projectDir)
+	if err != nil {
+		return workloads.Config{}, false, err
+	}
+	return workloads.LoadConfigured(projectDir, fnDir, settings)
 }
 
 func normalizeRuntimeDaemonConfigValue(raw any) (string, bool) {

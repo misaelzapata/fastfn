@@ -3,7 +3,6 @@
 package workloads
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -24,15 +23,16 @@ import (
 
 const (
 	defaultFirecrackerBin       = "firecracker"
-	defaultVolumeBytes    int64 = 10 * 1024 * 1024 * 1024
+	defaultVolumeBytes    int64 = 1 * 1024 * 1024 * 1024
 	guestServiceVsockBase       = 30000
 )
 
 type FirecrackerManager struct {
-	cfg   ManagerConfig
-	mu    sync.Mutex
-	state State
-	vms   []managedVM
+	cfg             ManagerConfig
+	mu              sync.Mutex
+	state           State
+	controllers     map[string]*workloadController
+	controllerOrder []*workloadController
 }
 
 type managedVM struct {
@@ -43,6 +43,7 @@ type managedVM struct {
 	vsockPath      string
 	guestPort      int
 	internalHost   string
+	debugSSH       *WorkloadDebugSSH
 	check          HealthcheckSpec
 	machine        *firecracker.Machine
 	proxies        []io.Closer
@@ -53,6 +54,9 @@ type workloadBootConfig struct {
 	Version      int                      `json:"version"`
 	Kind         string                   `json:"kind"`
 	Name         string                   `json:"name"`
+	Debug        bool                     `json:"debug,omitempty"`
+	EntropySeed  string                   `json:"entropy_seed,omitempty"`
+	DebugSSH     *workloadDebugSSHConfig  `json:"debug_ssh,omitempty"`
 	ProcessGroup string                   `json:"process_group,omitempty"`
 	Replica      int                      `json:"replica,omitempty"`
 	Port         int                      `json:"port,omitempty"`
@@ -87,8 +91,18 @@ type workloadVolumeMount struct {
 	Device string `json:"device"`
 }
 
+type workloadDebugSSHConfig struct {
+	GuestPort     int    `json:"guest_port,omitempty"`
+	LocalPort     int    `json:"local_port,omitempty"`
+	User          string `json:"user,omitempty"`
+	AuthorizedKey string `json:"authorized_key,omitempty"`
+	HostKeyPEM    string `json:"host_key_pem,omitempty"`
+}
+
 type workloadServiceBridgeTarget struct {
 	VsockPort       int
+	TargetKind      string
+	TargetName      string
 	TargetVsockPath string
 	TargetGuestPort int
 }
@@ -105,6 +119,16 @@ func NewFirecrackerManager(cfg ManagerConfig) (*FirecrackerManager, error) {
 		return nil, fmt.Errorf("state path is required")
 	}
 	return &FirecrackerManager{cfg: cfg, state: state}, nil
+}
+
+func firecrackerDebugEnabled() bool {
+	value := strings.ToLower(strings.TrimSpace(os.Getenv("FN_FIRECRACKER_DEBUG")))
+	switch value {
+	case "1", "true", "yes", "on", "debug":
+		return true
+	default:
+		return false
+	}
 }
 
 func (m *FirecrackerManager) StatePath() string {
@@ -124,27 +148,24 @@ func (m *FirecrackerManager) Start(ctx context.Context) error {
 		return err
 	}
 
-	services := map[string]ServiceState{}
-	apps := map[string]AppState{}
+	controllers := make(map[string]*workloadController, len(plans))
+	order := make([]*workloadController, 0, len(plans))
 	for _, plan := range plans {
-		serviceState, appState, vm, err := m.startPlannedWorkload(ctx, plan)
-		if err != nil {
-			_ = m.Stop(context.Background())
-			return err
-		}
-		m.vms = append(m.vms, vm)
-		switch plan.Kind {
-		case "service":
-			services[plan.Name] = serviceState
-		case "app":
-			apps[plan.Name] = appState
-		}
+		controller := newWorkloadController(m, plan)
+		controllers[workloadPlanKey(plan.Kind, plan.Name)] = controller
+		order = append(order, controller)
 	}
 
 	m.mu.Lock()
-	m.state.Services = services
-	m.state.Apps = apps
+	m.controllers = controllers
+	m.controllerOrder = order
 	m.mu.Unlock()
+	for _, controller := range order {
+		if err := controller.Start(ctx); err != nil {
+			_ = m.Stop(context.Background())
+			return err
+		}
+	}
 	return m.writeState()
 }
 
@@ -154,43 +175,102 @@ func (m *FirecrackerManager) Stop(ctx context.Context) error {
 	}
 
 	var firstErr error
-	for i := len(m.vms) - 1; i >= 0; i-- {
-		vm := m.vms[i]
-		for _, closer := range vm.serviceBridges {
-			if err := closer.Close(); err != nil && firstErr == nil {
-				firstErr = err
-			}
-		}
-		for _, closer := range vm.proxies {
-			if err := closer.Close(); err != nil && firstErr == nil {
-				firstErr = err
-			}
-		}
-		if vm.machine != nil {
-			shutdownCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-			_ = vm.machine.Shutdown(shutdownCtx)
-			cancel()
-			if err := vm.machine.StopVMM(); err != nil && firstErr == nil {
-				firstErr = err
-			}
-			waitCtx, waitCancel := context.WithTimeout(context.Background(), 3*time.Second)
-			_ = vm.machine.Wait(waitCtx)
-			waitCancel()
-		}
-		if vm.vmDir != "" {
-			if err := os.RemoveAll(vm.vmDir); err != nil && firstErr == nil {
-				firstErr = err
-			}
+	m.mu.Lock()
+	order := append([]*workloadController(nil), m.controllerOrder...)
+	m.mu.Unlock()
+	for i := len(order) - 1; i >= 0; i-- {
+		if err := order[i].Stop(ctx); err != nil && firstErr == nil {
+			firstErr = err
 		}
 	}
-	m.vms = nil
+	m.mu.Lock()
+	m.controllers = nil
+	m.controllerOrder = nil
+	m.state = State{
+		Apps:     map[string]AppState{},
+		Services: map[string]ServiceState{},
+	}
+	m.mu.Unlock()
 	return firstErr
 }
 
 func (m *FirecrackerManager) writeState() error {
+	if m == nil {
+		return nil
+	}
+	state := State{
+		Apps:     map[string]AppState{},
+		Services: map[string]ServiceState{},
+	}
+	m.mu.Lock()
+	order := append([]*workloadController(nil), m.controllerOrder...)
+	m.mu.Unlock()
+	for _, controller := range order {
+		kind, name, snapshot := controller.snapshotState()
+		if kind == "" || name == "" {
+			continue
+		}
+		switch kind {
+		case "service":
+			state.Services[name] = snapshot.service
+		case "app":
+			state.Apps[name] = snapshot.app
+		}
+	}
+	m.mu.Lock()
+	m.state = state
+	m.mu.Unlock()
+	return WriteState(m.cfg.StatePath, state)
+}
+
+func (m *FirecrackerManager) controllerFor(kind, name string) (*workloadController, bool) {
+	if m == nil {
+		return nil, false
+	}
+	key := workloadPlanKey(kind, name)
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return WriteState(m.cfg.StatePath, m.state)
+	controller, ok := m.controllers[key]
+	return controller, ok
+}
+
+func (m *FirecrackerManager) dialBridgeTarget(ctx context.Context, kind, name string) (net.Conn, func(), error) {
+	controller, ok := m.controllerFor(kind, name)
+	if !ok {
+		return nil, nil, fmt.Errorf("bridge target %s.%s is not registered", kind, name)
+	}
+	return controller.AcquireConnection(ctx)
+}
+
+func stopManagedVM(ctx context.Context, vm managedVM) error {
+	var firstErr error
+	for _, closer := range vm.serviceBridges {
+		if err := closer.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	for _, closer := range vm.proxies {
+		if err := closer.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	if vm.machine != nil {
+		shutdownCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		_ = vm.machine.Shutdown(shutdownCtx)
+		cancel()
+		if err := vm.machine.StopVMM(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+		waitCtx, waitCancel := context.WithTimeout(context.Background(), 3*time.Second)
+		_ = vm.machine.Wait(waitCtx)
+		waitCancel()
+	}
+	if vm.vmDir != "" {
+		if err := os.RemoveAll(vm.vmDir); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
 }
 
 func (m *FirecrackerManager) startPlannedWorkload(ctx context.Context, plan workloadPlan) (ServiceState, AppState, managedVM, error) {
@@ -212,6 +292,7 @@ func (m *FirecrackerManager) startPlannedWorkload(ctx context.Context, plan work
 			InternalURL:  plan.InternalURL,
 			Health:       WorkloadHealth{Up: true, Reason: "ok"},
 			Volume:       plan.Volume,
+			DebugSSH:     cloneDebugSSH(vm.debugSSH),
 			BaseEnv:      cloneEnvMap(plan.SpecEnv),
 		}
 		service.URL = BuildServiceURL(plan.Name, service.Host, service.Port, plan.SpecEnv)
@@ -236,6 +317,7 @@ func (m *FirecrackerManager) startPlannedWorkload(ctx context.Context, plan work
 			Routes:       append([]string{}, plan.Routes...),
 			Health:       WorkloadHealth{Up: true, Reason: "ok"},
 			Volume:       plan.Volume,
+			DebugSSH:     cloneDebugSSH(vm.debugSSH),
 			Env:          cloneEnvMap(plan.SpecEnv),
 		}
 		if err := waitForEndpoint(app.Host, app.Port, plan.Healthcheck, 30*time.Second); err != nil {
@@ -277,7 +359,10 @@ func (m *FirecrackerManager) startVMWithBundle(ctx context.Context, plan workloa
 
 	bridgeClosers := make([]io.Closer, 0, len(plan.Bridges))
 	for _, target := range plan.Bridges {
-		bridge, err := startHostServiceBridge(plan.VsockPath, target.VsockPort, target.TargetVsockPath, target.TargetGuestPort)
+		bridgeTarget := target
+		bridge, err := startHostServiceBridge(plan.VsockPath, target.VsockPort, func(handlerCtx context.Context) (net.Conn, func(), error) {
+			return m.dialBridgeTarget(handlerCtx, bridgeTarget.TargetKind, bridgeTarget.TargetName)
+		})
 		if err != nil {
 			for _, closer := range bridgeClosers {
 				_ = closer.Close()
@@ -334,6 +419,12 @@ func (m *FirecrackerManager) startVMWithBundle(ctx context.Context, plan workloa
 			return putMachineConfigSMT(handlerCtx, plan.SocketPath, plan.Bundle.VCPUCount, plan.Bundle.MemoryMiB)
 		},
 	})
+	machine.Handlers.FcInit = machine.Handlers.FcInit.AppendAfter(firecracker.CreateMachineHandlerName, firecracker.Handler{
+		Name: "fastfn.ConfigureEntropy",
+		Fn: func(handlerCtx context.Context, _ *firecracker.Machine) error {
+			return putEntropyDevice(handlerCtx, plan.SocketPath)
+		},
+	})
 	if err := machine.Start(ctx); err != nil {
 		for _, closer := range bridgeClosers {
 			_ = closer.Close()
@@ -352,6 +443,28 @@ func (m *FirecrackerManager) startVMWithBundle(ctx context.Context, plan workloa
 		return managedVM{}, 0, fmt.Errorf("start host proxy for %s.%s: %w", plan.Kind, plan.Name, err)
 	}
 
+	var debugSSHState *WorkloadDebugSSH
+	proxies := []io.Closer{proxy, consoleFile}
+	if plan.DebugSSH != nil {
+		debugProxy, debugHostPort, err := startGuestTCPProxy(plan.VsockPath, plan.DebugSSH.GuestPort)
+		if err != nil {
+			_ = proxy.Close()
+			_ = machine.StopVMM()
+			for _, closer := range bridgeClosers {
+				_ = closer.Close()
+			}
+			_ = consoleFile.Close()
+			return managedVM{}, 0, fmt.Errorf("start debug ssh proxy for %s.%s: %w", plan.Kind, plan.Name, err)
+		}
+		proxies = append(proxies, debugProxy)
+		debugSSHState = &WorkloadDebugSSH{
+			Host:    "127.0.0.1",
+			Port:    debugHostPort,
+			User:    plan.DebugSSH.User,
+			KeyPath: plan.DebugSSH.PrivateKeyPath,
+		}
+	}
+
 	vm := managedVM{
 		kind:           plan.Kind,
 		specName:       plan.Name,
@@ -360,11 +473,33 @@ func (m *FirecrackerManager) startVMWithBundle(ctx context.Context, plan workloa
 		vsockPath:      plan.VsockPath,
 		guestPort:      plan.Bundle.GuestPort,
 		internalHost:   plan.InternalHost,
+		debugSSH:       debugSSHState,
 		machine:        machine,
-		proxies:        []io.Closer{proxy, consoleFile},
+		proxies:        proxies,
 		serviceBridges: bridgeClosers,
 	}
 	return vm, hostPort, nil
+}
+
+func buildWorkloadDebugSSHConfig(cfg *workloadDebugSSH) *workloadDebugSSHConfig {
+	if cfg == nil {
+		return nil
+	}
+	return &workloadDebugSSHConfig{
+		GuestPort:     cfg.GuestPort,
+		LocalPort:     cfg.LocalPort,
+		User:          cfg.User,
+		AuthorizedKey: cfg.AuthorizedKey,
+		HostKeyPEM:    cfg.HostKeyPEM,
+	}
+}
+
+func cloneDebugSSH(cfg *WorkloadDebugSSH) *WorkloadDebugSSH {
+	if cfg == nil {
+		return nil
+	}
+	out := *cfg
+	return &out
 }
 
 func scopeContains(parent, child string) bool {
@@ -487,7 +622,16 @@ func ensureVolumeFile(projectDir string, volume *VolumeSpec) (string, error) {
 			return "", fmt.Errorf("close firecracker volume %s: %w", volume.Name, err)
 		}
 		blocks := defaultVolumeBytes / 1024
-		cmd := exec.Command("mke2fs", "-q", "-t", "ext4", "-F", path, fmt.Sprintf("%d", blocks))
+		cmd := exec.Command(
+			"mke2fs",
+			"-q",
+			"-t", "ext4",
+			"-m", "0",
+			"-E", "lazy_itable_init=0,lazy_journal_init=0",
+			"-F",
+			path,
+			fmt.Sprintf("%d", blocks),
+		)
 		if output, err := cmd.CombinedOutput(); err != nil {
 			return "", fmt.Errorf("format firecracker volume %s: %w: %s", volume.Name, err, strings.TrimSpace(string(output)))
 		}
@@ -550,7 +694,7 @@ func dialGuestVsock(vsockPath string, guestPort int) (net.Conn, error) {
 		_ = conn.Close()
 		return nil, err
 	}
-	line, err := bufio.NewReaderSize(conn, 32).ReadString('\n')
+	line, err := readVsockConnectAck(conn)
 	if err != nil {
 		_ = conn.Close()
 		return nil, err
@@ -566,14 +710,31 @@ func dialGuestVsock(vsockPath string, guestPort int) (net.Conn, error) {
 	return conn, nil
 }
 
-func startHostServiceBridge(vsockPath string, guestPort int, targetVsockPath string, targetGuestPort int) (io.Closer, error) {
+func readVsockConnectAck(conn net.Conn) (string, error) {
+	var line []byte
+	for len(line) < 64 {
+		var chunk [1]byte
+		if _, err := conn.Read(chunk[:]); err != nil {
+			return "", err
+		}
+		line = append(line, chunk[0])
+		if chunk[0] == '\n' {
+			return string(line), nil
+		}
+	}
+	return "", fmt.Errorf("vsock ack exceeded %d bytes", 64)
+}
+
+type bridgeDialFunc func(context.Context) (net.Conn, func(), error)
+
+func startHostServiceBridge(vsockPath string, guestPort int, dialTarget bridgeDialFunc) (io.Closer, error) {
 	path := fmt.Sprintf("%s_%d", vsockPath, guestPort)
 	_ = os.Remove(path)
 	listener, err := net.Listen("unix", path)
 	if err != nil {
 		return nil, err
 	}
-	go serveHostServiceBridge(listener, targetVsockPath, targetGuestPort)
+	go serveHostServiceBridge(listener, dialTarget)
 	return &hostBridgeCloser{Listener: listener, path: path}, nil
 }
 
@@ -588,7 +749,7 @@ func (c *hostBridgeCloser) Close() error {
 	return err
 }
 
-func serveHostServiceBridge(listener net.Listener, targetVsockPath string, targetGuestPort int) {
+func serveHostServiceBridge(listener net.Listener, dialTarget bridgeDialFunc) {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
@@ -596,10 +757,11 @@ func serveHostServiceBridge(listener net.Listener, targetVsockPath string, targe
 		}
 		go func(clientConn net.Conn) {
 			defer clientConn.Close()
-			targetConn, err := dialGuestVsock(targetVsockPath, targetGuestPort)
+			targetConn, releaseTarget, err := dialTarget(context.Background())
 			if err != nil {
 				return
 			}
+			defer releaseTarget()
 			defer targetConn.Close()
 			copyBidirectional(clientConn, targetConn)
 		}(conn)
@@ -627,13 +789,21 @@ func copyBidirectional(left net.Conn, right net.Conn) {
 }
 
 func putMachineConfigSMT(ctx context.Context, socketPath string, vcpuCount, memoryMiB int64) error {
-	payload, err := json.Marshal(map[string]any{
+	return putFirecrackerJSON(ctx, socketPath, "/machine-config", map[string]any{
 		"vcpu_count":   vcpuCount,
 		"mem_size_mib": memoryMiB,
 		"smt":          false,
 	})
+}
+
+func putEntropyDevice(ctx context.Context, socketPath string) error {
+	return putFirecrackerJSON(ctx, socketPath, "/entropy", map[string]any{})
+}
+
+func putFirecrackerJSON(ctx context.Context, socketPath string, resourcePath string, body any) error {
+	payload, err := json.Marshal(body)
 	if err != nil {
-		return fmt.Errorf("marshal firecracker machine config: %w", err)
+		return fmt.Errorf("marshal firecracker request %s: %w", resourcePath, err)
 	}
 
 	transport := &http.Transport{
@@ -644,20 +814,20 @@ func putMachineConfigSMT(ctx context.Context, socketPath string, vcpuCount, memo
 	defer transport.CloseIdleConnections()
 
 	client := &http.Client{Transport: transport}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPut, "http://unix/machine-config", bytes.NewReader(payload))
+	request, err := http.NewRequestWithContext(ctx, http.MethodPut, "http://unix"+resourcePath, bytes.NewReader(payload))
 	if err != nil {
-		return fmt.Errorf("create firecracker machine-config request: %w", err)
+		return fmt.Errorf("create firecracker request %s: %w", resourcePath, err)
 	}
 	request.Header.Set("Content-Type", "application/json")
 
 	response, err := client.Do(request)
 	if err != nil {
-		return fmt.Errorf("put firecracker machine-config: %w", err)
+		return fmt.Errorf("put firecracker %s: %w", resourcePath, err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		body, _ := io.ReadAll(response.Body)
-		return fmt.Errorf("put firecracker machine-config: status %d: %s", response.StatusCode, strings.TrimSpace(string(body)))
+		return fmt.Errorf("put firecracker %s: status %d: %s", resourcePath, response.StatusCode, strings.TrimSpace(string(body)))
 	}
 	return nil
 }

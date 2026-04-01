@@ -96,6 +96,9 @@ func TestRunCmd_NativeMode_HappyPath(t *testing.T) {
 	if !captured.Watch {
 		t.Error("expected Watch=true (follows HotReload)")
 	}
+	if captured.ProjectDir != tmpDir {
+		t.Fatalf("ProjectDir = %q, want %q", captured.ProjectDir, tmpDir)
+	}
 }
 
 func TestRunCmd_NativeModePassesImageWorkloads(t *testing.T) {
@@ -103,15 +106,20 @@ func TestRunCmd_NativeModePassesImageWorkloads(t *testing.T) {
 	viper.Reset()
 
 	tmpDir := t.TempDir()
+	config := `{
+  "services": {
+    "mysql": {
+      "image": "mysql:8.4",
+      "port": 3306,
+      "volume": "mysql-data"
+    }
+  }
+}`
+	if err := os.WriteFile(filepath.Join(tmpDir, "fastfn.json"), []byte(config), 0o644); err != nil {
+		t.Fatalf("write fastfn.json: %v", err)
+	}
 	runNativeMode = true
 	runForceURL = false
-	viper.Set("services", map[string]any{
-		"mysql": map[string]any{
-			"image":  "mysql:8.4",
-			"port":   3306,
-			"volume": "mysql-data",
-		},
-	})
 
 	var captured process.RunConfig
 	runProcessRunner = func(cfg process.RunConfig) error {
@@ -130,6 +138,54 @@ func TestRunCmd_NativeModePassesImageWorkloads(t *testing.T) {
 
 	if len(captured.Workloads.Services) != 1 || captured.Workloads.Services[0].Name != "mysql" {
 		t.Fatalf("expected services workload to be forwarded, got %+v", captured.Workloads.Services)
+	}
+}
+
+func TestRunCmd_NativeMode_UsesTargetProjectRootConfig(t *testing.T) {
+	saveRunGlobals(t)
+	viper.Reset()
+
+	projectDir := t.TempDir()
+	functionsDir := filepath.Join(projectDir, "functions")
+	if err := os.MkdirAll(functionsDir, 0o755); err != nil {
+		t.Fatalf("mkdir functions dir: %v", err)
+	}
+	config := `{
+  "services": {
+    "mysql": {
+      "image": "mysql:8.4",
+      "port": 3306,
+      "volume": "mysql-data"
+    }
+  }
+}`
+	if err := os.WriteFile(filepath.Join(projectDir, "fastfn.json"), []byte(config), 0o644); err != nil {
+		t.Fatalf("write fastfn.json: %v", err)
+	}
+
+	runNativeMode = true
+	runForceURL = false
+
+	var captured process.RunConfig
+	runProcessRunner = func(cfg process.RunConfig) error {
+		captured = cfg
+		return nil
+	}
+	runFatalf = func(format string, args ...interface{}) {
+		t.Fatalf("unexpected fatalf: "+format, args...)
+	}
+	runFatal = func(args ...interface{}) {
+		t.Fatalf("unexpected fatal: %v", args)
+	}
+	runAbsFn = filepath.Abs
+
+	runCmd.Run(runCmd, []string{functionsDir})
+
+	if captured.ProjectDir != projectDir {
+		t.Fatalf("ProjectDir = %q, want %q", captured.ProjectDir, projectDir)
+	}
+	if len(captured.Workloads.Services) != 1 || captured.Workloads.Services[0].Name != "mysql" {
+		t.Fatalf("expected target project services workload, got %+v", captured.Workloads.Services)
 	}
 }
 

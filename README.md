@@ -202,15 +202,17 @@ Key behavior:
 - Env override for internal visibility: `FN_OPENAPI_INCLUDE_INTERNAL`.
 - `public-base-url` controls `servers[0].url` in generated OpenAPI.
 - `domains` helps CLI doctor checks; host enforcement at runtime lives in per-function `invoke.allow_hosts`.
-- `apps` registers simple public HTTP routes backed by Firecracker image bundles.
-- `services` registers private Firecracker image bundles and injects connection env vars into functions.
+- `apps` registers public HTTP routes backed by resident Firecracker microVMs.
+- `services` registers private Firecracker microVMs and injects connection env vars into functions and other image workloads.
 - In this branch, `apps` and `services` are wired for `fastfn dev --native` and `fastfn run --native` on Linux/KVM hosts.
 
-Bundle note:
+Image workload note:
 
-- `image` points to a local Firecracker bundle directory, not a registry image reference.
-- Each bundle should contain `vmlinux`, `rootfs.ext4`, and can optionally include `fastfn-image.json`.
-- `dockerfile`-based conversion is not implemented in this branch yet.
+- Choose exactly one source per workload: `image`, `image_file`, or `dockerfile`.
+- `image` can point to a local Firecracker bundle directory or to an OCI image reference like `postgres:16`.
+- `image_file` loads a local OCI or Docker archive.
+- `dockerfile` builds through the Docker Engine API and caches the converted Firecracker bundle under `.fastfn/firecracker/images/`.
+- Default lifecycle is speed-first: workloads stay resident and prewarmed unless you explicitly switch to `lifecycle.idle_action = "pause"`.
 
 Reference:
 

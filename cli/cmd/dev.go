@@ -96,11 +96,6 @@ var devCmd = &cobra.Command{
 		applyConfiguredRuntimeBinaries(func(envVar, value string) {
 			fmt.Printf("Using runtime binary from config: %s=%s\n", envVar, value)
 		})
-		imageWorkloads, hasImageWorkloads, err := configuredImageWorkloads()
-		if err != nil {
-			devFatalf("Invalid apps/services config: %v", err)
-			return
-		}
 		if devForceURL {
 			_ = os.Setenv("FN_FORCE_URL", "1")
 			fmt.Println("force-url enabled (will allow config/policy routes to override existing URLs)")
@@ -118,6 +113,13 @@ var devCmd = &cobra.Command{
 			return
 		}
 
+		projectRoot := resolveTargetProjectRoot(absPath)
+		imageWorkloads, hasImageWorkloads, err := configuredImageWorkloadsFor(projectRoot, absPath)
+		if err != nil {
+			devFatalf("Invalid apps/services config: %v", err)
+			return
+		}
+
 		if devNativeMode {
 			if dryRun || devBuild {
 				devFatal("--dry-run/--build are only supported in Docker mode (omit --native)")
@@ -130,7 +132,7 @@ var devCmd = &cobra.Command{
 				}
 			}
 			fmt.Println("Running in NATIVE mode (embedded runtime stack)...")
-			if err := runNative(configuredProjectRoot(), absPath, imageWorkloads); err != nil {
+			if err := runNative(projectRoot, absPath, imageWorkloads); err != nil {
 				devFatalf("Native dev failed: %v", err)
 				return
 			}
@@ -154,7 +156,7 @@ var devCmd = &cobra.Command{
 		// We prefer starting from the current working directory so repo developers
 		// can run `fastfn dev /tmp/project` from the repo root and still use the
 		// repo stack. If that fails, fall back to scanning from the target dir.
-		projectRoot := ""
+		projectRoot = ""
 		if wd, wdErr := os.Getwd(); wdErr == nil {
 			if root, rootErr := findProjectRoot(wd); rootErr == nil {
 				projectRoot = root
