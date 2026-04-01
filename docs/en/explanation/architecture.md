@@ -1,6 +1,6 @@
 # Architecture
 
-> Verified status as of **March 13, 2026**.
+> Verified status as of **April 1, 2026**.
 > Runtime note: FastFN resolves dependencies and build steps per function: Python uses `requirements.txt`, Node uses `package.json`, PHP installs from `composer.json` when present, and Rust handlers are built with `cargo`. Host runtimes and tools are required in `fastfn dev --native`, while `fastfn dev` depends on a running Docker daemon.
 
 ## Quick View
@@ -53,6 +53,30 @@ If the root `fn.config.json` defines `assets`, the gateway can answer `GET`/`HEA
 
 That assets mount is intentionally narrow: only the configured directory is public, while sibling function folders stay private. Dotfiles, traversal attempts, and reserved prefixes such as `/_fn/*` and `/console/*` are rejected before file resolution.
 
+Image workloads add a second path in native mode:
+
+```mermaid
+flowchart LR
+  A["HTTP client"] --> B["OpenResty gateway"]
+  B --> C["Public workload broker"]
+  C --> D["Resident Firecracker microVM"]
+  D --> E["App process"]
+  E --> D
+  D --> C
+  C --> B
+  B --> A
+```
+
+Private traffic between image workloads stays off the public edge:
+
+```mermaid
+flowchart LR
+  A["App microVM"] --> B["Guest loopback alias"]
+  B --> C["Host vsock bridge"]
+  C --> D["Target microVM vsock"]
+  D --> E["Target app/service process"]
+```
+
 ## Discovery and route map
 
 FastFN does not keep a static `routes.json` as the source of truth. It discovers functions from a functions directory and builds the route map at runtime.
@@ -76,6 +100,41 @@ If the same public route exists in more than one runtime, the first enabled runt
 When root `assets` are enabled, the static directory is intentionally excluded from zero-config discovery. That keeps files under `public/` or `dist/` from accidentally becoming runtime routes.
 
 In `fastfn dev`, non-leaf project roots are mounted as a whole. That keeps Docker/native hot reload honest: new directories, new asset files, and new explicit function folders become visible without restart, and explicit folders keep their function identity instead of degrading into `handler.*` aliases.
+
+## Image workloads, brokers, and private networking
+
+Public image-backed apps and services do not expose their ephemeral VM ports directly to the rest of the stack.
+
+- Each public endpoint gets a stable host-side broker.
+- `/_fn/health` reports both the legacy public `host`/`port` view and the richer `broker_host`/`broker_port` plus `public_endpoints`.
+- Once prewarmed, hot requests keep using the same resident microVM instead of rebuilding, repulling, or restarting Firecracker.
+
+Private image-workload networking uses stable internal names:
+
+- Every image workload gets an `internal_host` such as `postgres.internal` or `admin.internal`.
+- Inside microVMs, FastFN maps those names to deterministic loopback aliases and bridges guest-to-guest traffic over `vsock`.
+- Multiple services can keep the same native container port because the separation happens by workload name and VM boundary, not by forcing every service onto a different internal port.
+
+This matters for common Fly.io-style setups:
+
+- two `postgres:16` services can both keep `5432`
+- two Flask apps can both keep `5000`
+- dependent apps connect through `*.internal` and service-scoped env vars instead of hardcoded host ports
+
+## Access policy for public workloads
+
+FastFN now has two different edge-policy layers:
+
+- function routes still use per-function `invoke.allow_hosts`
+- public image workloads use `access.allow_hosts` and `access.allow_cidrs`
+
+Enforcement points:
+
+- HTTP public workloads: OpenResty checks the normalized request host plus the client IP.
+- TCP public workloads: the host-side broker checks only `allow_cidrs`.
+- Private `*.internal` traffic is not gated by the public firewall; it stays inside the workload-to-workload network path.
+
+When FastFN runs behind trusted proxies, client IP resolution follows `FN_TRUSTED_PROXY_CIDRS`. Without that allowlist, the gateway treats `remote_addr` as the caller IP and ignores untrusted forwarding headers.
 
 ## Runtime routing
 
@@ -162,6 +221,13 @@ This model is intentionally simple, but it is not magic:
 - Unix sockets keep the local stack predictable, but they still add a hop compared with in-process Lua.
 
 That is why FastFN publishes raw benchmark artifacts and recommends measuring your own workload before raising daemon counts across the board.
+
+The current Firecracker image-workload matrix reinforces the same lesson:
+
+- cold build/pull and prewarm can take seconds
+- hot resident traffic drops into single-digit milliseconds after prewarm
+- the hot path stays fast because it reuses the same broker and the same Firecracker process
+- services with slower bootstrap sequences now wait for a short stable-ready window before FastFN exposes them to dependent apps
 
 ## Related links
 

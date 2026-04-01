@@ -26,13 +26,7 @@ func effectiveHealthcheck(spec HealthcheckSpec) HealthcheckSpec {
 func waitForEndpoint(host string, port int, check HealthcheckSpec, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for {
-		var err error
-		switch strings.ToLower(strings.TrimSpace(check.Type)) {
-		case "http":
-			err = checkHTTP(host, port, check)
-		default:
-			err = checkTCP(host, port, check)
-		}
+		err := checkEndpoint(host, port, check)
 		if err == nil {
 			return nil
 		}
@@ -40,6 +34,48 @@ func waitForEndpoint(host string, port int, check HealthcheckSpec, timeout time.
 			return err
 		}
 		time.Sleep(200 * time.Millisecond)
+	}
+}
+
+func waitForEndpointStable(host string, port int, check HealthcheckSpec, timeout time.Duration, stableFor time.Duration) error {
+	if stableFor <= 0 {
+		return waitForEndpoint(host, port, check, timeout)
+	}
+	deadline := time.Now().Add(timeout)
+	var (
+		lastErr     error
+		stableSince time.Time
+	)
+	for {
+		err := checkEndpoint(host, port, check)
+		now := time.Now()
+		if err == nil {
+			if stableSince.IsZero() {
+				stableSince = now
+			}
+			if now.Sub(stableSince) >= stableFor {
+				return nil
+			}
+		} else {
+			lastErr = err
+			stableSince = time.Time{}
+		}
+		if now.After(deadline) {
+			if lastErr != nil {
+				return lastErr
+			}
+			return fmt.Errorf("endpoint did not remain healthy for %s", stableFor)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+}
+
+func checkEndpoint(host string, port int, check HealthcheckSpec) error {
+	switch strings.ToLower(strings.TrimSpace(check.Type)) {
+	case "http":
+		return checkHTTP(host, port, check)
+	default:
+		return checkTCP(host, port, check)
 	}
 }
 

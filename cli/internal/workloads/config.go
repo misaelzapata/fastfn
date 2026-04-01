@@ -34,6 +34,7 @@ type PortSpec struct {
 	Public        bool            `json:"public,omitempty"`
 	Routes        []string        `json:"routes,omitempty"`
 	ListenPort    int             `json:"listen_port,omitempty"`
+	Access        AccessSpec      `json:"access,omitempty"`
 	Healthcheck   HealthcheckSpec `json:"healthcheck,omitempty"`
 }
 
@@ -80,6 +81,7 @@ type AppSpec struct {
 	Routes        []string           `json:"routes,omitempty"`
 	Replicas      int                `json:"replicas,omitempty"`
 	Ports         []PortSpec         `json:"ports,omitempty"`
+	Access        AccessSpec         `json:"access,omitempty"`
 	ProcessGroups []ProcessGroupSpec `json:"process_groups,omitempty"`
 	HA            *HAConfig          `json:"ha,omitempty"`
 	Lifecycle     LifecycleSpec      `json:"lifecycle,omitempty"`
@@ -102,6 +104,7 @@ type ServiceSpec struct {
 	Healthcheck   HealthcheckSpec    `json:"healthcheck,omitempty"`
 	Routes        []string           `json:"routes,omitempty"`
 	Ports         []PortSpec         `json:"ports,omitempty"`
+	Access        AccessSpec         `json:"access,omitempty"`
 	ProcessGroups []ProcessGroupSpec `json:"process_groups,omitempty"`
 	HA            *HAConfig          `json:"ha,omitempty"`
 	Lifecycle     LifecycleSpec      `json:"lifecycle,omitempty"`
@@ -269,6 +272,11 @@ func normalizeAppSpec(baseDir, name string, raw any) (AppSpec, error) {
 	if err := populateSourceFields(baseDir, cfg, &spec.Image, &spec.ImageFile, &spec.Dockerfile, &spec.Context); err != nil {
 		return AppSpec{}, err
 	}
+	specAccess, err := normalizeAccess(cfg["access"])
+	if err != nil {
+		return AppSpec{}, fmt.Errorf("access: %w", err)
+	}
+	spec.Access = specAccess
 	volumes, err := normalizeVolumes(name, cfg["volumes"], cfg["volume"])
 	if err != nil {
 		return AppSpec{}, fmt.Errorf("volumes: %w", err)
@@ -283,7 +291,7 @@ func normalizeAppSpec(baseDir, name string, raw any) (AppSpec, error) {
 	}
 	spec.Lifecycle = normalizeLifecycle(cfg["lifecycle"], defaultAppLifecycle())
 
-	ports, legacyPort, legacyRoutes, legacyHealth, err := normalizePorts(name, cfg, true)
+	ports, legacyPort, legacyRoutes, legacyHealth, err := normalizePorts(name, cfg, true, spec.Access)
 	if err != nil {
 		return AppSpec{}, err
 	}
@@ -322,6 +330,11 @@ func normalizeServiceSpec(baseDir, name string, raw any) (ServiceSpec, error) {
 	if err := populateSourceFields(baseDir, cfg, &spec.Image, &spec.ImageFile, &spec.Dockerfile, &spec.Context); err != nil {
 		return ServiceSpec{}, err
 	}
+	specAccess, err := normalizeAccess(cfg["access"])
+	if err != nil {
+		return ServiceSpec{}, fmt.Errorf("access: %w", err)
+	}
+	spec.Access = specAccess
 	volumes, err := normalizeVolumes(name, cfg["volumes"], cfg["volume"])
 	if err != nil {
 		return ServiceSpec{}, fmt.Errorf("volumes: %w", err)
@@ -336,7 +349,7 @@ func normalizeServiceSpec(baseDir, name string, raw any) (ServiceSpec, error) {
 	}
 	spec.Lifecycle = normalizeLifecycle(cfg["lifecycle"], defaultServiceLifecycle())
 
-	ports, legacyPort, legacyRoutes, legacyHealth, err := normalizePorts(name, cfg, false)
+	ports, legacyPort, legacyRoutes, legacyHealth, err := normalizePorts(name, cfg, false, spec.Access)
 	if err != nil {
 		return ServiceSpec{}, err
 	}
@@ -400,6 +413,15 @@ func validateCommonSpec(name, image, imageFile, dockerfile, context string, port
 		if port.Public && protocol != "http" && (port.ListenPort < 1 || port.ListenPort > 65535) {
 			return fmt.Errorf("port %q: public tcp exposure requires listen_port", port.Name)
 		}
+		if port.Public && protocol == "http" && len(port.Routes) == 0 {
+			return fmt.Errorf("port %q: public http exposure requires routes", port.Name)
+		}
+		if !port.Public && !port.Access.IsZero() {
+			return fmt.Errorf("port %q: access is only supported on public ports", port.Name)
+		}
+		if protocol != "http" && len(port.Access.AllowHosts) > 0 {
+			return fmt.Errorf("port %q: allow_hosts is only supported for public http ports", port.Name)
+		}
 	}
 	if len(groups) == 0 {
 		return fmt.Errorf("must define at least one process group")
@@ -431,11 +453,27 @@ func validateCommonSpec(name, image, imageFile, dockerfile, context string, port
 	return nil
 }
 
-func normalizePorts(workloadName string, cfg map[string]any, isApp bool) ([]PortSpec, int, []string, HealthcheckSpec, error) {
+func normalizePorts(workloadName string, cfg map[string]any, isApp bool, shorthandAccess AccessSpec) ([]PortSpec, int, []string, HealthcheckSpec, error) {
 	if rawPorts, ok := cfg["ports"]; ok && rawPorts != nil {
 		ports, err := normalizeNamedPorts(rawPorts)
 		if err != nil {
 			return nil, 0, nil, HealthcheckSpec{}, fmt.Errorf("ports: %w", err)
+		}
+		if !shorthandAccess.IsZero() {
+			applied := false
+			for idx := range ports {
+				if !ports[idx].Public {
+					continue
+				}
+				if ports[idx].Access.IsZero() {
+					ports[idx].Access = shorthandAccess
+					applied = true
+					break
+				}
+			}
+			if !applied {
+				return nil, 0, nil, HealthcheckSpec{}, fmt.Errorf("access shorthand requires at least one public port")
+			}
 		}
 		legacyPort, routes, health, err := selectLegacyPortFields(ports, isApp)
 		if err != nil {
@@ -464,6 +502,7 @@ func normalizePorts(workloadName string, cfg map[string]any, isApp bool) ([]Port
 		Protocol:      protocol,
 		Public:        public,
 		Routes:        routes,
+		Access:        shorthandAccess,
 		Healthcheck:   health,
 	}}
 	if isApp && len(routes) == 0 {
@@ -500,11 +539,21 @@ func normalizeNamedPorts(raw any) ([]PortSpec, error) {
 			spec.Public = normalizeBool(exposeCfg["public"])
 			spec.Routes = normalizeRoutes(exposeCfg["routes"])
 			spec.ListenPort = normalizePositiveInt(exposeCfg["listen_port"])
+			access, accessErr := normalizeAccess(exposeCfg["access"])
+			if accessErr != nil {
+				return nil, fmt.Errorf("%s access: %w", name, accessErr)
+			}
+			spec.Access = access
 		}
 		if !exposeSet {
 			spec.Public = normalizeBool(cfg["public"])
 			spec.Routes = normalizeRoutes(cfg["routes"])
 			spec.ListenPort = normalizePositiveInt(cfg["listen_port"])
+			access, accessErr := normalizeAccess(cfg["access"])
+			if accessErr != nil {
+				return nil, fmt.Errorf("%s access: %w", name, accessErr)
+			}
+			spec.Access = access
 		}
 		if spec.Protocol == "" {
 			if spec.Public && len(spec.Routes) > 0 {

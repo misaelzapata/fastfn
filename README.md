@@ -201,7 +201,7 @@ Key behavior:
 - `openapi-include-internal` defaults to `false`.
 - Env override for internal visibility: `FN_OPENAPI_INCLUDE_INTERNAL`.
 - `public-base-url` controls `servers[0].url` in generated OpenAPI.
-- `domains` helps CLI doctor checks; host enforcement at runtime lives in per-function `invoke.allow_hosts`.
+- `domains` helps CLI doctor checks; runtime host enforcement for functions still lives in per-function `invoke.allow_hosts`.
 - `apps` registers public HTTP routes backed by resident Firecracker microVMs.
 - `services` registers private Firecracker microVMs and injects connection env vars into functions and other image workloads.
 - In this branch, `apps` and `services` are wired for `fastfn dev --native` and `fastfn run --native` on Linux/KVM hosts.
@@ -213,11 +213,47 @@ Image workload note:
 - `image_file` loads a local OCI or Docker archive.
 - `dockerfile` builds through the Docker Engine API and caches the converted Firecracker bundle under `.fastfn/firecracker/images/`.
 - Default lifecycle is speed-first: workloads stay resident and prewarmed unless you explicitly switch to `lifecycle.idle_action = "pause"`.
+- Public image workloads can enforce a simple firewall with `access.allow_hosts` and `access.allow_cidrs`.
+- Nested `fn.config.json` files can declare `app`, `service`, `apps`, or `services` for a folder without editing the global `fastfn.json`.
+
+Access example:
+
+```json
+{
+  "app": {
+    "dockerfile": "./Dockerfile.fastfn",
+    "context": ".",
+    "port": 8000,
+    "routes": ["/*"],
+    "access": {
+      "allow_hosts": ["app.example.com", "*.corp.example.com"],
+      "allow_cidrs": ["203.0.113.0/24", "2001:db8::/32"]
+    }
+  }
+}
+```
+
+Rules:
+
+- On HTTP, `allow_hosts` and `allow_cidrs` are cumulative when both are present.
+- On TCP public ports, FastFN only supports `allow_cidrs`.
+- Behind proxies, client IP evaluation uses `FN_TRUSTED_PROXY_CIDRS`.
+
+Benchmark snapshot from the 20-case Firecracker matrix on April 1, 2026:
+
+- Flask from `dockerfile`: build/pull `1168ms`, first `200` in `5017ms`, hot `p50 1.94ms`
+- Registry app `traefik/whoami:v1.10.2`: build/pull `98ms`, first `200` in `2508ms`, hot `p50 1.26ms`
+- FastAPI + Postgres over `*.internal`: first `200` in `17036ms`, hot `p50 5.29ms`
+- Two `postgres:16` services with the same native `5432` port: first `200` in `22090ms`, hot `p50 10.92ms`, same Firecracker PID across the hot loop
+
+The reproducible harness lives under `cli/tools/image-matrix-bench/` and writes Markdown/JSON/CSV outputs to the configured `--smoke-dir`.
 
 Reference:
 
 - [`docs/en/reference/fastfn-config.md`](./docs/en/reference/fastfn-config.md)
 - [`docs/en/reference/function-spec.md`](./docs/en/reference/function-spec.md)
+- [`docs/en/explanation/performance-benchmarks.md`](./docs/en/explanation/performance-benchmarks.md)
+- [`docs/en/explanation/security-model.md`](./docs/en/explanation/security-model.md)
 
 ## License
 

@@ -42,6 +42,7 @@ Notes:
 - `dockerfile` builds through the Docker Engine API, then converts the resulting OCI image into a cached Firecracker bundle under `.fastfn/firecracker/images/`.
 - Current branch scope keeps image workloads on native mode only, and only on Linux/KVM hosts; classic Docker dev remains functions-only.
 - The fast path is resident and prewarmed by default: once an app or service is up, public and internal traffic go through stable broker endpoints instead of rebuilding or restarting Firecracker on each request.
+- Folder-local `fn.config.json` files can declare `app`, `service`, `apps`, or `services` without editing the global `fastfn.json`.
 
 ## Example 1: Default functions directory
 
@@ -234,6 +235,49 @@ What to expect:
 - Services also receive direct aliases based on their real service names, such as `MYSQL_HOST` or `MARIADB_HOST` when those names are not ambiguous.
 - `/_fn/health` includes `apps` and `services` snapshots alongside runtime health, including `broker_host`, `broker_port`, `internal_host`, `lifecycle_state`, and `firecracker_pid`.
 
+## Example 7: Restrict a public app with `allow_hosts` and `allow_cidrs`
+
+`fastfn.json`
+
+```json
+{
+  "functions-dir": "functions",
+  "apps": {
+    "dashboard": {
+      "image": "traefik/whoami:v1.10.2",
+      "port": 80,
+      "routes": ["/dashboard/*"],
+      "access": {
+        "allow_hosts": ["dashboard.example.com", "*.corp.example.com"],
+        "allow_cidrs": ["203.0.113.0/24", "2001:db8::/32"]
+      }
+    }
+  }
+}
+```
+
+What to expect:
+
+- Host matching is case-insensitive and supports exact values plus `*.example.com` style wildcards.
+- Client IP matching accepts both CIDR strings and single IPs, which FastFN normalizes to `/32` or `/128`.
+- When both `allow_hosts` and `allow_cidrs` are present on HTTP, both must pass.
+- Public TCP ports only support `allow_cidrs`.
+- If FastFN sits behind a trusted proxy, set `FN_TRUSTED_PROXY_CIDRS` so the gateway can safely honor `X-Forwarded-For`.
+
+Folder-local variant:
+
+```json
+{
+  "service": {
+    "image": "postgres:16",
+    "port": 5432,
+    "volume": "payments-db"
+  }
+}
+```
+
+Placed in `functions/payments/fn.config.json`, this declares a folder-scoped service without changing the root `fastfn.json`.
+
 ## Image workload sources and lifecycle
 
 Workload source fields:
@@ -260,6 +304,41 @@ Behavior:
 - `pause_after_ms` only matters when `idle_action` is `pause`.
 - `services` should normally stay resident; `pause` is mainly useful for low-priority apps where saving memory matters more than latency.
 - Once prewarmed, FastFN serves public HTTP and private `*.internal` traffic through stable brokers, so hot requests do not rebuild, repull, or restart Firecracker.
+- Prewarmed services also wait for a short stable-ready window before FastFN considers them attachable. That prevents dependent apps from connecting to a transient bootstrap listener and then failing during warmup.
+
+## Access policy
+
+The simple firewall lives on public image workloads.
+
+Supported shapes:
+
+- `app.access` and `service.access` act as shorthands for the primary public port in the simple `port + routes` schema.
+- `ports[].access` applies policy per public endpoint when you use the expanded `ports` schema.
+
+Fields:
+
+```json
+{
+  "access": {
+    "allow_hosts": ["api.example.com", "*.corp.example.com"],
+    "allow_cidrs": ["203.0.113.0/24", "2001:db8::/32"]
+  }
+}
+```
+
+Rules:
+
+- `allow_hosts` is HTTP-only and matches the request host after FastFN normalizes the `Host` or `X-Forwarded-Host` header.
+- `allow_cidrs` works for both HTTP and TCP public ports.
+- On HTTP, `allow_hosts` and `allow_cidrs` are cumulative when both exist.
+- On TCP public ports, setting `allow_hosts` is a config error.
+- Empty `access` means the endpoint is public with no extra restriction.
+
+Health and state:
+
+- `/_fn/health` keeps the legacy `host`, `port`, and `routes` fields for the primary HTTP app endpoint.
+- The richer `public_endpoints` list now includes `protocol`, `routes`, `listen_port`, `allow_hosts`, and `allow_cidrs`.
+- Hot resident state also includes `broker_host`, `broker_port`, `internal_host`, `internal_url`, `lifecycle_state`, and `firecracker_pid`.
 
 ## Firecracker bundle layout
 
@@ -351,6 +430,7 @@ curl -sS http://127.0.0.1:8080/_fn/openapi.json | jq '.servers[0].url'
 - If a workload uses `image`, `image_file`, or `dockerfile` and fails before boot, confirm that the Docker daemon is reachable because FastFN currently resolves OCI inputs through the Docker Engine API.
 - If hot requests look slower than expected, inspect `/_fn/health` and verify `broker_host`, `broker_port`, `lifecycle_state`, and `firecracker_pid` stay stable across repeated requests.
 - If image workloads fail immediately on macOS or Windows, that is expected in this branch; Firecracker workloads require a Linux/KVM host.
+- If `allow_cidrs` appears to evaluate the proxy IP instead of the caller IP, set `FN_TRUSTED_PROXY_CIDRS` to the CIDR list of the proxies you trust.
 
 ### Additional environment variables
 

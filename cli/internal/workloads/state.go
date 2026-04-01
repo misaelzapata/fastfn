@@ -25,55 +25,69 @@ type WorkloadHealth struct {
 	Reason string `json:"reason,omitempty"`
 }
 
+type PublicEndpointState struct {
+	Name          string   `json:"name"`
+	Protocol      string   `json:"protocol,omitempty"`
+	Host          string   `json:"host,omitempty"`
+	Port          int      `json:"port,omitempty"`
+	ContainerPort int      `json:"container_port,omitempty"`
+	ListenPort    int      `json:"listen_port,omitempty"`
+	Routes        []string `json:"routes,omitempty"`
+	AllowHosts    []string `json:"allow_hosts,omitempty"`
+	AllowCIDRs    []string `json:"allow_cidrs,omitempty"`
+}
+
 type AppState struct {
-	Name           string            `json:"name"`
-	Image          string            `json:"image"`
-	ImageDigest    string            `json:"image_digest,omitempty"`
-	Host           string            `json:"host"`
-	Port           int               `json:"port"`
-	BrokerHost     string            `json:"broker_host,omitempty"`
-	BrokerPort     int               `json:"broker_port,omitempty"`
-	InternalHost   string            `json:"internal_host,omitempty"`
-	InternalPort   int               `json:"internal_port"`
-	InternalURL    string            `json:"internal_url,omitempty"`
-	Routes         []string          `json:"routes,omitempty"`
-	ContainerID    string            `json:"container_id,omitempty"`
-	Health         WorkloadHealth    `json:"health"`
-	Lifecycle      LifecycleSpec     `json:"lifecycle,omitempty"`
-	LifecycleState string            `json:"lifecycle_state,omitempty"`
-	Paused         bool              `json:"paused,omitempty"`
-	ResumeCount    int               `json:"resume_count,omitempty"`
-	LastResumeMS   int64             `json:"last_resume_ms,omitempty"`
-	FirecrackerPID int               `json:"firecracker_pid,omitempty"`
-	Volume         *VolumeSpec       `json:"volume,omitempty"`
-	DebugSSH       *WorkloadDebugSSH `json:"debug_ssh,omitempty"`
-	Env            map[string]string `json:"env,omitempty"`
+	Name            string                `json:"name"`
+	Image           string                `json:"image"`
+	ImageDigest     string                `json:"image_digest,omitempty"`
+	Host            string                `json:"host"`
+	Port            int                   `json:"port"`
+	BrokerHost      string                `json:"broker_host,omitempty"`
+	BrokerPort      int                   `json:"broker_port,omitempty"`
+	InternalHost    string                `json:"internal_host,omitempty"`
+	InternalPort    int                   `json:"internal_port"`
+	InternalURL     string                `json:"internal_url,omitempty"`
+	Routes          []string              `json:"routes,omitempty"`
+	PublicEndpoints []PublicEndpointState `json:"public_endpoints,omitempty"`
+	ContainerID     string                `json:"container_id,omitempty"`
+	Health          WorkloadHealth        `json:"health"`
+	Lifecycle       LifecycleSpec         `json:"lifecycle,omitempty"`
+	LifecycleState  string                `json:"lifecycle_state,omitempty"`
+	Paused          bool                  `json:"paused,omitempty"`
+	ResumeCount     int                   `json:"resume_count,omitempty"`
+	LastResumeMS    int64                 `json:"last_resume_ms,omitempty"`
+	FirecrackerPID  int                   `json:"firecracker_pid,omitempty"`
+	Volume          *VolumeSpec           `json:"volume,omitempty"`
+	DebugSSH        *WorkloadDebugSSH     `json:"debug_ssh,omitempty"`
+	Env             map[string]string     `json:"env,omitempty"`
 }
 
 type ServiceState struct {
-	Name           string            `json:"name"`
-	Image          string            `json:"image"`
-	ImageDigest    string            `json:"image_digest,omitempty"`
-	Host           string            `json:"host"`
-	Port           int               `json:"port"`
-	BrokerHost     string            `json:"broker_host,omitempty"`
-	BrokerPort     int               `json:"broker_port,omitempty"`
-	InternalHost   string            `json:"internal_host"`
-	InternalPort   int               `json:"internal_port"`
-	URL            string            `json:"url"`
-	InternalURL    string            `json:"internal_url"`
-	ContainerID    string            `json:"container_id,omitempty"`
-	Health         WorkloadHealth    `json:"health"`
-	Lifecycle      LifecycleSpec     `json:"lifecycle,omitempty"`
-	LifecycleState string            `json:"lifecycle_state,omitempty"`
-	Paused         bool              `json:"paused,omitempty"`
-	ResumeCount    int               `json:"resume_count,omitempty"`
-	LastResumeMS   int64             `json:"last_resume_ms,omitempty"`
-	FirecrackerPID int               `json:"firecracker_pid,omitempty"`
-	Volume         *VolumeSpec       `json:"volume,omitempty"`
-	DebugSSH       *WorkloadDebugSSH `json:"debug_ssh,omitempty"`
-	BaseEnv        map[string]string `json:"-"`
-	FunctionEnv    map[string]string `json:"function_env,omitempty"`
+	Name            string                `json:"name"`
+	Image           string                `json:"image"`
+	ImageDigest     string                `json:"image_digest,omitempty"`
+	Host            string                `json:"host"`
+	Port            int                   `json:"port"`
+	BrokerHost      string                `json:"broker_host,omitempty"`
+	BrokerPort      int                   `json:"broker_port,omitempty"`
+	InternalHost    string                `json:"internal_host"`
+	InternalPort    int                   `json:"internal_port"`
+	URL             string                `json:"url"`
+	InternalURL     string                `json:"internal_url"`
+	PublicEndpoints []PublicEndpointState `json:"public_endpoints,omitempty"`
+	ContainerID     string                `json:"container_id,omitempty"`
+	Health          WorkloadHealth        `json:"health"`
+	Lifecycle       LifecycleSpec         `json:"lifecycle,omitempty"`
+	LifecycleState  string                `json:"lifecycle_state,omitempty"`
+	Paused          bool                  `json:"paused,omitempty"`
+	ResumeCount     int                   `json:"resume_count,omitempty"`
+	LastResumeMS    int64                 `json:"last_resume_ms,omitempty"`
+	FirecrackerPID  int                   `json:"firecracker_pid,omitempty"`
+	Volume          *VolumeSpec           `json:"volume,omitempty"`
+	DebugSSH        *WorkloadDebugSSH     `json:"debug_ssh,omitempty"`
+	BaseEnv         map[string]string     `json:"-"`
+	FunctionEnv     map[string]string     `json:"function_env,omitempty"`
 }
 
 func WriteState(path string, state State) error {

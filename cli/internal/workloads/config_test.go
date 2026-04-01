@@ -166,6 +166,102 @@ func TestNormalizeServiceSpecs_AcceptsDockerfile(t *testing.T) {
 	}
 }
 
+func TestNormalizeAppSpecs_AccessShorthand(t *testing.T) {
+	apps, ok, err := NormalizeAppSpecs(map[string]any{
+		"admin": map[string]any{
+			"image": "ghcr.io/acme/admin:latest",
+			"port":  3000,
+			"routes": []any{
+				"/admin/*",
+			},
+			"access": map[string]any{
+				"allow_hosts": []any{"admin.example.com"},
+				"allow_cidrs": []any{"10.0.0.0/8"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NormalizeAppSpecs() error = %v", err)
+	}
+	if !ok || len(apps) != 1 {
+		t.Fatalf("expected one app, got ok=%v apps=%d", ok, len(apps))
+	}
+	if len(apps[0].Ports) != 1 {
+		t.Fatalf("Ports = %+v", apps[0].Ports)
+	}
+	if apps[0].Ports[0].Access.AllowHosts[0] != "admin.example.com" {
+		t.Fatalf("AllowHosts = %+v", apps[0].Ports[0].Access.AllowHosts)
+	}
+	if apps[0].Ports[0].Access.AllowCIDRs[0] != "10.0.0.0/8" {
+		t.Fatalf("AllowCIDRs = %+v", apps[0].Ports[0].Access.AllowCIDRs)
+	}
+}
+
+func TestNormalizeServiceSpecs_PublicTCPRejectsAllowHosts(t *testing.T) {
+	_, _, err := NormalizeServiceSpecs(map[string]any{
+		"postgres": map[string]any{
+			"image": "postgres:16",
+			"ports": map[string]any{
+				"sql": map[string]any{
+					"container_port": 5432,
+					"public":         true,
+					"listen_port":    15432,
+					"access": map[string]any{
+						"allow_hosts": []any{"db.example.com"},
+					},
+				},
+			},
+		},
+	})
+	if err == nil {
+		t.Fatalf("NormalizeServiceSpecs() error = nil, want allow_hosts rejection")
+	}
+}
+
+func TestBuildPublicEndpointPlans_ReusesPrimaryGuestPort(t *testing.T) {
+	endpoints, err := buildPublicEndpointPlans(3000, 10700, []PortSpec{
+		{
+			Name:          "http",
+			ContainerPort: 3000,
+			Protocol:      "http",
+			Public:        true,
+			Routes:        []string{"/admin/*"},
+		},
+		{
+			Name:          "metrics",
+			ContainerPort: 9090,
+			Protocol:      "http",
+			Public:        true,
+			Routes:        []string{"/metrics"},
+		},
+		{
+			Name:          "sql",
+			ContainerPort: 5432,
+			Protocol:      "tcp",
+			Public:        true,
+			ListenPort:    15432,
+			Access: AccessSpec{
+				AllowCIDRs: []string{"10.0.0.0/8"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("buildPublicEndpointPlans() error = %v", err)
+	}
+	if len(endpoints) != 3 {
+		t.Fatalf("len(endpoints) = %d", len(endpoints))
+	}
+	if endpoints[0].GuestPort != 10700 {
+		t.Fatalf("endpoints[0].GuestPort = %d", endpoints[0].GuestPort)
+	}
+	if endpoints[1].GuestPort != 10701 || endpoints[2].GuestPort != 10702 {
+		t.Fatalf("endpoints = %+v", endpoints)
+	}
+	if endpoints[2].Access.AllowCIDRs[0] != "10.0.0.0/8" {
+		t.Fatalf("tcp access = %+v", endpoints[2].Access)
+	}
+}
+
 func TestBuildFunctionServiceEnv_UsesServiceNameAliases(t *testing.T) {
 	service := ServiceState{
 		Name:         "mariadb",

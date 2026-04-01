@@ -16,30 +16,41 @@ import (
 const guestEntropySeedBytes = 256
 
 type workloadPlan struct {
-	Kind         string
-	Name         string
-	ScopeDir     string
-	Image        string
-	Lifecycle    LifecycleSpec
-	InternalHost string
-	InternalPort int
-	InternalURL  string
-	Routes       []string
-	Volume       *VolumeSpec
-	Healthcheck  HealthcheckSpec
-	SpecEnv      map[string]string
-	BaseEnv      map[string]string
-	Bundle       FirecrackerBundle
-	Boot         workloadBootConfig
-	DebugSSH     *workloadDebugSSH
-	Peer         workloadPeer
-	Bridges      []workloadServiceBridgeTarget
-	VMDir        string
-	ConfigDrive  string
-	SocketPath   string
-	VsockPath    string
-	LogPath      string
-	ConsolePath  string
+	Kind            string
+	Name            string
+	ScopeDir        string
+	Image           string
+	Lifecycle       LifecycleSpec
+	InternalHost    string
+	InternalPort    int
+	InternalURL     string
+	Routes          []string
+	Volume          *VolumeSpec
+	Healthcheck     HealthcheckSpec
+	SpecEnv         map[string]string
+	BaseEnv         map[string]string
+	PublicEndpoints []publicEndpointPlan
+	Bundle          FirecrackerBundle
+	Boot            workloadBootConfig
+	DebugSSH        *workloadDebugSSH
+	Peer            workloadPeer
+	Bridges         []workloadServiceBridgeTarget
+	VMDir           string
+	ConfigDrive     string
+	SocketPath      string
+	VsockPath       string
+	LogPath         string
+	ConsolePath     string
+}
+
+type publicEndpointPlan struct {
+	Name          string
+	Protocol      string
+	ContainerPort int
+	GuestPort     int
+	ListenPort    int
+	Routes        []string
+	Access        AccessSpec
 }
 
 func (m *FirecrackerManager) planWorkloads(ctx context.Context) ([]workloadPlan, error) {
@@ -109,22 +120,27 @@ func (m *FirecrackerManager) planService(ctx context.Context, spec ServiceSpec, 
 	if err != nil {
 		return workloadPlan{}, err
 	}
+	publicEndpoints, err := buildPublicEndpointPlans(spec.Port, bundle.GuestPort, spec.Ports)
+	if err != nil {
+		return workloadPlan{}, err
+	}
 
 	plan := workloadPlan{
-		Kind:         "service",
-		Name:         spec.Name,
-		ScopeDir:     spec.ScopeDir,
-		Image:        firstNonEmpty(spec.Image, spec.ImageFile, spec.Dockerfile),
-		Lifecycle:    spec.Lifecycle,
-		InternalHost: internalHost,
-		InternalPort: spec.Port,
-		InternalURL:  internalURL,
-		Volume:       spec.Volume,
-		Healthcheck:  effectiveHealthcheck(spec.Healthcheck),
-		SpecEnv:      cloneEnvMap(spec.Env),
-		BaseEnv:      baseEnv,
-		Bundle:       bundle,
-		DebugSSH:     debugSSH,
+		Kind:            "service",
+		Name:            spec.Name,
+		ScopeDir:        spec.ScopeDir,
+		Image:           firstNonEmpty(spec.Image, spec.ImageFile, spec.Dockerfile),
+		Lifecycle:       spec.Lifecycle,
+		InternalHost:    internalHost,
+		InternalPort:    spec.Port,
+		InternalURL:     internalURL,
+		Volume:          spec.Volume,
+		Healthcheck:     effectiveHealthcheck(spec.Healthcheck),
+		SpecEnv:         cloneEnvMap(spec.Env),
+		BaseEnv:         baseEnv,
+		PublicEndpoints: publicEndpoints,
+		Bundle:          bundle,
+		DebugSSH:        debugSSH,
 		Boot: workloadBootConfig{
 			Version:      1,
 			Kind:         "service",
@@ -136,7 +152,7 @@ func (m *FirecrackerManager) planService(ctx context.Context, spec ServiceSpec, 
 			Command:      defaultWorkloadCommand(spec.Command, bundle.DefaultCommand),
 			WorkingDir:   firstNonEmpty(bundle.WorkingDir, spec.WorkingDir),
 			User:         firstNonEmpty(bundle.User, spec.User),
-			InboundPorts: buildInboundPorts(bundle.GuestPort, spec.Ports),
+			InboundPorts: buildInboundPorts(spec.Port, bundle.GuestPort, spec.Ports, publicEndpoints),
 			Volumes:      buildVolumeMounts(spec.Volume),
 		},
 		Peer: workloadPeer{
@@ -182,23 +198,28 @@ func (m *FirecrackerManager) planApp(ctx context.Context, spec AppSpec, seen map
 	if err != nil {
 		return workloadPlan{}, err
 	}
+	publicEndpoints, err := buildPublicEndpointPlans(spec.Port, bundle.GuestPort, spec.Ports)
+	if err != nil {
+		return workloadPlan{}, err
+	}
 
 	plan := workloadPlan{
-		Kind:         "app",
-		Name:         spec.Name,
-		ScopeDir:     spec.ScopeDir,
-		Image:        firstNonEmpty(spec.Image, spec.ImageFile, spec.Dockerfile),
-		Lifecycle:    spec.Lifecycle,
-		InternalHost: internalHost,
-		InternalPort: spec.Port,
-		InternalURL:  internalURL,
-		Routes:       append([]string{}, spec.Routes...),
-		Volume:       spec.Volume,
-		Healthcheck:  effectiveHealthcheck(spec.Healthcheck),
-		SpecEnv:      cloneEnvMap(spec.Env),
-		BaseEnv:      baseEnv,
-		Bundle:       bundle,
-		DebugSSH:     debugSSH,
+		Kind:            "app",
+		Name:            spec.Name,
+		ScopeDir:        spec.ScopeDir,
+		Image:           firstNonEmpty(spec.Image, spec.ImageFile, spec.Dockerfile),
+		Lifecycle:       spec.Lifecycle,
+		InternalHost:    internalHost,
+		InternalPort:    spec.Port,
+		InternalURL:     internalURL,
+		Routes:          append([]string{}, spec.Routes...),
+		Volume:          spec.Volume,
+		Healthcheck:     effectiveHealthcheck(spec.Healthcheck),
+		SpecEnv:         cloneEnvMap(spec.Env),
+		BaseEnv:         baseEnv,
+		PublicEndpoints: publicEndpoints,
+		Bundle:          bundle,
+		DebugSSH:        debugSSH,
 		Boot: workloadBootConfig{
 			Version:      1,
 			Kind:         "app",
@@ -210,7 +231,7 @@ func (m *FirecrackerManager) planApp(ctx context.Context, spec AppSpec, seen map
 			Command:      defaultWorkloadCommand(spec.Command, bundle.DefaultCommand),
 			WorkingDir:   firstNonEmpty(bundle.WorkingDir, spec.WorkingDir),
 			User:         firstNonEmpty(bundle.User, spec.User),
-			InboundPorts: buildInboundPorts(bundle.GuestPort, spec.Ports),
+			InboundPorts: buildInboundPorts(spec.Port, bundle.GuestPort, spec.Ports, publicEndpoints),
 			Volumes:      buildVolumeMounts(spec.Volume),
 		},
 		Peer: workloadPeer{

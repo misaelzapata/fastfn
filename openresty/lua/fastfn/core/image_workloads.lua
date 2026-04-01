@@ -59,7 +59,10 @@ end
 local function route_matches(route, request_path)
   route = tostring(route or "")
   request_path = tostring(request_path or "")
-  if route == "" or request_path == "" then
+  if request_path == "" then
+    request_path = "/"
+  end
+  if route == "" then
     return false
   end
   if route == request_path then
@@ -75,6 +78,35 @@ local function route_matches(route, request_path)
   return false
 end
 
+local function workload_public_endpoints(workload)
+  if type(workload) ~= "table" then
+    return {}
+  end
+  if type(workload.public_endpoints) == "table" and #workload.public_endpoints > 0 then
+    return workload.public_endpoints
+  end
+  local routes = type(workload.routes) == "table" and workload.routes or {}
+  if #routes == 0 then
+    return {}
+  end
+  local host = tostring(workload.host or "")
+  local port = tonumber(workload.port)
+  if host == "" or not port or port < 1 then
+    return {}
+  end
+  return {
+    {
+      name = "default",
+      protocol = "http",
+      host = host,
+      port = port,
+      routes = routes,
+      allow_hosts = {},
+      allow_cidrs = {},
+    },
+  }
+end
+
 function M.function_env()
   local state = load_state()
   local env = {}
@@ -88,25 +120,48 @@ function M.function_env()
   return env
 end
 
-function M.match_app(request_path)
+function M.public_http_candidates(request_path)
   local state = load_state()
-  local best
-  local best_score = -1
+  local candidates = {}
 
-  for _, app_name in ipairs(sorted_keys(state.apps)) do
-    local app = state.apps[app_name]
-    local routes = type(app) == "table" and type(app.routes) == "table" and app.routes or {}
-    for _, route in ipairs(routes) do
-      if route_matches(route, request_path) then
-        local score = #tostring(route)
-        if score > best_score then
-          best = app
-          best_score = score
+  for _, kind in ipairs({ "apps", "services" }) do
+    for _, workload_name in ipairs(sorted_keys(state[kind])) do
+      local workload = state[kind][workload_name]
+      for _, endpoint in ipairs(workload_public_endpoints(workload)) do
+        if tostring(endpoint.protocol or "http") == "http" then
+          local routes = type(endpoint.routes) == "table" and endpoint.routes or {}
+          for _, route in ipairs(routes) do
+            if route_matches(route, request_path) then
+              candidates[#candidates + 1] = {
+                kind = kind == "apps" and "app" or "service",
+                name = workload_name,
+                workload = workload,
+                endpoint = endpoint,
+                route = route,
+                route_length = #tostring(route),
+              }
+            end
+          end
         end
       end
     end
   end
 
+  return candidates
+end
+
+function M.match_app(request_path)
+  local best
+  local best_score = -1
+  for _, candidate in ipairs(M.public_http_candidates(request_path)) do
+    if candidate.kind == "app" then
+      local score = tonumber(candidate.route_length) or 0
+      if score > best_score then
+        best = candidate.workload
+        best_score = score
+      end
+    end
+  end
   return best
 end
 

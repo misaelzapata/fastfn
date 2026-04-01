@@ -372,6 +372,107 @@ func TestWorkloadControllerSnapshotState_TracksResumeMetrics(t *testing.T) {
 	}
 }
 
+func TestWorkloadControllerSnapshotState_ExposesPublicEndpoints(t *testing.T) {
+	controller := &workloadController{
+		plan: workloadPlan{
+			Kind:         "app",
+			Name:         "admin",
+			Image:        "ghcr.io/acme/admin:latest",
+			InternalHost: "admin.internal",
+			InternalPort: 3000,
+			InternalURL:  "http://admin.internal:3000",
+			Routes:       []string{"/admin/*"},
+			PublicEndpoints: []publicEndpointPlan{
+				{
+					Name:          "http",
+					Protocol:      "http",
+					ContainerPort: 3000,
+					GuestPort:     10700,
+					Routes:        []string{"/admin/*"},
+					Access: AccessSpec{
+						AllowHosts: []string{"admin.example.com"},
+						AllowCIDRs: []string{"10.0.0.0/8"},
+					},
+				},
+				{
+					Name:          "metrics",
+					Protocol:      "http",
+					ContainerPort: 9090,
+					GuestPort:     10701,
+					Routes:        []string{"/metrics"},
+				},
+				{
+					Name:          "sql",
+					Protocol:      "tcp",
+					ContainerPort: 5432,
+					GuestPort:     10702,
+					ListenPort:    15432,
+					Access: AccessSpec{
+						AllowCIDRs: []string{"10.0.0.0/8"},
+					},
+				},
+			},
+			Lifecycle: LifecycleSpec{
+				IdleAction: "run",
+				Prewarm:    true,
+			},
+			Bundle: FirecrackerBundle{BundleID: "bundle-admin"},
+		},
+		started:        true,
+		brokerHost:     "127.0.0.1",
+		brokerPort:     18081,
+		lifecycleState: "ready",
+		health:         WorkloadHealth{Up: true, Reason: "ok"},
+		publicListeners: []publicEndpointListener{
+			{
+				plan: publicEndpointPlan{
+					Name:          "metrics",
+					Protocol:      "http",
+					ContainerPort: 9090,
+					GuestPort:     10701,
+					Routes:        []string{"/metrics"},
+				},
+				host: "127.0.0.1",
+				port: 18082,
+			},
+			{
+				plan: publicEndpointPlan{
+					Name:          "sql",
+					Protocol:      "tcp",
+					ContainerPort: 5432,
+					GuestPort:     10702,
+					ListenPort:    15432,
+					Access: AccessSpec{
+						AllowCIDRs: []string{"10.0.0.0/8"},
+					},
+				},
+				host: "0.0.0.0",
+				port: 15432,
+			},
+		},
+	}
+
+	kind, name, snapshot := controller.snapshotState()
+	if kind != "app" || name != "admin" {
+		t.Fatalf("snapshot identity = %s.%s", kind, name)
+	}
+	if snapshot.app.Host != "127.0.0.1" || snapshot.app.Port != 18081 {
+		t.Fatalf("primary app endpoint = %s:%d", snapshot.app.Host, snapshot.app.Port)
+	}
+	if len(snapshot.app.PublicEndpoints) != 3 {
+		t.Fatalf("PublicEndpoints = %+v", snapshot.app.PublicEndpoints)
+	}
+	if snapshot.app.PublicEndpoints[0].AllowHosts[0] != "admin.example.com" {
+		t.Fatalf("primary public endpoint = %+v", snapshot.app.PublicEndpoints[0])
+	}
+	if snapshot.app.PublicEndpoints[1].Host != "127.0.0.1" || snapshot.app.PublicEndpoints[1].Port != 18082 {
+		t.Fatalf("metrics endpoint = %+v", snapshot.app.PublicEndpoints[1])
+	}
+	if snapshot.app.PublicEndpoints[2].Host != "0.0.0.0" || snapshot.app.PublicEndpoints[2].Port != 15432 {
+		t.Fatalf("tcp endpoint = %+v", snapshot.app.PublicEndpoints[2])
+	}
+}
+
 func BenchmarkControllerAcquireConnection_Hot(b *testing.B) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -418,9 +519,82 @@ func withControllerTestHooksTB(tb interface{ Helper() }) func() {
 
 	originalPatch := controllerPatchFirecrackerVMState
 	originalDial := controllerDialTarget
+	originalWait := controllerWaitForEndpoint
+	originalWaitStable := controllerWaitForEndpointStable
 	return func() {
 		controllerPatchFirecrackerVMState = originalPatch
 		controllerDialTarget = originalDial
+		controllerWaitForEndpoint = originalWait
+		controllerWaitForEndpointStable = originalWaitStable
+	}
+}
+
+func TestWorkloadControllerFinishInitialHealthCheck_PrewarmFailureReturnsError(t *testing.T) {
+	restore := withControllerTestHooks(t)
+	defer restore()
+
+	controller := &workloadController{
+		plan: workloadPlan{
+			Kind: "service",
+			Name: "db",
+			Lifecycle: LifecycleSpec{
+				Prewarm: true,
+			},
+		},
+		lifecycleState: "ready",
+		health:         WorkloadHealth{Up: true, Reason: "ok"},
+	}
+
+	err := controller.finishInitialHealthCheck(3306, errors.New("connection refused"))
+	if err == nil {
+		t.Fatalf("finishInitialHealthCheck() error = nil, want prewarm failure")
+	}
+	controller.mu.Lock()
+	defer controller.mu.Unlock()
+	if controller.lifecycleState != "failed" {
+		t.Fatalf("lifecycleState = %q, want failed", controller.lifecycleState)
+	}
+	if controller.health.Up {
+		t.Fatalf("health.Up = true, want false")
+	}
+}
+
+func TestWorkloadControllerFinishInitialHealthCheck_UsesStableWaitForPrewarmedServices(t *testing.T) {
+	restore := withControllerTestHooks(t)
+	defer restore()
+
+	var (
+		stableCalled bool
+		stableFor    time.Duration
+	)
+	controllerWaitForEndpointStable = func(host string, port int, check HealthcheckSpec, timeout time.Duration, window time.Duration) error {
+		stableCalled = true
+		stableFor = window
+		return nil
+	}
+
+	controller := &workloadController{
+		plan: workloadPlan{
+			Kind: "service",
+			Name: "db",
+			Healthcheck: HealthcheckSpec{
+				IntervalMS: 1000,
+			},
+			Lifecycle: LifecycleSpec{
+				Prewarm: true,
+			},
+		},
+		lifecycleState: "booting",
+	}
+
+	if err := controller.finishInitialHealthCheck(3306, nil); err != nil {
+		t.Fatalf("finishInitialHealthCheck() error = %v", err)
+	}
+	if !stableCalled {
+		t.Fatalf("finishInitialHealthCheck() did not use stable wait")
+	}
+	if stableFor < defaultServiceReadyWindow {
+		t.Fatalf("stableFor = %s, want >= %s", stableFor, defaultServiceReadyWindow)
 	}
 }
 

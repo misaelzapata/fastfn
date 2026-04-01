@@ -49,6 +49,29 @@ func TestWriteHostsEntries_ReplacesExistingInternalEntry(t *testing.T) {
 	}
 }
 
+func TestWriteHostsEntries_AllowsShortServiceAliases(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "hosts")
+	err := writeHostsEntries(path, append(defaultHostEntries("api"), []hostEntry{
+		{Host: "db.internal", IP: "127.77.0.1"},
+		{Host: "db", IP: "127.77.0.1"},
+	}...))
+	if err != nil {
+		t.Fatalf("writeHostsEntries() error = %v", err)
+	}
+
+	gotBytes, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read hosts file: %v", err)
+	}
+	got := string(gotBytes)
+	if !strings.Contains(got, "127.77.0.1 db.internal\n") {
+		t.Fatalf("hosts missing internal alias: %q", got)
+	}
+	if !strings.Contains(got, "127.77.0.1 db\n") {
+		t.Fatalf("hosts missing short alias: %q", got)
+	}
+}
+
 func TestEnsureHostResolutionConfig_AddsHostsLookup(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nsswitch.conf")
 	if err := os.WriteFile(path, []byte("passwd: files\n"), 0o644); err != nil {

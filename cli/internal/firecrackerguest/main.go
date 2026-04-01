@@ -217,7 +217,6 @@ func mountRuntimeFilesystems() error {
 		{source: "devtmpfs", target: "/dev", fstype: "devtmpfs", mode: 0o755},
 		{source: "devpts", target: "/dev/pts", fstype: "devpts", mode: 0o755},
 		{source: "tmpfs", target: "/dev/shm", fstype: "tmpfs", data: "mode=1777", mode: 0o1777},
-		{source: "tmpfs", target: "/run", fstype: "tmpfs", data: "mode=0755", mode: 0o755},
 		{source: "tmpfs", target: "/tmp", fstype: "tmpfs", data: "mode=1777", mode: 0o1777},
 	} {
 		if err := mountIfNeeded(spec.source, spec.target, spec.fstype, spec.flags, spec.data, spec.mode); err != nil {
@@ -361,6 +360,7 @@ func configureInternalHosts(hostname string, services []firecrackerboot.ServiceB
 	entries := defaultHostEntries(hostname)
 	for _, service := range services {
 		host := strings.TrimSpace(service.LocalHost)
+		shortHost := strings.TrimSpace(service.Name)
 		ip := strings.TrimSpace(service.LocalIP)
 		if host == "" || ip == "" {
 			continue
@@ -369,6 +369,9 @@ func configureInternalHosts(hostname string, services []firecrackerboot.ServiceB
 			return err
 		}
 		entries = append(entries, hostEntry{Host: host, IP: ip})
+		if shortHost != "" && !strings.EqualFold(shortHost, host) {
+			entries = append(entries, hostEntry{Host: shortHost, IP: ip})
+		}
 	}
 	return writeHostsEntries("/etc/hosts", entries)
 }

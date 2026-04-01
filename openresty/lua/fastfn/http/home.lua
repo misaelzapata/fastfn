@@ -1,6 +1,9 @@
 local home = require("fastfn.core.home")
+local http_client = require("fastfn.core.http_client")
+local image_workloads = require("fastfn.core.image_workloads")
 local routes = require("fastfn.core.routes")
 local assets_http = require("fastfn.http.assets")
+local public_workloads = require("fastfn.http.public_workloads")
 
 local function json_error(message)
   return string.format('{"error":%q}', tostring(message or "internal"))
@@ -16,6 +19,49 @@ local function write_response(status, headers, body)
   if body ~= nil then
     ngx.print(body)
   end
+end
+
+local function execute_public_workload_proxy(workload, endpoint)
+  if type(workload) ~= "table" then
+    return nil, "workload config missing"
+  end
+  if type(workload.health) == "table" and workload.health.up ~= true then
+    return nil, tostring(workload.health.reason or "workload unavailable")
+  end
+
+  local target = type(endpoint) == "table" and endpoint or workload
+  local host = tostring(target.host or "")
+  local port = tonumber(target.port)
+  if host == "" or not port or port < 1 then
+    return nil, "invalid public workload endpoint"
+  end
+
+  local resp, err = http_client.request({
+    url = string.format("http://%s:%d%s", host, port, ngx.var.request_uri or "/"),
+    method = ngx.req.get_method(),
+    headers = public_workloads.sanitize_request_headers(ngx.req.get_headers()),
+    timeout_ms = 30000,
+    max_body_bytes = 10 * 1024 * 1024,
+  })
+  if not resp then
+    return nil, err
+  end
+
+  local filtered = {}
+  local drop = {
+    ["connection"] = true,
+    ["keep-alive"] = true,
+    ["transfer-encoding"] = true,
+    ["content-length"] = true,
+    ["upgrade"] = true,
+  }
+  for k, v in pairs(resp.headers or {}) do
+    if not drop[tostring(k):lower()] then
+      filtered[k] = v
+    end
+  end
+  resp.headers = filtered
+  return resp
 end
 
 local function catalog_has_discovered_content()
@@ -48,6 +94,31 @@ if action.mode == "function" then
 end
 if action.mode == "redirect" then
   return ngx.redirect(action.location, ngx.HTTP_MOVED_TEMPORARILY)
+end
+
+local request_host, request_authority = public_workloads.request_host_values(ngx)
+local matched_workload, matched_endpoint, workload_access_err = public_workloads.match_public_workload(
+  image_workloads.public_http_candidates("/"),
+  request_host,
+  request_authority,
+  public_workloads.request_client_ip(ngx)
+)
+if type(matched_workload) == "table" then
+  local app_resp, app_err = execute_public_workload_proxy(matched_workload, matched_endpoint)
+  if not app_resp then
+    local status = 502
+    if tostring(app_err or ""):find("unavailable", 1, true) then
+      status = 503
+    end
+    return write_response(status, { ["Content-Type"] = "application/json" }, json_error("public workload proxy failed: " .. tostring(app_err)))
+  end
+  return write_response(app_resp.status or 502, app_resp.headers or {}, app_resp.body or "")
+end
+if workload_access_err == "host not allowed" then
+  return write_response(421, { ["Content-Type"] = "application/json" }, json_error(workload_access_err))
+end
+if workload_access_err == "ip not allowed" then
+  return write_response(403, { ["Content-Type"] = "application/json" }, json_error(workload_access_err))
 end
 
 local assets_cfg = type(routes.get_assets_config) == "function" and routes.get_assets_config() or nil

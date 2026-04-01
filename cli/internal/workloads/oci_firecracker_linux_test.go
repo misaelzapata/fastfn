@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -141,5 +142,20 @@ func TestAllowedE2FSCKExitCode(t *testing.T) {
 		if allowedE2FSCKExitCode(code) {
 			t.Fatalf("allowedE2FSCKExitCode(%d) = true, want false", code)
 		}
+	}
+}
+
+func TestConsumeDockerBuildOutput_Success(t *testing.T) {
+	payload := strings.NewReader("{\"stream\":\"Step 1/3 : FROM alpine\\n\"}\n{\"stream\":\"Successfully built\\n\"}\n")
+	if err := consumeDockerBuildOutput(payload); err != nil {
+		t.Fatalf("consumeDockerBuildOutput() error = %v", err)
+	}
+}
+
+func TestConsumeDockerBuildOutput_Error(t *testing.T) {
+	payload := strings.NewReader("{\"stream\":\"Step 1/3 : FROM alpine\\n\"}\n{\"errorDetail\":{\"message\":\"boom\"}}\n")
+	err := consumeDockerBuildOutput(payload)
+	if err == nil || !strings.Contains(err.Error(), "boom") {
+		t.Fatalf("consumeDockerBuildOutput() error = %v, want boom", err)
 	}
 }

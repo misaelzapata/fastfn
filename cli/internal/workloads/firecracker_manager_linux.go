@@ -549,23 +549,66 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func buildInboundPorts(guestPort int, ports []PortSpec) []workloadInboundPort {
-	if guestPort < 1 || len(ports) == 0 {
+func buildPublicEndpointPlans(primaryContainerPort, primaryGuestPort int, ports []PortSpec) ([]publicEndpointPlan, error) {
+	if primaryGuestPort < 1 || len(ports) == 0 {
+		return nil, nil
+	}
+	nextGuestPort := primaryGuestPort + 1
+	out := make([]publicEndpointPlan, 0, len(ports))
+	for _, port := range ports {
+		if !port.Public {
+			continue
+		}
+		guestPort := primaryGuestPort
+		if port.ContainerPort != primaryContainerPort {
+			guestPort = nextGuestPort
+			nextGuestPort++
+		}
+		if guestPort > 65535 {
+			return nil, fmt.Errorf("public port %q exceeds guest port range", port.Name)
+		}
+		out = append(out, publicEndpointPlan{
+			Name:          port.Name,
+			Protocol:      port.Protocol,
+			ContainerPort: port.ContainerPort,
+			GuestPort:     guestPort,
+			ListenPort:    port.ListenPort,
+			Routes:        append([]string{}, port.Routes...),
+			Access:        port.Access,
+		})
+	}
+	return out, nil
+}
+
+func buildInboundPorts(primaryContainerPort, primaryGuestPort int, ports []PortSpec, publicEndpoints []publicEndpointPlan) []workloadInboundPort {
+	if primaryGuestPort < 1 || len(ports) == 0 {
 		return nil
 	}
 	primary := ports[0]
 	for _, port := range ports {
-		if port.Public {
+		if port.ContainerPort == primaryContainerPort {
 			primary = port
 			break
 		}
 	}
-	return []workloadInboundPort{{
+	out := []workloadInboundPort{{
 		Name:          primary.Name,
 		Protocol:      primary.Protocol,
-		GuestPort:     guestPort,
-		ContainerPort: primary.ContainerPort,
+		GuestPort:     primaryGuestPort,
+		ContainerPort: primaryContainerPort,
 	}}
+	for _, endpoint := range publicEndpoints {
+		if endpoint.GuestPort == primaryGuestPort && endpoint.ContainerPort == primaryContainerPort {
+			continue
+		}
+		out = append(out, workloadInboundPort{
+			Name:          endpoint.Name,
+			Protocol:      endpoint.Protocol,
+			GuestPort:     endpoint.GuestPort,
+			ContainerPort: endpoint.ContainerPort,
+		})
+	}
+	return out
 }
 
 func buildVolumeMounts(volume *VolumeSpec) []workloadVolumeMount {

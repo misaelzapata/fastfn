@@ -12404,6 +12404,94 @@ local function test_invoke_rules_empty_route_table_and_missing_handler()
   assert_eq(ir5, nil, "parse_invoke_routes empty table returns nil")
 end
 
+local function test_public_workloads_helpers_and_trusted_proxies()
+  with_fake_ngx(function()
+    package.loaded["fastfn.http.public_workloads"] = nil
+    local helpers = require("fastfn.http.public_workloads")
+
+    local sanitized = helpers.sanitize_request_headers({
+      Host = "example.com",
+      ["X-Test"] = "ok",
+      ["Connection"] = "close",
+      ["X-Bad"] = "bad\r\nvalue",
+    })
+    assert_eq(sanitized.Host, nil, "public workload sanitize strips host")
+    assert_eq(sanitized["Connection"], nil, "public workload sanitize strips connection")
+    assert_eq(sanitized["X-Test"], "ok", "public workload sanitize keeps safe header")
+    assert_eq(sanitized["X-Bad"], nil, "public workload sanitize strips invalid header value")
+
+    ngx.var.http_x_forwarded_host = "api.example.com:8443, proxy.example.com"
+    ngx.var.http_host = "ignored.example.com"
+    ngx.var.host = "fallback.example.com"
+    local req_host, req_authority = helpers.request_host_values(ngx)
+    assert_eq(req_host, "api.example.com", "public workload request host forwarded host")
+    assert_eq(req_authority, "api.example.com:8443", "public workload request host forwarded authority")
+
+    ngx.var.remote_addr = "127.0.0.1"
+    ngx.var.http_x_forwarded_for = "198.51.100.10, 127.0.0.1"
+    with_env({ FN_TRUSTED_PROXY_CIDRS = "127.0.0.0/8" }, function()
+      assert_eq(helpers.request_client_ip(ngx), "198.51.100.10", "public workload trusted proxy xff client ip")
+    end)
+
+    ngx.var.remote_addr = "8.8.8.8"
+    with_env({ FN_TRUSTED_PROXY_CIDRS = "127.0.0.0/8" }, function()
+      assert_eq(helpers.request_client_ip(ngx), "8.8.8.8", "public workload untrusted proxy keeps remote addr")
+    end)
+
+    ngx.var.remote_addr = "127.0.0.1"
+    ngx.var.http_x_forwarded_for = "not-an-ip"
+    with_env({ FN_TRUSTED_PROXY_CIDRS = "127.0.0.0/8" }, function()
+      assert_eq(helpers.request_client_ip(ngx), "127.0.0.1", "public workload invalid xff falls back to remote addr")
+    end)
+    ngx.var.http_x_forwarded_for = nil
+
+    assert_eq(helpers.cidr_contains_ip("10.0.0.0/8", "10.1.2.3"), true, "public workload cidr allow")
+    assert_eq(helpers.cidr_contains_ip("10.0.0.0/8", "192.0.2.3"), false, "public workload cidr deny")
+
+    local best_workload, best_endpoint, best_err = helpers.match_public_workload({
+      {
+        workload = { name = "api", health = { up = true } },
+        endpoint = {
+          host = "127.0.0.1",
+          port = 18081,
+          allow_hosts = { "api.example.com" },
+          allow_cidrs = { "10.10.0.0/16" },
+        },
+        route_length = 7,
+      },
+      {
+        workload = { name = "wildcard", health = { up = true } },
+        endpoint = {
+          host = "127.0.0.1",
+          port = 18082,
+          allow_hosts = { "*.example.com" },
+          allow_cidrs = { "10.0.0.0/8" },
+        },
+        route_length = 3,
+      },
+    }, "api.example.com", "api.example.com", "10.10.1.50")
+    assert_eq(best_workload.name, "api", "public workload match picks most specific candidate")
+    assert_eq(best_endpoint.port, 18081, "public workload match endpoint")
+    assert_eq(best_err, nil, "public workload match error")
+
+    local denied_workload, denied_endpoint, denied_err = helpers.match_public_workload({
+      {
+        workload = { name = "api", health = { up = true } },
+        endpoint = {
+          host = "127.0.0.1",
+          port = 18081,
+          allow_hosts = { "api.example.com" },
+          allow_cidrs = { "10.10.0.0/16" },
+        },
+        route_length = 7,
+      },
+    }, "api.example.com", "api.example.com", "192.0.2.10")
+    assert_eq(denied_workload, nil, "public workload deny returns nil workload")
+    assert_eq(denied_endpoint, nil, "public workload deny returns nil endpoint")
+    assert_eq(denied_err, "ip not allowed", "public workload deny reason")
+  end)
+end
+
 -- Forward declarations for coverage gap tests
 local test_guard_request_is_local_all_ranges
 local test_guard_constant_time_eq_edge_cases
@@ -12508,6 +12596,7 @@ local function main()
   run_test("test_home_missing_env_and_empty_functions", test_home_missing_env_and_empty_functions)
   run_test("test_openapi_all_parameter_types_and_schemas", test_openapi_all_parameter_types_and_schemas)
   run_test("test_invoke_rules_empty_route_table_and_missing_handler", test_invoke_rules_empty_route_table_and_missing_handler)
+  run_test("test_public_workloads_helpers_and_trusted_proxies", test_public_workloads_helpers_and_trusted_proxies)
   -- Coverage gap tests
   run_test("test_guard_request_is_local_all_ranges", test_guard_request_is_local_all_ranges)
   run_test("test_guard_constant_time_eq_edge_cases", test_guard_constant_time_eq_edge_cases)
@@ -16857,6 +16946,12 @@ return {
   request_host_values = request_host_values,
   host_matches_pattern = host_matches_pattern,
   host_is_allowed = host_is_allowed,
+  request_client_ip = request_client_ip,
+  cidr_contains_ip = cidr_contains_ip,
+  cidrs_allow_ip = cidrs_allow_ip,
+  host_allowlist_score = host_allowlist_score,
+  match_public_workload = match_public_workload,
+  execute_public_workload_proxy = execute_public_workload_proxy,
   resolve_request_target = resolve_request_target,
 }
 ]]
@@ -17340,6 +17435,103 @@ return {
       assert_eq(helpers.host_is_allowed({ "*.example.com" }), true, "gateway helper host allowed wildcard")
       assert_eq(helpers.host_is_allowed({ "api.example.com:8443" }), true, "gateway helper host allowed authority")
       assert_eq(helpers.host_is_allowed({ "other.example.com" }), false, "gateway helper host allowed deny")
+
+      ngx.var.remote_addr = "10.10.1.25"
+      assert_eq(helpers.request_client_ip(), "10.10.1.25", "gateway helper client ip")
+      ngx.var.remote_addr = "127.0.0.1"
+      ngx.var.http_x_forwarded_for = "203.0.113.10, 127.0.0.1"
+      with_env({ FN_TRUSTED_PROXY_CIDRS = "127.0.0.0/8,::1/128" }, function()
+        assert_eq(helpers.request_client_ip(), "203.0.113.10", "gateway helper trusted proxy xff client ip")
+      end)
+      ngx.var.remote_addr = "8.8.8.8"
+      with_env({ FN_TRUSTED_PROXY_CIDRS = "127.0.0.0/8,::1/128" }, function()
+        assert_eq(helpers.request_client_ip(), "8.8.8.8", "gateway helper untrusted proxy keeps remote addr")
+      end)
+      ngx.var.remote_addr = "127.0.0.1"
+      ngx.var.http_x_forwarded_for = "not-an-ip"
+      with_env({ FN_TRUSTED_PROXY_CIDRS = "127.0.0.0/8" }, function()
+        assert_eq(helpers.request_client_ip(), "127.0.0.1", "gateway helper invalid xff falls back to remote addr")
+      end)
+      ngx.var.http_x_forwarded_for = nil
+      assert_eq(helpers.cidr_contains_ip("10.10.0.0/16", "10.10.1.25"), true, "gateway helper cidr ipv4 allow")
+      assert_eq(helpers.cidr_contains_ip("10.20.0.0/16", "10.10.1.25"), false, "gateway helper cidr ipv4 deny")
+      assert_eq(helpers.cidr_contains_ip("2001:db8::/32", "2001:db8::10"), true, "gateway helper cidr ipv6 allow")
+      assert_eq(helpers.cidr_contains_ip("2001:db9::/32", "2001:db8::10"), false, "gateway helper cidr ipv6 deny")
+      assert_eq(helpers.cidrs_allow_ip({ "10.10.0.0/16" }, "10.10.1.25"), true, "gateway helper cidr list allow")
+      assert_eq(helpers.cidrs_allow_ip({ "10.20.0.0/16" }, "10.10.1.25"), false, "gateway helper cidr list deny")
+
+      local host_score_ok, host_score = helpers.host_allowlist_score({ "*.example.com" }, "api.example.com", "api.example.com:443")
+      assert_eq(host_score_ok, true, "gateway helper host score allow")
+      assert_true(host_score > 0, "gateway helper host score positive")
+      local host_score_deny_ok, host_score_deny = helpers.host_allowlist_score({ "admin.example.com" }, "api.example.com", "api.example.com:443")
+      assert_eq(host_score_deny_ok, false, "gateway helper host score deny")
+      assert_eq(host_score_deny, 0, "gateway helper host score deny score")
+
+      do
+        local workload_a = { name = "admin", health = { up = true } }
+        local workload_b = { name = "reports", health = { up = true } }
+        local best_workload, best_endpoint, best_err = helpers.match_public_workload({
+          {
+            workload = workload_a,
+            endpoint = {
+              host = "127.0.0.1",
+              port = 18081,
+              allow_hosts = { "admin.example.com" },
+              allow_cidrs = { "10.10.0.0/16" },
+            },
+            route_length = 7,
+          },
+          {
+            workload = workload_b,
+            endpoint = {
+              host = "127.0.0.1",
+              port = 18082,
+              allow_hosts = { "*.example.com" },
+              allow_cidrs = { "10.0.0.0/8" },
+            },
+            route_length = 3,
+          },
+        }, "admin.example.com", "admin.example.com", "10.10.1.25")
+        assert_eq(best_workload, workload_a, "gateway helper match public workload picks best host+route")
+        assert_eq(best_endpoint.port, 18081, "gateway helper match public workload endpoint")
+        assert_eq(best_err, nil, "gateway helper match public workload error")
+      end
+
+      do
+        local denied_workload, denied_endpoint, denied_err = helpers.match_public_workload({
+          {
+            workload = { name = "admin", health = { up = true } },
+            endpoint = {
+              host = "127.0.0.1",
+              port = 18081,
+              allow_hosts = { "admin.example.com" },
+              allow_cidrs = { "10.10.0.0/16" },
+            },
+            route_length = 7,
+          },
+        }, "other.example.com", "other.example.com", "10.10.1.25")
+        assert_eq(denied_workload, nil, "gateway helper match public workload denied workload")
+        assert_eq(denied_endpoint, nil, "gateway helper match public workload denied endpoint")
+        assert_eq(denied_err, "host not allowed", "gateway helper match public workload denied host")
+      end
+
+      do
+        local denied_workload, denied_endpoint, denied_err = helpers.match_public_workload({
+          {
+            workload = { name = "admin", health = { up = true } },
+            endpoint = {
+              host = "127.0.0.1",
+              port = 18081,
+              allow_hosts = { "admin.example.com" },
+              allow_cidrs = { "192.168.0.0/16" },
+            },
+            route_length = 7,
+          },
+        }, "admin.example.com", "admin.example.com", "10.10.1.25")
+        assert_eq(denied_workload, nil, "gateway helper match public workload ip denied workload")
+        assert_eq(denied_endpoint, nil, "gateway helper match public workload ip denied endpoint")
+        assert_eq(denied_err, "ip not allowed", "gateway helper match public workload denied ip")
+      end
 
       do
         local mapped_helpers = load_gateway_helpers({
@@ -18633,6 +18825,123 @@ return {
     assert_eq(redirect_location, "/_fn/docs", "home.lua redirect location")
     assert_eq(redirect_status, 302, "home.lua redirect status")
     assert_true(type(log_messages[1]) == "table" and log_messages[1].message:find("home redirect warning", 1, true) ~= nil, "home.lua redirect warning logged")
+
+    printed = {}
+    log_messages = {}
+    ngx.status = 0
+    ngx.header = {}
+    with_module_stubs({
+      ["fastfn.core.home"] = {
+        resolve_home_action = function()
+          return { mode = "default", warnings = {} }
+        end,
+      },
+      ["fastfn.core.routes"] = {
+        get_assets_config = function()
+          return nil
+        end,
+      },
+      ["fastfn.core.image_workloads"] = {
+        public_http_candidates = function(path)
+          assert_eq(path, "/", "home.lua public workload root path")
+          return {
+            {
+              workload = {
+                name = "root-app",
+                health = { up = true },
+              },
+              endpoint = {
+                host = "127.0.0.1",
+                port = 18080,
+              },
+              route_length = 2,
+            },
+          }
+        end,
+      },
+      ["fastfn.http.public_workloads"] = {
+        request_host_values = function()
+          return "root.example.com", "root.example.com"
+        end,
+        request_client_ip = function()
+          return "127.0.0.1"
+        end,
+        match_public_workload = function(candidates)
+          return candidates[1].workload, candidates[1].endpoint, nil
+        end,
+        sanitize_request_headers = function()
+          return {}
+        end,
+      },
+      ["fastfn.core.http_client"] = {
+        request = function(req)
+          assert_eq(req.url, "http://127.0.0.1:18080/", "home.lua proxies root workload to broker")
+          return {
+            status = 200,
+            headers = { ["Content-Type"] = "text/plain" },
+            body = "root app ok",
+          }
+        end,
+      },
+      ["fastfn.http.assets"] = {
+        try_serve = function()
+          return false
+        end,
+      },
+    }, function()
+      dofile(REPO_ROOT .. "/openresty/lua/fastfn/http/home.lua")
+    end)
+
+    assert_eq(ngx.status, 200, "home.lua proxies root public workload status")
+    assert_true(table.concat(printed):find("root app ok", 1, true) ~= nil, "home.lua proxies root public workload body")
+
+    printed = {}
+    log_messages = {}
+    ngx.status = 0
+    ngx.header = {}
+    with_module_stubs({
+      ["fastfn.core.home"] = {
+        resolve_home_action = function()
+          return { mode = "default", warnings = {} }
+        end,
+      },
+      ["fastfn.core.routes"] = {
+        get_assets_config = function()
+          return nil
+        end,
+      },
+      ["fastfn.core.image_workloads"] = {
+        public_http_candidates = function()
+          return {
+            { workload = { health = { up = true } }, endpoint = { host = "127.0.0.1", port = 18080 }, route_length = 2 },
+          }
+        end,
+      },
+      ["fastfn.http.public_workloads"] = {
+        request_host_values = function()
+          return "root.example.com", "root.example.com"
+        end,
+        request_client_ip = function()
+          return "192.0.2.10"
+        end,
+        match_public_workload = function()
+          return nil, nil, "host not allowed"
+        end,
+        sanitize_request_headers = function()
+          return {}
+        end,
+      },
+      ["fastfn.http.assets"] = {
+        try_serve = function()
+          return false
+        end,
+      },
+    }, function()
+      dofile(REPO_ROOT .. "/openresty/lua/fastfn/http/home.lua")
+    end)
+
+    assert_eq(ngx.status, 421, "home.lua root public workload host deny status")
+    assert_true(table.concat(printed):find("host not allowed", 1, true) ~= nil, "home.lua root public workload host deny body")
 
     printed = {}
     log_messages = {}

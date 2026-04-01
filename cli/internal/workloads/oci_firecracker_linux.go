@@ -4,6 +4,7 @@ package workloads
 
 import (
 	"archive/tar"
+	"bytes"
 	"context"
 	"crypto/sha1"
 	"encoding/binary"
@@ -44,7 +45,12 @@ type rootFSMetadata struct {
 }
 
 func ResolveWorkloadBundle(ctx context.Context, projectDir, scopeDir, kind, name, imageRef, imageFile, dockerfile, contextDir string) (FirecrackerBundle, error) {
+	trace := newBenchmarkTrace(kind, name)
 	if localBundleRef(projectDir, imageRef) {
+		trace.log("bundle_ready", map[string]any{
+			"source":    "local_bundle",
+			"cache_hit": true,
+		})
 		return ResolveFirecrackerBundle(projectDir, imageRef)
 	}
 
@@ -63,9 +69,16 @@ func ResolveWorkloadBundle(ctx context.Context, projectDir, scopeDir, kind, name
 	if err != nil {
 		return FirecrackerBundle{}, err
 	}
+	trace.log("oci_ready", map[string]any{
+		"source": firstNonEmpty(dockerfile, imageFile, imageRef),
+	})
 
 	bundleDir := filepath.Join(projectDir, ".fastfn", "firecracker", "images", bundleCacheKey(bundleCacheSchemaVersion, inspect.ID, dockerfile, imageFile, resolvedRef, guestInitDigest))
 	if bundle, err := ResolveFirecrackerBundle(projectDir, bundleDir); err == nil {
+		trace.log("bundle_ready", map[string]any{
+			"source":    resolvedRef,
+			"cache_hit": true,
+		})
 		return bundle, nil
 	}
 
@@ -122,6 +135,10 @@ func ResolveWorkloadBundle(ctx context.Context, projectDir, scopeDir, kind, name
 	if err := os.Rename(tmpDir, bundleDir); err != nil {
 		return FirecrackerBundle{}, fmt.Errorf("finalize bundle cache for %s.%s: %w", kind, name, err)
 	}
+	trace.log("bundle_ready", map[string]any{
+		"source":    resolvedRef,
+		"cache_hit": false,
+	})
 	return ResolveFirecrackerBundle(projectDir, bundleDir)
 }
 
@@ -186,17 +203,91 @@ func buildDockerfileImage(ctx context.Context, cli *client.Client, kind, name, d
 	defer buildCtx.Close()
 
 	tag := "fastfn/" + kind + "-" + sanitizeName(name) + ":" + shortDockerHash(resolvedDockerfile+"|"+buildDir)
-	resp, err := cli.ImageBuild(ctx, buildCtx, dockertypes.ImageBuildOptions{
+	options := dockertypes.ImageBuildOptions{
 		Dockerfile: relativeDockerfile,
 		Tags:       []string{tag},
 		Remove:     true,
-	})
-	if err != nil {
+	}
+	if err := imageBuildWithFallback(ctx, cli, buildCtx, options); err != nil {
 		return "", fmt.Errorf("build image for %s.%s: %w", kind, name, err)
 	}
-	defer resp.Body.Close()
-	_, _ = io.Copy(io.Discard, resp.Body)
 	return tag, nil
+}
+
+func imageBuildWithFallback(ctx context.Context, cli *client.Client, buildCtx io.ReadCloser, options dockertypes.ImageBuildOptions) error {
+	buildContextBytes, err := readBuildContextBytes(buildCtx)
+	if err != nil {
+		return err
+	}
+
+	buildKitOptions := options
+	buildKitOptions.Version = dockertypes.BuilderBuildKit
+	if err := imageBuildOnce(ctx, cli, bytes.NewReader(buildContextBytes), buildKitOptions); err == nil {
+		return nil
+	} else if !shouldRetryDockerBuildWithoutBuildKit(err) {
+		return err
+	}
+
+	legacyOptions := options
+	legacyOptions.Version = dockertypes.BuilderV1
+	return imageBuildOnce(ctx, cli, bytes.NewReader(buildContextBytes), legacyOptions)
+}
+
+func readBuildContextBytes(buildCtx io.ReadCloser) ([]byte, error) {
+	data, err := io.ReadAll(buildCtx)
+	if err != nil {
+		return nil, fmt.Errorf("buffer docker build context: %w", err)
+	}
+	return data, nil
+}
+
+func imageBuildOnce(ctx context.Context, cli *client.Client, buildCtx io.Reader, options dockertypes.ImageBuildOptions) error {
+	resp, err := cli.ImageBuild(ctx, buildCtx, options)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return consumeDockerBuildOutput(resp.Body)
+}
+
+type dockerBuildMessage struct {
+	Stream      string `json:"stream,omitempty"`
+	Error       string `json:"error,omitempty"`
+	ErrorDetail struct {
+		Message string `json:"message,omitempty"`
+	} `json:"errorDetail,omitempty"`
+}
+
+func consumeDockerBuildOutput(reader io.Reader) error {
+	decoder := json.NewDecoder(reader)
+	for {
+		var message dockerBuildMessage
+		if err := decoder.Decode(&message); err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
+		}
+		if text := strings.TrimSpace(message.Error); text != "" {
+			return fmt.Errorf("%s", text)
+		}
+		if text := strings.TrimSpace(message.ErrorDetail.Message); text != "" {
+			return fmt.Errorf("%s", text)
+		}
+	}
+}
+
+func shouldRetryDockerBuildWithoutBuildKit(err error) bool {
+	if err == nil {
+		return false
+	}
+	text := strings.ToLower(strings.TrimSpace(err.Error()))
+	if text == "" {
+		return false
+	}
+	return strings.Contains(text, "no active sessions") ||
+		strings.Contains(text, "session") && strings.Contains(text, "not found") ||
+		strings.Contains(text, "failed to dial gRPC")
 }
 
 func loadImageFile(ctx context.Context, cli *client.Client, kind, name, imageFile string) (string, error) {

@@ -1,6 +1,6 @@
 # Benchmarks de rendimiento
 
-> Estado verificado al **14 de marzo de 2026**.
+> Estado verificado al **1 de abril de 2026**.
 > Nota de runtime: FastFN resuelve dependencias y build por función según el runtime: Python usa `requirements.txt`, Node usa `package.json`, PHP instala desde `composer.json` cuando existe, y Rust compila handlers con `cargo`. En `fastfn dev --native` necesitas runtimes y herramientas del host, mientras que `fastfn dev` depende de un daemon de Docker activo.
 
 Esta página publica snapshots reproducibles de rendimiento para FastFN. La idea es mostrar mediciones reales, no promesas generales.
@@ -21,6 +21,46 @@ Cada benchmark debería incluir:
 - concurrencia y repeticiones
 - mezcla de estados
 - ruta del artefacto crudo
+
+## Matriz Firecracker de image workloads
+
+Snapshot: **1 de abril de 2026**.
+
+Harness:
+
+- Tool: `cd cli && go run ./tools/image-matrix-bench`
+- Casos: `20`
+- Loop hot: `50` requests secuenciales despues del prewarm
+- Host: Linux/KVM con workloads Firecracker residentes
+- Outputs: Markdown, JSON, CSV y logs por caso bajo `--smoke-dir` y el workspace del benchmark
+
+Significado de las metricas:
+
+- `build_or_pull_ms`: tiempo invertido en buildar un Dockerfile o hacer pull/load de la imagen
+- `bundle_ms`: tiempo para convertir la entrada OCI al bundle Firecracker cacheado
+- `prewarm_ready_ms`: tiempo hasta que el workload queda warm y attachable
+- `first_ok_ms`: tiempo hasta la primera respuesta de verificacion exitosa
+- `hot_p50_ms`, `hot_p95_ms`, `hot_p99_ms`: latencia steady-state despues del prewarm
+- `same_firecracker_pid`: si el loop hot reutilizo el mismo proceso Firecracker antes y despues de medir
+
+Resultados representativos:
+
+| Caso | Fuente | Build/Pull | First OK | Hot p50 | Hot p95 | Hot p99 | Mismo PID |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Flask (`flask-compose`) | Repo con Dockerfile | `1168ms` | `5017ms` | `1.94ms` | `3.05ms` | `4.10ms` | `true` |
+| App desde registry (`traefik/whoami:v1.10.2`) | Imagen de registry | `98ms` | `2508ms` | `1.26ms` | `2.09ms` | `2.28ms` | `true` |
+| FastAPI + Postgres (`fastapi-realworld`) | Repo Dockerfile + service privado | `1202ms` | `17036ms` | `5.29ms` | `7.02ms` | `7.94ms` | `true` |
+| Dos servicios `postgres:16` iguales | Mismo OCI, mismo `5432` nativo | `1246ms` | `22090ms` | `10.92ms` | `28.85ms` | `32.58ms` | `true` |
+| Rust + Postgres (`rust-postgres`) | Repo Dockerfile + service privado | `35139ms` | `47602ms` | `2.66ms` | `3.86ms` | `10.27ms` | `true` |
+
+Qué muestra esta matriz:
+
+- el build/pull en frio y el prewarm siguen estando en segundos
+- despues del prewarm, el hot path residente baja a pocos milisegundos para apps ligeras y se mantiene en el mismo orden para apps con base de datos
+- `same_firecracker_pid = true` en toda la matriz confirma que el loop hot reutilizo la misma microVM residente y no reinicio Firecracker
+- servicios con OCI identico pueden coexistir en el mismo puerto nativo si sus nombres de workload son distintos
+
+La matriz completa de 20 casos la produce el propio harness y la escribe en el smoke directory configurado como Markdown/JSON/CSV. La doc del repo deja aquí el resumen y el bundle operativo detallado se genera fuera del repo.
 
 ## Snapshot fast-path
 

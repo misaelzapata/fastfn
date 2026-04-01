@@ -9,6 +9,8 @@ local http_client = require "fastfn.core.http_client"
 local image_workloads = require "fastfn.core.image_workloads"
 local invoke_rules = require "fastfn.core.invoke_rules"
 local assets_http = require "fastfn.http.assets"
+local parse_ip_bytes
+local cidrs_allow_ip
 
 local CONC = ngx.shared.fn_conc
 local FCACHE = ngx.shared.fn_cache
@@ -482,18 +484,19 @@ local function sanitize_app_request_headers(raw)
   return out
 end
 
-local function execute_app_proxy(app)
-  if type(app) ~= "table" then
-    return nil, "app config missing"
+local function execute_public_workload_proxy(workload, endpoint)
+  if type(workload) ~= "table" then
+    return nil, "workload config missing"
   end
-  if type(app.health) == "table" and app.health.up ~= true then
-    return nil, tostring(app.health.reason or "app unavailable")
+  if type(workload.health) == "table" and workload.health.up ~= true then
+    return nil, tostring(workload.health.reason or "workload unavailable")
   end
 
-  local host = tostring(app.host or "")
-  local port = tonumber(app.port)
+  local target = type(endpoint) == "table" and endpoint or workload
+  local host = tostring(target.host or "")
+  local port = tonumber(target.port)
   if host == "" or not port or port < 1 then
-    return nil, "invalid app endpoint"
+    return nil, "invalid public workload endpoint"
   end
 
   local body, body_err = read_body_limited(10 * 1024 * 1024)
@@ -629,6 +632,256 @@ local function host_is_allowed(allowed_hosts)
   return false
 end
 
+local function request_client_ip()
+  local remote_addr = tostring(ngx.var.remote_addr or "")
+  local trusted_raw = tostring(os.getenv("FN_TRUSTED_PROXY_CIDRS") or "")
+  if trusted_raw == "" then
+    return remote_addr
+  end
+
+  local trusted = {}
+  for item in trusted_raw:gmatch("([^,]+)") do
+    item = tostring(item or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    if item ~= "" then
+      trusted[#trusted + 1] = item
+    end
+  end
+  if #trusted == 0 or not cidrs_allow_ip(trusted, remote_addr) then
+    return remote_addr
+  end
+
+  local forwarded = tostring(ngx.var.http_x_forwarded_for or ""):match("^%s*([^,]+)")
+  forwarded = tostring(forwarded or ""):gsub("^%s+", ""):gsub("%s+$", "")
+  if forwarded == "" then
+    return remote_addr
+  end
+  local addr, family = parse_ip_bytes(forwarded)
+  if not addr or not family then
+    return remote_addr
+  end
+  return forwarded
+end
+
+local function parse_ipv4(value)
+  local octets = {}
+  for item in tostring(value or ""):gmatch("([0-9]+)") do
+    octets[#octets + 1] = tonumber(item)
+  end
+  if #octets ~= 4 then
+    return nil
+  end
+  for _, octet in ipairs(octets) do
+    if not octet or octet < 0 or octet > 255 then
+      return nil
+    end
+  end
+  return octets
+end
+
+local function split_ipv6_words(raw)
+  if raw == "" then
+    return {}
+  end
+  local out = {}
+  for part in raw:gmatch("([^:]+)") do
+    out[#out + 1] = part
+  end
+  return out
+end
+
+local function parse_ipv6(value)
+  local raw = tostring(value or ""):lower()
+  if raw == "" then
+    return nil
+  end
+  local zone = raw:find("%%", 1, true)
+  if zone then
+    raw = raw:sub(1, zone - 1)
+  end
+  local left, right = raw:match("^(.-)::(.-)$")
+  if left and right and right:find("::", 1, true) then
+    return nil
+  end
+
+  local function normalize_words(words)
+    local out = {}
+    for _, word in ipairs(words) do
+      if word:find("%.", 1, true) then
+        local ipv4 = parse_ipv4(word)
+        if not ipv4 then
+          return nil
+        end
+        out[#out + 1] = string.format("%x", ipv4[1] * 256 + ipv4[2])
+        out[#out + 1] = string.format("%x", ipv4[3] * 256 + ipv4[4])
+      else
+        if not word:match("^[0-9a-f]+$") or #word > 4 then
+          return nil
+        end
+        out[#out + 1] = word
+      end
+    end
+    return out
+  end
+
+  local left_words = normalize_words(split_ipv6_words(left or raw))
+  if not left_words then
+    return nil
+  end
+  local right_words = {}
+  if left then
+    right_words = normalize_words(split_ipv6_words(right))
+    if not right_words then
+      return nil
+    end
+  elseif #left_words ~= 8 then
+    return nil
+  end
+
+  local words = {}
+  if left then
+    local zeros = 8 - (#left_words + #right_words)
+    if zeros < 1 then
+      return nil
+    end
+    for _, word in ipairs(left_words) do
+      words[#words + 1] = word
+    end
+    for _ = 1, zeros do
+      words[#words + 1] = "0"
+    end
+    for _, word in ipairs(right_words) do
+      words[#words + 1] = word
+    end
+  else
+    words = left_words
+  end
+
+  if #words ~= 8 then
+    return nil
+  end
+
+  local bytes = {}
+  for _, word in ipairs(words) do
+    local num = tonumber(word, 16)
+    if not num or num < 0 or num > 65535 then
+      return nil
+    end
+    bytes[#bytes + 1] = math.floor(num / 256)
+    bytes[#bytes + 1] = num % 256
+  end
+  return bytes
+end
+
+parse_ip_bytes = function(raw)
+  local ipv4 = parse_ipv4(raw)
+  if ipv4 then
+    return ipv4, 4
+  end
+  local ipv6 = parse_ipv6(raw)
+  if ipv6 then
+    return ipv6, 6
+  end
+  return nil, nil
+end
+
+local function cidr_contains_ip(cidr, raw_ip)
+  local prefix = tostring(cidr or "")
+  local slash = prefix:find("/", 1, true)
+  if not slash then
+    return false
+  end
+  local addr_raw = prefix:sub(1, slash - 1)
+  local bits_raw = prefix:sub(slash + 1)
+  local network, family = parse_ip_bytes(addr_raw)
+  local addr, ip_family = parse_ip_bytes(raw_ip)
+  local bits = tonumber(bits_raw)
+  if not network or not addr or family ~= ip_family or not bits then
+    return false
+  end
+  local max_bits = family == 4 and 32 or 128
+  if bits < 0 or bits > max_bits then
+    return false
+  end
+  local full_bytes = math.floor(bits / 8)
+  local remainder = bits % 8
+  for idx = 1, full_bytes do
+    if network[idx] ~= addr[idx] then
+      return false
+    end
+  end
+  if remainder == 0 then
+    return true
+  end
+  local mask = 256 - 2 ^ (8 - remainder)
+  return bit.band(network[full_bytes + 1], mask) == bit.band(addr[full_bytes + 1], mask)
+end
+
+cidrs_allow_ip = function(allow_cidrs, raw_ip)
+  if type(allow_cidrs) ~= "table" or #allow_cidrs == 0 then
+    return true
+  end
+  raw_ip = tostring(raw_ip or "")
+  if raw_ip == "" then
+    return false
+  end
+  for _, cidr in ipairs(allow_cidrs) do
+    if cidr_contains_ip(cidr, raw_ip) then
+      return true
+    end
+  end
+  return false
+end
+
+local function host_allowlist_score(allow_hosts, request_host, request_authority)
+  if type(allow_hosts) ~= "table" or #allow_hosts == 0 then
+    return true, 0
+  end
+  local best = -1
+  for _, raw in ipairs(allow_hosts) do
+    local allowed = tostring(raw or ""):gsub("^%s+", ""):gsub("%s+$", ""):lower()
+    if allowed ~= "" then
+      local allowed_host, allowed_authority = split_host_port(allowed)
+      if request_authority ~= "" and allowed_authority == request_authority then
+        best = math.max(best, 300)
+      elseif request_host ~= "" and allowed_host == request_host then
+        best = math.max(best, 200)
+      elseif host_matches_pattern(request_host, allowed_host) or host_matches_pattern(request_authority, allowed) then
+        best = math.max(best, 100)
+      end
+    end
+  end
+  return best >= 0, math.max(best, 0)
+end
+
+local function match_public_workload(candidates, request_host, request_authority, client_ip)
+  local best_workload
+  local best_endpoint
+  local best_score = -1
+  local denied_reason = nil
+  local denied_score = -1
+
+  for _, candidate in ipairs(candidates or {}) do
+    local endpoint = type(candidate.endpoint) == "table" and candidate.endpoint or {}
+    local host_ok, host_score = host_allowlist_score(endpoint.allow_hosts, request_host, request_authority)
+    local cidr_ok = cidrs_allow_ip(endpoint.allow_cidrs, client_ip)
+    local route_score = tonumber(candidate.route_length) or 0
+    local total_score = route_score * 1000 + host_score
+
+    if host_ok and cidr_ok then
+      if total_score > best_score then
+        best_workload = candidate.workload
+        best_endpoint = endpoint
+        best_score = total_score
+      end
+    elseif total_score > denied_score then
+      denied_score = total_score
+      denied_reason = host_ok and "ip not allowed" or "host not allowed"
+    end
+  end
+
+  return best_workload, best_endpoint, denied_reason
+end
+
 local function resolve_request_target(request_uri, request_method, catalog)
   local runtime
   local fn_name
@@ -664,6 +917,9 @@ local function resolve_request_target(request_uri, request_method, catalog)
 end
 
 local request_uri = ngx.var.uri or ""
+if request_uri == "" then
+  request_uri = "/"
+end
 local req_method = ngx.req.get_method()
 local assets_cfg = type(routes_mod.get_assets_config) == "function" and routes_mod.get_assets_config() or nil
 local runtime
@@ -691,18 +947,32 @@ if type(routes_mod.discover_functions) == "function" then
   end
 end
 
-local matched_app = image_workloads.match_app(request_uri)
-if type(matched_app) == "table" then
-  local app_resp, app_err = execute_app_proxy(matched_app)
+local request_host, request_authority = request_host_values()
+local matched_workload, matched_endpoint, workload_access_err = match_public_workload(
+  image_workloads.public_http_candidates(request_uri),
+  request_host,
+  request_authority,
+  request_client_ip()
+)
+if type(matched_workload) == "table" then
+  local app_resp, app_err = execute_public_workload_proxy(matched_workload, matched_endpoint)
   if not app_resp then
     local status = 502
     if tostring(app_err or ""):find("unavailable", 1, true) then
       status = 503
     end
-    write_response(status, { ["Content-Type"] = "application/json" }, json_error("app proxy failed: " .. tostring(app_err)))
+    write_response(status, { ["Content-Type"] = "application/json" }, json_error("public workload proxy failed: " .. tostring(app_err)))
     return
   end
   write_response(app_resp.status or 502, app_resp.headers or {}, app_resp.body or "")
+  return
+end
+if workload_access_err == "host not allowed" then
+  write_response(421, { ["Content-Type"] = "application/json" }, json_error(workload_access_err))
+  return
+end
+if workload_access_err == "ip not allowed" then
+  write_response(403, { ["Content-Type"] = "application/json" }, json_error(workload_access_err))
   return
 end
 

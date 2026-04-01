@@ -1,6 +1,6 @@
 # Arquitectura
 
-> Estado verificado al **13 de marzo de 2026**.
+> Estado verificado al **1 de abril de 2026**.
 > Nota de runtime: FastFN resuelve dependencias y build por función según el runtime: Python usa `requirements.txt`, Node usa `package.json`, PHP instala desde `composer.json` cuando existe, y Rust compila handlers con `cargo`. En `fastfn dev --native` necesitas runtimes y herramientas del host, mientras que `fastfn dev` depende de un daemon de Docker activo.
 
 ## Vista rápida
@@ -53,6 +53,30 @@ Si el `fn.config.json` raíz declara `assets`, el gateway también puede servir 
 
 Ese mount de assets es deliberadamente acotado: solo se publica la carpeta configurada. Las carpetas vecinas de funciones siguen privadas, y FastFN bloquea dotfiles, traversal y prefijos reservados como `/_fn/*` y `/console/*` antes de resolver archivos.
 
+Los workloads con imagen agregan un segundo camino en modo native:
+
+```mermaid
+flowchart LR
+  A["Cliente HTTP"] --> B["Gateway OpenResty"]
+  B --> C["Broker publico del workload"]
+  C --> D["MicroVM Firecracker residente"]
+  D --> E["Proceso de la app"]
+  E --> D
+  D --> C
+  C --> B
+  B --> A
+```
+
+El trafico privado entre image workloads evita el edge publico:
+
+```mermaid
+flowchart LR
+  A["MicroVM de la app"] --> B["Alias loopback del guest"]
+  B --> C["Bridge vsock en host"]
+  C --> D["vsock de la microVM target"]
+  D --> E["Proceso app/service target"]
+```
+
 ## Discovery y mapa de rutas
 
 FastFN no usa un `routes.json` estático como fuente de verdad. Descubre funciones desde un directorio y arma el mapa de rutas en runtime.
@@ -80,6 +104,41 @@ Cuando hay `assets` root-level:
 - En modo SPA, el fallback a `index.html` ocurre únicamente después de confirmar que no hubo asset real ni route handler.
 
 En `fastfn dev`, las apps no-leaf se montan por el root completo del proyecto. Eso hace que el hot reload vea carpetas nuevas, archivos nuevos de assets y funciones nuevas sin reiniciar, y además evita degradar funciones explícitas root-level en aliases tipo `handler.*`.
+
+## Image workloads, brokers y red privada
+
+Las apps y services publicos con imagen no exponen directamente al resto de la pila los puertos efimeros de su VM.
+
+- Cada endpoint publico usa un broker estable del lado host.
+- `/_fn/health` reporta tanto la vista legacy `host`/`port` como `broker_host`/`broker_port` y `public_endpoints`.
+- Una vez prewarmed, los requests hot siguen usando la misma microVM residente en vez de rebuildar, repullar o reiniciar Firecracker.
+
+La red privada entre image workloads usa nombres internos estables:
+
+- Cada workload obtiene un `internal_host` como `postgres.internal` o `admin.internal`.
+- Dentro de las microVMs, FastFN mapea esos nombres a aliases loopback deterministas y puentea el trafico guest-to-guest sobre `vsock`.
+- Varios services pueden conservar el mismo puerto nativo porque la separacion se hace por nombre de workload y borde de VM, no forzando puertos internos distintos para cada uno.
+
+Eso permite patrones estilo Fly.io como:
+
+- dos `postgres:16` usando ambos `5432`
+- dos apps Flask usando ambas `5000`
+- apps consumidoras conectando por `*.internal` y envs scoped por servicio, no por host ports hardcodeados
+
+## Politica de acceso para workloads publicos
+
+FastFN ahora tiene dos capas distintas de politica en el edge:
+
+- las function routes siguen usando `invoke.allow_hosts`
+- los image workloads publicos usan `access.allow_hosts` y `access.allow_cidrs`
+
+Puntos de enforcement:
+
+- HTTP publico: OpenResty valida host normalizado e IP del cliente.
+- TCP publico: el broker del lado host valida solo `allow_cidrs`.
+- El trafico privado `*.internal` no pasa por ese firewall publico; queda dentro del camino workload-to-workload.
+
+Cuando FastFN corre detras de proxies confiables, la resolucion de IP real sigue `FN_TRUSTED_PROXY_CIDRS`. Sin esa allowlist, el gateway trata `remote_addr` como IP del caller e ignora forwarding headers no confiables.
 
 ## Ruteo hacia runtimes
 
@@ -166,6 +225,13 @@ Este modelo es simple a propósito, pero no hace milagros:
 - Unix sockets vuelven la pila local más predecible, pero siguen agregando un salto frente a Lua in-process.
 
 Por eso FastFN publica artefactos crudos de benchmark y conviene medir tu propia carga antes de subir counts en todos los runtimes.
+
+La matriz actual de image workloads sobre Firecracker refuerza la misma idea:
+
+- el build/pull en frio y el prewarm pueden tardar segundos
+- el trafico hot residente baja a milisegundos de un digito despues del prewarm
+- el hot path se mantiene rapido porque reutiliza el mismo broker y el mismo proceso Firecracker
+- services con bootstrap mas lento ahora esperan una pequena ventana de estabilidad antes de exponerse a apps dependientes
 
 ## Enlaces relacionados
 
