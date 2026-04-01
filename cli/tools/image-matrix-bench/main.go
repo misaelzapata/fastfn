@@ -130,12 +130,15 @@ type healthSnapshot struct {
 }
 
 func main() {
+	defaultSmokeDir := benchSmokeDir()
+	defaultKernelPath := filepath.Join(defaultSmokeDir, "tools", "vmlinux.bin")
+	defaultFirecrackerPath := filepath.Join(defaultSmokeDir, "tools", "firecracker-v1.15.0-x86_64")
 	var (
 		caseFilter        = flag.String("case", "all", "case name, comma-separated names, or all")
 		workspace         = flag.String("workspace", "/tmp/fastfn-image-matrix", "working directory for clones, generated projects, and logs")
-		smokeDir          = flag.String("smoke-dir", "/home/misael/Desktop/fastfn-firecracker-smoke", "desktop smoke folder for markdown/json/csv outputs")
-		kernelPath        = flag.String("kernel", "/home/misael/Desktop/fastfn-firecracker-smoke/tools/vmlinux.bin", "Firecracker kernel path")
-		firecrackerBinary = flag.String("firecracker-bin", "/home/misael/Desktop/fastfn-firecracker-smoke/tools/firecracker-v1.15.0-x86_64", "Firecracker binary path")
+		smokeDir          = flag.String("smoke-dir", defaultSmokeDir, "desktop smoke folder for markdown/json/csv outputs")
+		kernelPath        = flag.String("kernel", defaultKernelPath, "Firecracker kernel path")
+		firecrackerBinary = flag.String("firecracker-bin", defaultFirecrackerPath, "Firecracker binary path")
 		hostBasePort      = flag.Int("host-base-port", 18200, "starting public port to probe for benchmark runs")
 		requests          = flag.Int("requests", 50, "hot request count per case")
 		readyTimeout      = flag.Duration("ready-timeout", 12*time.Minute, "maximum time to wait for a case to become ready")
@@ -245,6 +248,13 @@ func filterCases(all []matrixCase, raw string) ([]matrixCase, error) {
 		out = append(out, tc)
 	}
 	return out, nil
+}
+
+func benchSmokeDir() string {
+	if home, err := os.UserHomeDir(); err == nil && strings.TrimSpace(home) != "" {
+		return filepath.Join(home, "Desktop", "fastfn-firecracker-smoke")
+	}
+	return filepath.Join(os.TempDir(), "fastfn-firecracker-smoke")
 }
 
 func rebuildBenchBinaries(cfg benchConfig) error {
